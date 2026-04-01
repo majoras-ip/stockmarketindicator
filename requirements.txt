@@ -1,0 +1,31 @@
+# Stock Volatility Prediction — Python dependencies
+# Install with: pip install -r requirements.txt
+#
+# Apple Silicon (M1/M2/M3) users:
+#   Install tensorflow-macos and tensorflow-metal separately
+#   before running pip install -r requirements.txt:
+#
+#     pip install tensorflow-macos tensorflow-metal
+#
+# Google Colab users:
+#   TensorFlow is pre-installed. Just run:
+#     pip install lightgbm yfinance joblib scipy
+
+# ── Core ML ────────────────────────────────────────────────────────────────────
+lightgbm>=4.3.0
+tensorflow>=2.15.0          # use tensorflow-macos on Apple Silicon
+scikit-learn>=1.4.0
+
+# ── Data ───────────────────────────────────────────────────────────────────────
+pandas>=2.1.0
+numpy>=1.26.0
+yfinance>=0.2.38
+joblib>=1.3.0
+scipy>=1.12.0
+
+# ── Visualisation ──────────────────────────────────────────────────────────────
+matplotlib>=3.8.0
+
+# ── API Server (TradingView bridge) ────────────────────────────────────────────
+fastapi>=0.110.0
+uvicorn>=0.29.0

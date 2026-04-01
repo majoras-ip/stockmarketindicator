@@ -1,0 +1,13 @@
+{
+  "ticker": "AAPL",
+  "lgb_n_estimators": 20000,
+  "lgb_learning_rate": 0.01,
+  "lgb_n_fold": 10,
+  "gru_layer1": 100,
+  "gru_layer2": 10,
+  "gru_dropout": 0.2,
+  "gru_lr": 1e-05,
+  "gru_epochs": 1000,
+  "sequence_length": 30,
+  "train_split": 0.8
+}

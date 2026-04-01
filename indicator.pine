@@ -1,0 +1,123 @@
+// ============================================================
+// Stock Volatility Indicator — TradingView Companion
+// ============================================================
+// This indicator does two things:
+//
+//  1. Displays a rolling volatility panel computed entirely
+//     in Pine Script (no external server needed for this part).
+//
+//  2. Fires an alert when volatility crosses a threshold.
+//     That alert sends a webhook to your Python server, which
+//     runs the full LightGBM-GRU prediction and logs the result
+//     to your dashboard at http://localhost:8000/dashboard
+//
+// SETUP
+// ─────
+//  1. Run your Python server:   python3 server.py
+//  2. Expose it:                ngrok http 8000
+//  3. Copy the ngrok URL (e.g. https://abc123.ngrok.io)
+//  4. In TradingView → Create Alert → Webhook URL:
+//       https://abc123.ngrok.io/webhook
+//  5. Alert message (set to JSON format):
+//       {"ticker": "{{ticker}}", "close": {{close}}, "volume": {{volume}}}
+// ============================================================
+
+//@version=5
+indicator("Volatility Monitor [ML Bridge]", overlay=false, max_labels_count=50)
+
+// ── Inputs ────────────────────────────────────────────────────────────────────
+vol_window    = input.int(10,     "Volatility Window (bars)",   minval=2,  maxval=100)
+alert_window  = input.int(20,     "Alert Smoothing Window",      minval=2,  maxval=50)
+thresh_low    = input.float(0.0005, "Low / Medium threshold",    step=0.0001)
+thresh_med    = input.float(0.0015, "Medium / High threshold",   step=0.0001)
+thresh_high   = input.float(0.0030, "High / Extreme threshold",  step=0.0001)
+show_bands    = input.bool(true,  "Show threshold bands")
+show_table    = input.bool(true,  "Show info table")
+
+// ── Realised Volatility (mirrors the Python formula) ─────────────────────────
+log_ret = math.log(close / close[1])
+rv      = 0.0
+for i = 0 to vol_window - 1
+    rv := rv + math.pow(log_ret[i], 2)
+rv := math.sqrt(rv)
+
+// Smoothed version for alert triggering (reduces noise)
+rv_smooth = ta.sma(rv, alert_window)
+
+// ── Volatility Level Classification ──────────────────────────────────────────
+get_level(v) =>
+    v < thresh_low  ? "Low" :
+     v < thresh_med  ? "Medium" :
+     v < thresh_high ? "High" : "Extreme"
+
+get_color(v) =>
+    v < thresh_low  ? color.new(#2ecc71, 0) :   // green
+     v < thresh_med  ? color.new(#f1c40f, 0) :   // yellow
+     v < thresh_high ? color.new(#e67e22, 0) :   // orange
+                       color.new(#e74c3c, 0)      // red
+
+current_level = get_level(rv)
+current_color = get_color(rv)
+
+// ── Plot ──────────────────────────────────────────────────────────────────────
+plot(rv,        "Realised Vol (raw)",      color=color.new(current_color, 60), linewidth=1)
+plot(rv_smooth, "Realised Vol (smoothed)", color=current_color,                linewidth=2)
+
+// Threshold bands
+if show_bands
+    hline(thresh_low,  "Low / Med",  color=color.new(#2ecc71, 50), linestyle=hline.style_dashed)
+    hline(thresh_med,  "Med / High", color=color.new(#f1c40f, 50), linestyle=hline.style_dashed)
+    hline(thresh_high, "High / Ext", color=color.new(#e74c3c, 50), linestyle=hline.style_dashed)
+
+// Zero line
+hline(0, color=color.new(color.gray, 80))
+
+// Background colour by level
+bgcolor(color.new(current_color, 92), title="Level background")
+
+// ── Info Table ────────────────────────────────────────────────────────────────
+if show_table and barstate.islast
+    var tbl = table.new(position.top_right, 2, 5,
+                        bgcolor=#16213e, border_color=#333333, border_width=1,
+                        frame_color=#333333, frame_width=1)
+
+    table.cell(tbl, 0, 0, "Metric",    text_color=#aaaaaa, text_size=size.small)
+    table.cell(tbl, 1, 0, "Value",     text_color=#aaaaaa, text_size=size.small)
+
+    table.cell(tbl, 0, 1, "Raw Vol",   text_color=color.white, text_size=size.small)
+    table.cell(tbl, 1, 1, str.tostring(rv, "#.00000"),
+               text_color=current_color, text_size=size.small)
+
+    table.cell(tbl, 0, 2, "Smoothed",  text_color=color.white, text_size=size.small)
+    table.cell(tbl, 1, 2, str.tostring(rv_smooth, "#.00000"),
+               text_color=current_color, text_size=size.small)
+
+    table.cell(tbl, 0, 3, "Level",     text_color=color.white, text_size=size.small)
+    table.cell(tbl, 1, 3, current_level,
+               text_color=current_color, text_size=size.small, text_size=size.normal)
+
+    table.cell(tbl, 0, 4, "ML Signal", text_color=color.white,  text_size=size.small)
+    table.cell(tbl, 1, 4, "→ check dashboard",
+               text_color=#e94560, text_size=size.small)
+
+// ── Alert Conditions ─────────────────────────────────────────────────────────
+// These fire the webhook to your Python server.
+// Create one alert per condition in TradingView.
+
+level_change = get_level(rv) != get_level(rv[1])
+
+alertcondition(level_change,
+     title="Volatility Level Changed",
+     message='{"ticker": "{{ticker}}", "close": {{close}}, "volume": {{volume}}, "note": "level_change"}')
+
+alertcondition(ta.crossover(rv_smooth, thresh_high),
+     title="Entered HIGH Volatility",
+     message='{"ticker": "{{ticker}}", "close": {{close}}, "volume": {{volume}}, "note": "entered_high"}')
+
+alertcondition(ta.crossover(rv_smooth, thresh_low) and rv_smooth < thresh_med,
+     title="Entered LOW Volatility",
+     message='{"ticker": "{{ticker}}", "close": {{close}}, "volume": {{volume}}, "note": "entered_low"}')
+
+alertcondition(ta.crossover(rv_smooth, thresh_high * 2),
+     title="EXTREME Volatility",
+     message='{"ticker": "{{ticker}}", "close": {{close}}, "volume": {{volume}}, "note": "extreme"}')
