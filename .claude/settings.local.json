@@ -3,7 +3,11 @@
     "allow": [
       "Bash(pip3 install:*)",
       "Bash(git branch:*)",
-      "Bash(git remote:*)"
+      "Bash(git remote:*)",
+      "Bash(git push:*)",
+      "Bash(curl -s \"https://web-production-1251c.up.railway.app/api/pine?ticker=SPY&interval=5m\")",
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
     ]
   }
 }
