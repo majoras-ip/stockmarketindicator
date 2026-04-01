@@ -149,6 +149,37 @@ class LSTMForecaster:
         seq = X[-1:] if X.ndim == 3 else X[-config.SEQUENCE_LENGTH:][np.newaxis]
         return self.predict(seq)[0]
 
+    def predict_with_uncertainty(
+        self, X: np.ndarray, n_samples: int = 50
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """
+        Monte Carlo dropout — run forward pass n_samples times with dropout
+        active to estimate prediction uncertainty.
+
+        Returns
+        -------
+        mean   : (steps,)  — central forecast
+        lower  : (steps,)  — 10th percentile
+        upper  : (steps,)  — 90th percentile
+        """
+        import tensorflow as tf
+
+        if self.model is None:
+            raise RuntimeError("Model not built or loaded.")
+
+        seq = X[-1:] if X.ndim == 3 else X[-config.SEQUENCE_LENGTH:][np.newaxis]
+
+        # Run with training=True to keep dropout active
+        samples = np.array([
+            np.clip(self.model(seq, training=True).numpy(), 0, None)[0]
+            for _ in range(n_samples)
+        ])  # shape: (n_samples, steps)
+
+        mean  = np.mean(samples, axis=0)
+        lower = np.percentile(samples, 10, axis=0)
+        upper = np.percentile(samples, 90, axis=0)
+        return mean, lower, upper
+
     # ── Persistence ───────────────────────────────────────────────────────────
 
     def save(self, path: str) -> None:

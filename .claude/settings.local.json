@@ -1,7 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "Bash(pip3 install:*)"
+      "Bash(pip3 install:*)",
+      "Bash(git branch:*)",
+      "Bash(git remote:*)"
     ]
   }
 }

@@ -21,6 +21,7 @@ FORECASTER_FILE = "forecaster.keras"
 FORECAST_SCALER_FILE = "forecast_scaler.joblib"
 FORECAST_FEATURES_FILE = "forecast_feature_list.json"
 FORECAST_Y_SCALE_FILE = "forecast_y_scale.json"
+DIRECTION_MODEL_FILE = "direction_model.joblib"
 
 
 class ForecastTrainer:
@@ -29,10 +30,11 @@ class ForecastTrainer:
     """
 
     def __init__(self, model_dir: str = config.MODEL_DIR) -> None:
-        self.model_dir  = model_dir
-        self.forecaster = LSTMForecaster(steps=FORECAST_STEPS)
-        self.scaler     = None
-        self.y_scale    = 1.0
+        self.model_dir      = model_dir
+        self.forecaster     = LSTMForecaster(steps=FORECAST_STEPS)
+        self.scaler         = None
+        self.y_scale        = 1.0
+        self.direction_model = None
         self.feature_names: list[str] = []
 
     def run(self, df: "pd.DataFrame") -> None:
@@ -74,8 +76,40 @@ class ForecastTrainer:
         print(f"    RMSE : {rmse:.6f}")
         print(f"    MAE  : {mae:.6f}\n")
 
+        # Direction model (LightGBM classifier: 1=up, 0=down)
+        self._train_direction(df_clean, feat_df)
+
         # Save
         self._save()
+
+    def _train_direction(self, df_clean: "pd.DataFrame", feat_df: "pd.DataFrame") -> None:
+        """Train a LightGBM classifier to predict price direction."""
+        import lightgbm as lgb
+
+        close = df_clean["Close"].reindex(feat_df.index)
+        future_close = close.shift(-FORECAST_STEPS)
+
+        import pandas as pd
+        combined = feat_df.join(future_close.rename("future_close"), how="inner").dropna()
+        X_dir = combined.drop(columns=["future_close"]).values
+        y_dir = (combined["future_close"].values > close.reindex(combined.index).values).astype(int)
+
+        cutoff = int(len(X_dir) * config.TRAIN_SPLIT)
+        X_tr, X_vl = X_dir[:cutoff], X_dir[cutoff:]
+        y_tr, y_vl = y_dir[:cutoff], y_dir[cutoff:]
+
+        self.direction_model = lgb.LGBMClassifier(
+            n_estimators=300, learning_rate=0.05,
+            num_leaves=31, random_state=42, verbose=-1,
+        )
+        self.direction_model.fit(
+            X_tr, y_tr,
+            eval_set=[(X_vl, y_vl)],
+            callbacks=[lgb.early_stopping(20, verbose=False)],
+        )
+
+        acc = float(np.mean(self.direction_model.predict(X_vl) == y_vl))
+        print(f"  Direction model val accuracy: {acc:.1%}")
 
     def _save(self) -> None:
         os.makedirs(self.model_dir, exist_ok=True)
@@ -88,6 +122,9 @@ class ForecastTrainer:
 
         with open(os.path.join(self.model_dir, FORECAST_Y_SCALE_FILE), "w") as f:
             json.dump({"y_scale": self.y_scale}, f)
+
+        if self.direction_model is not None:
+            joblib.dump(self.direction_model, os.path.join(self.model_dir, DIRECTION_MODEL_FILE))
 
         log.info("Forecaster artefacts saved → %s", self.model_dir)
         print(f"  Saved to: {self.model_dir}")

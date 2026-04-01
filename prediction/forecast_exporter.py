@@ -19,7 +19,7 @@ import pandas as pd
 import config
 from data.forecast_preprocessor import prepare_forecast, FORECAST_STEPS
 from models.forecaster import LSTMForecaster, build_sequences
-from training.forecast_trainer import FORECASTER_FILE, FORECAST_SCALER_FILE, FORECAST_FEATURES_FILE, FORECAST_Y_SCALE_FILE
+from training.forecast_trainer import FORECASTER_FILE, FORECAST_SCALER_FILE, FORECAST_FEATURES_FILE, FORECAST_Y_SCALE_FILE, DIRECTION_MODEL_FILE
 from utils.logger import get_logger
 
 log = get_logger(__name__)
@@ -32,12 +32,13 @@ class ForecastExporter:
     """
 
     def __init__(self, model_dir: str = config.MODEL_DIR) -> None:
-        self.model_dir     = model_dir
-        self.forecaster    = LSTMForecaster(steps=FORECAST_STEPS)
-        self.scaler        = None
-        self.y_scale       = 1.0
+        self.model_dir       = model_dir
+        self.forecaster      = LSTMForecaster(steps=FORECAST_STEPS)
+        self.scaler          = None
+        self.y_scale         = 1.0
+        self.direction_model = None
         self.feature_names: list[str] = []
-        self._loaded       = False
+        self._loaded         = False
 
     def load(self) -> None:
         if not os.path.isdir(self.model_dir):
@@ -62,6 +63,10 @@ class ForecastExporter:
         if os.path.exists(y_scale_path):
             with open(y_scale_path) as f:
                 self.y_scale = json.load(f).get("y_scale", 1.0)
+
+        dir_path = os.path.join(self.model_dir, DIRECTION_MODEL_FILE)
+        if os.path.exists(dir_path):
+            self.direction_model = joblib.load(dir_path)
 
         self._loaded = True
         log.info("ForecastExporter loaded.")
@@ -113,9 +118,11 @@ class ForecastExporter:
         timestamps_ms = [int(ts.timestamp() * 1000) for ts in hist_index]
         hist_values   = [round(float(v), 8) for v in hist_rv]
 
-        # Future forecast from the last sequence
-        future_forecast = self.forecaster.predict_last(X_seq) * self.y_scale  # (FORECAST_STEPS,)
-        future_values   = [round(float(v), 8) for v in future_forecast]
+        # Future forecast with confidence bands (Monte Carlo dropout)
+        mean, lower, upper = self.forecaster.predict_with_uncertainty(X_seq)
+        future_values  = [round(float(v) * self.y_scale, 8) for v in mean]
+        lower_values   = [round(float(v) * self.y_scale, 8) for v in lower]
+        upper_values   = [round(float(v) * self.y_scale, 8) for v in upper]
 
         # Infer bar duration in milliseconds
         interval_ms_map = {"1m": 60_000, "5m": 300_000, "15m": 900_000, "1h": 3_600_000}
@@ -125,6 +132,15 @@ class ForecastExporter:
         last_ts_ms = timestamps_ms[-1] if timestamps_ms else int(datetime.now(timezone.utc).timestamp() * 1000)
         future_timestamps_ms = [last_ts_ms + bar_ms * (i + 1) for i in range(FORECAST_STEPS)]
 
+        # Direction prediction from the most recent bar's features
+        direction_up = None
+        direction_conf = None
+        if self.direction_model is not None:
+            last_features = features.iloc[[-1]].values
+            proba = self.direction_model.predict_proba(last_features)[0]
+            direction_up   = bool(proba[1] >= 0.5)
+            direction_conf = float(max(proba))
+
         pine_code = _build_forecast_pine(
             ticker=ticker,
             interval=interval,
@@ -132,6 +148,10 @@ class ForecastExporter:
             hist_values=hist_values,
             future_timestamps_ms=future_timestamps_ms,
             future_values=future_values,
+            lower_values=lower_values,
+            upper_values=upper_values,
+            direction_up=direction_up,
+            direction_conf=direction_conf,
         )
 
         os.makedirs(output_dir, exist_ok=True)
@@ -158,6 +178,10 @@ def _build_forecast_pine(
     hist_values: list[float],
     future_timestamps_ms: list[int],
     future_values: list[float],
+    lower_values: list[float] | None = None,
+    upper_values: list[float] | None = None,
+    direction_up: bool | None = None,
+    direction_conf: float | None = None,
 ) -> str:
     generated_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     steps = len(future_values)
@@ -172,6 +196,22 @@ def _build_forecast_pine(
 
     fts_str  = ", ".join(str(t) for t in future_timestamps_ms)
     fval_str = ", ".join(f"{v:.8f}" for v in future_values)
+    flow_str = ", ".join(f"{v:.8f}" for v in (lower_values or future_values))
+    fhigh_str = ", ".join(f"{v:.8f}" for v in (upper_values or future_values))
+
+    if direction_up is not None and direction_conf is not None:
+        arrow       = "▲" if direction_up else "▼"
+        dir_color   = "color.new(color.green, 20)" if direction_up else "color.new(color.red, 20)"
+        dir_text    = f"{arrow} {'UP' if direction_up else 'DOWN'}  {direction_conf:.0%}"
+        direction_pine = f"""
+    // Direction prediction
+    label.new(bar_index - 1, HIGH_THRESH * 1.1, "{dir_text}",
+              style=label.style_label_down,
+              size=size.normal,
+              color={dir_color},
+              textcolor=color.white)"""
+    else:
+        direction_pine = ""
 
     return f"""\
 // ================================================================
@@ -191,8 +231,10 @@ var int[]   _ts   = array.from({ts_str})
 var float[] _hist = array.from({hist_str})
 
 // ── Future forecast (next {steps} bars) ──────────────────────────
-var int[]   _fts  = array.from({fts_str})
-var float[] _fval = array.from({fval_str})
+var int[]   _fts   = array.from({fts_str})
+var float[] _fval  = array.from({fval_str})
+var float[] _flow  = array.from({flow_str})
+var float[] _fhigh = array.from({fhigh_str})
 
 // ── Thresholds (auto-calibrated to this stock) ───────────────────
 float LOW_THRESH    = {low_thresh}
@@ -266,6 +308,14 @@ if barstate.islast
                   color=color.new(fc, 60),
                   textcolor=color.white)
 
+        // Confidence band
+        float fl = array.get(_flow,  i)
+        float fh = array.get(_fhigh, i)
+        line.new(fi, fl, fi, fh,
+                 color=color.new(fc, 70), width=6,
+                 style=line.style_solid,
+                 extend=extend.none)
+
         prev_val := fv
         prev_idx := fi
 
@@ -274,5 +324,5 @@ if barstate.islast
               style=label.style_label_left,
               size=size.small,
               color=color.new(color.blue, 50),
-              textcolor=color.white)
+              textcolor=color.white){direction_pine}
 """

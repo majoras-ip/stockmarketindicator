@@ -37,6 +37,9 @@ MENU = """
 ║  ──────────────────────────────────────  ║
 ║  11. Train 30-Min Forecaster             ║
 ║  12. Export Forecast Pine Script         ║
+║  13. Auto-Refresh Forecast (every 5min) ║
+║  14. Multi-Ticker Forecast               ║
+║  15. Start Alert Monitor                 ║
 ║  ──────────────────────────────────────  ║
 ║  10. Exit                                ║
 ╚══════════════════════════════════════════╝"""
@@ -316,6 +319,196 @@ def _export_forecast_pine() -> None:
         log.exception("Forecast export error")
 
 
+def _auto_refresh_forecast() -> None:
+    """Option 13 — auto-refresh LSTM forecast every N minutes."""
+    import time
+    from prediction.forecast_exporter import ForecastExporter
+    from data.collector import download
+
+    ticker   = input(f"  Ticker   [default: {_ticker}]: ").strip().upper() or _ticker
+    interval = input("  Interval [default: 5m]: ").strip() or "5m"
+    refresh  = input("  Refresh every N minutes [default: 5]: ").strip()
+    refresh_secs = int(refresh) * 60 if refresh.isdigit() else 300
+
+    if "forecast_exporter" not in _session:
+        _session["forecast_exporter"] = ForecastExporter()
+
+    exporter = _session["forecast_exporter"]
+
+    interval_map = {"1m": "1Min", "5m": "5Min", "15m": "15Min", "1h": "1Hour"}
+    alpaca_interval = interval_map.get(interval, "5Min")
+
+    print(f"\n  Auto-refresh started for {ticker} every {refresh_secs // 60} min.")
+    print(f"  Press Ctrl+C to stop.\n")
+
+    while True:
+        try:
+            try:
+                from dotenv import load_dotenv
+                load_dotenv(os.path.join(config.BASE_DIR, ".env"))
+                from live.live_feed import fetch_bars
+                df = fetch_bars(ticker, alpaca_interval)
+            except Exception:
+                df = download(ticker, period="5d", interval=interval, save_csv=False)
+
+            exporter._loaded = False  # force reload of model each cycle
+            exporter.export(df=df, ticker=ticker, interval=interval)
+
+            out_path = os.path.join(config.CHART_DIR, f"{ticker.lower()}_forecast_{interval}.pine")
+            print(f"  Copy to clipboard: pbcopy < {out_path}")
+            print(f"  Next update in {refresh_secs // 60} min — press Ctrl+C to stop.\n")
+            time.sleep(refresh_secs)
+
+        except KeyboardInterrupt:
+            print("\n  Auto-refresh stopped.\n")
+            break
+        except Exception as exc:
+            print(f"\n  [!] Error: {exc} — retrying in {refresh_secs // 60} min …\n")
+            time.sleep(refresh_secs)
+
+
+def _multi_ticker_forecast() -> None:
+    """Option 14 — generate forecast Pine Scripts for multiple tickers at once."""
+    from prediction.forecast_exporter import ForecastExporter
+    from data.collector import download
+
+    raw = input("  Tickers (comma-separated, e.g. AAPL,PLTR,NVDA): ").strip().upper()
+    tickers = [t.strip() for t in raw.split(",") if t.strip()]
+    if not tickers:
+        print("  No tickers entered.")
+        return
+
+    interval = input("  Interval [default: 5m]: ").strip() or "5m"
+    interval_map = {"1m": "1Min", "5m": "5Min", "15m": "15Min", "1h": "1Hour"}
+    alpaca_interval = interval_map.get(interval, "5Min")
+
+    use_live = input("  Use live Alpaca data? (Y/n): ").strip().lower()
+
+    exporter = ForecastExporter()
+
+    print()
+    for ticker in tickers:
+        print(f"  Processing {ticker} …")
+        try:
+            if use_live != "n":
+                try:
+                    from dotenv import load_dotenv
+                    load_dotenv(os.path.join(config.BASE_DIR, ".env"))
+                    from live.live_feed import fetch_bars
+                    df = fetch_bars(ticker, alpaca_interval)
+                except Exception as exc:
+                    print(f"    Alpaca failed ({exc}), falling back to yfinance …")
+                    df = download(ticker, period="5d", interval=interval, save_csv=False)
+            else:
+                df = download(ticker, period="5d", interval=interval, save_csv=False)
+
+            exporter._loaded = False  # reload model for each ticker
+            path = exporter.export(df=df, ticker=ticker, interval=interval)
+            print(f"    Saved: {path}")
+        except Exception as exc:
+            print(f"    [!] Failed for {ticker}: {exc}")
+
+    print(f"\n  Done. Files saved in: {config.CHART_DIR}")
+    print(f"  Copy any file with: pbcopy < {config.CHART_DIR}/<ticker>_forecast_{interval}.pine\n")
+
+
+def _alert_monitor() -> None:
+    """Option 15 — monitor forecast and send phone alerts via ntfy.sh."""
+    import time
+    from prediction.forecast_exporter import ForecastExporter
+    from data.forecast_preprocessor import FORECAST_STEPS
+    from models.forecaster import build_sequences
+    from data.preprocessor import _filter_market_hours, _remove_outliers
+    from data.features import build_features
+    from utils.alerts import check_and_alert
+    import numpy as np
+
+    print("\n  Alert Monitor uses ntfy.sh — free push notifications to your phone.")
+    print("  1. Install the 'ntfy' app (iOS / Android)")
+    print("  2. Subscribe to your topic in the app")
+    print("  3. Enter the same topic name below\n")
+
+    raw = input(f"  Tickers (comma-separated) [default: {_ticker}]: ").strip().upper()
+    tickers  = [t.strip() for t in raw.split(",") if t.strip()] or [_ticker]
+    interval = input("  Interval [default: 5m]: ").strip() or "5m"
+    topic    = input("  ntfy topic name (e.g. stockvol-ayden): ").strip()
+    refresh  = input("  Check every N minutes [default: 5]: ").strip()
+    refresh_secs = int(refresh) * 60 if refresh.isdigit() else 300
+
+    if not topic:
+        print("  No topic entered — alerts disabled.")
+        return
+
+    interval_map = {"1m": "1Min", "5m": "5Min", "15m": "15Min", "1h": "1Hour"}
+    alpaca_interval = interval_map.get(interval, "5Min")
+
+    exporter    = ForecastExporter()
+    seen_events: set = set()
+
+    print(f"\n  Monitoring {tickers} every {refresh_secs // 60} min → ntfy.sh/{topic}")
+    print("  Press Ctrl+C to stop.\n")
+
+    while True:
+        for ticker in tickers:
+            try:
+                try:
+                    from dotenv import load_dotenv
+                    load_dotenv(os.path.join(config.BASE_DIR, ".env"))
+                    from live.live_feed import fetch_bars
+                    df = fetch_bars(ticker, alpaca_interval)
+                except Exception:
+                    from data.collector import download
+                    df = download(ticker, period="5d", interval=interval, save_csv=False)
+
+                exporter._loaded = False
+                exporter.load()
+
+                df_clean = _remove_outliers(_filter_market_hours(df))
+                features = build_features(df_clean).dropna()
+                if exporter.feature_names:
+                    for col in set(exporter.feature_names) - set(features.columns):
+                        features[col] = 0.0
+                    features = features[exporter.feature_names]
+
+                X_scaled = exporter.scaler.transform(features)
+                dummy_y  = np.zeros(len(X_scaled))
+                X_seq, _ = build_sequences(X_scaled, dummy_y, config.SEQUENCE_LENGTH, FORECAST_STEPS)
+
+                if len(X_seq) == 0:
+                    continue
+
+                future = list(exporter.forecaster.predict_last(X_seq) * exporter.y_scale)
+                arr    = exporter.forecaster.predict(X_seq)[:, 0] * exporter.y_scale
+                high_thresh = float(np.percentile(arr, 75))
+
+                direction_up   = None
+                direction_conf = None
+                if exporter.direction_model is not None:
+                    proba = exporter.direction_model.predict_proba(features.iloc[[-1]].values)[0]
+                    direction_up   = bool(proba[1] >= 0.5)
+                    direction_conf = float(max(proba))
+
+                check_and_alert(
+                    topic=topic,
+                    ticker=ticker,
+                    future_values=future,
+                    high_thresh=high_thresh,
+                    direction_up=direction_up,
+                    direction_conf=direction_conf,
+                    seen_events=seen_events,
+                )
+                print(f"  [{ticker}] checked — max forecast: {max(future):.5f}  thresh: {high_thresh:.5f}")
+
+            except Exception as exc:
+                print(f"  [{ticker}] error: {exc}")
+
+        try:
+            time.sleep(refresh_secs)
+        except KeyboardInterrupt:
+            print("\n  Alert monitor stopped.\n")
+            break
+
+
 def _view_charts() -> None:
     """Option 8 — open the charts directory in Finder / Explorer."""
     import subprocess, platform
@@ -354,6 +547,9 @@ _HANDLERS = {
     "9": _export_pine_script,
     "11": _train_forecaster,
     "12": _export_forecast_pine,
+    "13": _auto_refresh_forecast,
+    "14": _multi_ticker_forecast,
+    "15": _alert_monitor,
 }
 
 

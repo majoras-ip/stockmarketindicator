@@ -29,3 +29,7 @@ matplotlib>=3.8.0
 # ── API Server (TradingView bridge) ────────────────────────────────────────────
 fastapi>=0.110.0
 uvicorn>=0.29.0
+flask>=3.0.0
+flask-cors>=4.0.0
+python-dotenv>=1.0.0
+alpaca-py>=0.20.0
