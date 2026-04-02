@@ -188,6 +188,146 @@ def api_pine():
     return jsonify(result)
 
 
+# ── Basic indicator Pine Script templates ────────────────────────────────────
+
+def _pine_volume(ticker: str) -> str:
+    return f"""\
+//@version=5
+indicator("24h Volume · {ticker}", overlay=false, max_bars_back=500)
+
+vol_avg = ta.sma(volume, 20)
+is_high = volume > vol_avg * 1.5
+
+bar_color = is_high ? color.new(color.red, 20) : close >= open ? color.new(color.teal, 30) : color.new(color.gray, 40)
+
+plot(volume,   "Volume",     style=plot.style_columns, color=bar_color)
+plot(vol_avg,  "20-bar Avg", color=color.orange, linewidth=2)
+
+bgcolor(is_high ? color.new(color.red, 90) : na, title="High Volume")
+"""
+
+def _pine_vwap(ticker: str) -> str:
+    return f"""\
+//@version=5
+indicator("VWAP · {ticker}", overlay=true, max_bars_back=500)
+
+vwap_val = ta.vwap(hlc3)
+
+upper1 = vwap_val + ta.stdev(hlc3, 20)
+lower1 = vwap_val - ta.stdev(hlc3, 20)
+upper2 = vwap_val + 2 * ta.stdev(hlc3, 20)
+lower2 = vwap_val - 2 * ta.stdev(hlc3, 20)
+
+plot(vwap_val, "VWAP",    color=color.new(color.blue,   0), linewidth=2)
+plot(upper1,   "+1 StDev", color=color.new(color.green, 40), linewidth=1)
+plot(lower1,   "-1 StDev", color=color.new(color.green, 40), linewidth=1)
+plot(upper2,   "+2 StDev", color=color.new(color.red,   40), linewidth=1)
+plot(lower2,   "-2 StDev", color=color.new(color.red,   40), linewidth=1)
+
+fill(plot(upper1, display=display.none), plot(lower1, display=display.none),
+     color=color.new(color.green, 90), title="±1 StDev Band")
+"""
+
+def _pine_atr(ticker: str) -> str:
+    return f"""\
+//@version=5
+indicator("ATR · {ticker}", overlay=false, max_bars_back=500)
+
+atr14  = ta.atr(14)
+atr_avg = ta.sma(atr14, 20)
+is_high = atr14 > atr_avg * 1.5
+
+atr_color = is_high ? color.new(color.red, 20) : color.new(color.blue, 40)
+
+plot(atr14,   "ATR(14)",   color=atr_color, linewidth=2)
+plot(atr_avg, "20-bar Avg", color=color.new(color.orange, 0), linewidth=1, style=plot.style_line)
+
+bgcolor(is_high ? color.new(color.red, 90) : na, title="High ATR")
+
+hline(0, color=color.new(color.gray, 80))
+"""
+
+def _pine_relvol(ticker: str) -> str:
+    return f"""\
+//@version=5
+indicator("Relative Volume · {ticker}", overlay=false, max_bars_back=500)
+
+lookback  = input.int(20, "Lookback bars", minval=5)
+threshold = input.float(2.0, "High RVOL threshold", minval=1.0, step=0.1)
+
+avg_vol = ta.sma(volume, lookback)
+rvol    = avg_vol > 0 ? volume / avg_vol : 1.0
+
+is_high = rvol >= threshold
+bar_color = is_high ? color.new(color.red, 20) : rvol >= 1.0 ? color.new(color.teal, 40) : color.new(color.gray, 50)
+
+plot(rvol, "RVOL", style=plot.style_columns, color=bar_color)
+hline(1.0,       "Average",   color=color.new(color.gray,  40), linestyle=hline.style_dashed)
+hline(threshold, "High RVOL", color=color.new(color.red,   40), linestyle=hline.style_dashed)
+
+bgcolor(is_high ? color.new(color.red, 90) : na, title="High RVOL")
+"""
+
+def _pine_ma_cross(ticker: str) -> str:
+    return f"""\
+//@version=5
+indicator("MA Cross · {ticker}", overlay=true, max_bars_back=500)
+
+fast = input.int(50,  "Fast MA", minval=1)
+slow = input.int(200, "Slow MA", minval=1)
+
+ma_fast = ta.sma(close, fast)
+ma_slow = ta.sma(close, slow)
+
+golden = ta.crossover(ma_fast, ma_slow)
+death  = ta.crossunder(ma_fast, ma_slow)
+
+plot(ma_fast, "Fast MA", color=color.new(color.blue,  0), linewidth=2)
+plot(ma_slow, "Slow MA", color=color.new(color.orange, 0), linewidth=2)
+
+plotshape(golden, "Golden Cross", style=shape.labelup,   location=location.belowbar,
+          color=color.new(color.green, 0), text="Golden", size=size.small)
+plotshape(death,  "Death Cross",  style=shape.labeldown, location=location.abovebar,
+          color=color.new(color.red,   0), text="Death",  size=size.small)
+
+bgcolor(ma_fast > ma_slow ? color.new(color.green, 95) : color.new(color.red, 95), title="Trend")
+"""
+
+INDICATORS = {
+    "volume":  ("24h Volume",       _pine_volume,   "Volume bars with 20-bar average. Red = unusually high volume (1.5× avg)."),
+    "vwap":    ("VWAP + Bands",     _pine_vwap,     "Volume Weighted Average Price with ±1 and ±2 standard deviation bands. Overlay on price."),
+    "atr":     ("ATR",              _pine_atr,      "Average True Range (14). Shows how much the stock moves per bar. Red = elevated volatility."),
+    "relvol":  ("Relative Volume",  _pine_relvol,   "Today's volume relative to average. RVOL > 2 = unusually active. Configurable threshold."),
+    "macross": ("MA Cross",         _pine_ma_cross, "50/200 moving average crossover. Labels Golden Cross (bullish) and Death Cross (bearish)."),
+}
+
+
+@app.route("/indicators")
+def indicators_page():
+    kind   = request.args.get("kind", "")
+    ticker = request.args.get("ticker", "SPY").upper()
+
+    pine_code = None
+    description = None
+    name = None
+    error = None
+
+    if kind and kind in INDICATORS and "ticker" in request.args:
+        try:
+            name, fn, description = INDICATORS[kind]
+            pine_code = fn(ticker)
+        except Exception as exc:
+            error = str(exc)
+
+    return render_template_string(INDICATORS_HTML,
+        ticker=ticker, kind=kind,
+        indicators=INDICATORS,
+        pine_code=pine_code,
+        name=name,
+        description=description,
+        error=error)
+
+
 # ── Pine Script generator endpoint ───────────────────────────────────────────
 
 @app.route("/generate")
@@ -283,6 +423,157 @@ def generate():
             ticker=ticker, interval=interval,
             pine_code=None, arrow=None, conf=None,
             error=str(exc))
+
+
+# ── Indicators HTML ──────────────────────────────────────────────────────────
+
+INDICATORS_HTML = """<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Free TradingView Indicators — Pine Script Generator</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: monospace; background: #0d1117; color: #e6edf3; min-height: 100vh; }
+    nav {
+      background: #161b22; border-bottom: 1px solid #30363d;
+      padding: 14px 24px; display: flex; align-items: center; justify-content: space-between;
+    }
+    .logo { color: #58a6ff; font-size: 1.1rem; font-weight: bold; text-decoration: none; }
+    .nav-links a { color: #8b949e; text-decoration: none; margin-left: 20px; font-size: 0.9rem; }
+    .nav-links a:hover { color: #e6edf3; }
+
+    .hero { text-align: center; padding: 48px 24px 32px; border-bottom: 1px solid #21262d; }
+    .hero h1 { font-size: 1.8rem; color: #e6edf3; margin-bottom: 10px; }
+    .hero h1 span { color: #58a6ff; }
+    .hero p { color: #8b949e; font-size: 0.95rem; max-width: 520px; margin: 0 auto; }
+
+    .container { max-width: 760px; margin: 0 auto; padding: 32px 24px; }
+
+    /* Indicator cards */
+    .indicator-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; margin-bottom: 28px; }
+    .ind-card {
+      background: #161b22; border: 1px solid #30363d; border-radius: 8px;
+      padding: 14px 16px; cursor: pointer; transition: border-color 0.15s;
+      text-decoration: none; display: block;
+    }
+    .ind-card:hover { border-color: #58a6ff; }
+    .ind-card.active { border-color: #58a6ff; background: #0d2a4a; }
+    .ind-card .ind-name { color: #e6edf3; font-size: 0.9rem; font-weight: bold; margin-bottom: 4px; }
+    .ind-card .ind-desc { color: #8b949e; font-size: 0.75rem; line-height: 1.4; }
+
+    /* Form */
+    .card { background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 24px; margin-bottom: 24px; }
+    .form-row { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; }
+    .form-group { display: flex; flex-direction: column; gap: 6px; }
+    label { color: #8b949e; font-size: 0.8rem; }
+    input, select {
+      background: #0d1117; color: #e6edf3; border: 1px solid #30363d;
+      padding: 8px 14px; border-radius: 6px; font-family: monospace; font-size: 0.9rem;
+    }
+    input:focus, select:focus { outline: none; border-color: #58a6ff; }
+    .btn-generate {
+      background: #1f6feb; color: #fff; border: none;
+      padding: 9px 24px; border-radius: 6px; font-family: monospace;
+      font-size: 0.9rem; cursor: pointer; font-weight: bold;
+    }
+    .btn-generate:hover { background: #388bfd; }
+
+    /* Output */
+    .pine-label { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+    .pine-label span { color: #8b949e; font-size: 0.8rem; }
+    .btn-copy {
+      background: #21262d; color: #e6edf3; border: 1px solid #30363d;
+      padding: 5px 14px; border-radius: 6px; font-family: monospace; font-size: 0.8rem; cursor: pointer;
+    }
+    .btn-copy:hover { background: #30363d; }
+    .btn-copy.copied { border-color: #3fb950; color: #3fb950; }
+    textarea {
+      width: 100%; height: 320px; background: #0d1117; color: #c9d1d9;
+      border: 1px solid #30363d; border-radius: 6px; padding: 14px;
+      font-family: monospace; font-size: 0.78rem; line-height: 1.55; resize: vertical;
+    }
+    .desc-box { background: #0d2a14; border: 1px solid #3fb950; border-radius: 6px; padding: 10px 14px; margin-bottom: 16px; color: #3fb950; font-size: 0.85rem; }
+    .error-box { background: #2d1316; border: 1px solid #f85149; border-radius: 6px; padding: 14px; color: #f85149; font-size: 0.85rem; }
+
+    footer { text-align: center; padding: 32px 24px; color: #484f58; font-size: 0.8rem; border-top: 1px solid #21262d; margin-top: 40px; }
+  </style>
+</head>
+<body>
+<nav>
+  <a class="logo" href="/">VolForecast</a>
+  <div class="nav-links">
+    <a href="/indicators">Indicators</a>
+    <a href="/generate">Forecast</a>
+    <a href="/dashboard">Live Chart</a>
+  </div>
+</nav>
+
+<div class="hero">
+  <h1>Free <span>TradingView</span> Indicators</h1>
+  <p>Pick an indicator, enter a ticker, and get Pine Script to paste directly into TradingView. No paid plan needed.</p>
+</div>
+
+<div class="container">
+  <div class="indicator-grid">
+    {% for key, (iname, _, idesc) in indicators.items() %}
+    <a class="ind-card {{ 'active' if key == kind else '' }}"
+       href="/indicators?kind={{ key }}&ticker={{ ticker }}">
+      <div class="ind-name">{{ iname }}</div>
+      <div class="ind-desc">{{ idesc[:60] }}…</div>
+    </a>
+    {% endfor %}
+  </div>
+
+  {% if kind in indicators %}
+  <div class="card">
+    <form method="GET" action="/indicators">
+      <input type="hidden" name="kind" value="{{ kind }}">
+      <div class="form-row">
+        <div class="form-group">
+          <label>Ticker</label>
+          <input name="ticker" value="{{ ticker }}" style="width:100px; text-transform:uppercase">
+        </div>
+        <button class="btn-generate" type="submit">Generate</button>
+      </div>
+    </form>
+
+    {% if error %}
+    <div class="error-box" style="margin-top:16px">{{ error }}</div>
+    {% endif %}
+
+    {% if pine_code %}
+    <div style="margin-top:20px">
+      {% if description %}
+      <div class="desc-box">{{ description }}</div>
+      {% endif %}
+      <div class="pine-label">
+        <span>Pine Script v5 — paste into TradingView Pine Editor</span>
+        <button class="btn-copy" onclick="copyPine()">Copy</button>
+      </div>
+      <textarea id="pine-out" readonly>{{ pine_code }}</textarea>
+    </div>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+
+<footer>VolForecast — Free Pine Script indicators · Not financial advice</footer>
+
+<script>
+function copyPine() {
+  const ta = document.getElementById('pine-out');
+  ta.select();
+  document.execCommand('copy');
+  const btn = document.querySelector('.btn-copy');
+  btn.textContent = 'Copied!';
+  btn.classList.add('copied');
+  setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
+}
+</script>
+</body>
+</html>"""
 
 
 # ── Generator HTML ───────────────────────────────────────────────────────────
@@ -420,8 +711,9 @@ GENERATOR_HTML = """<!DOCTYPE html>
 <nav>
   <a class="logo" href="/">VolForecast</a>
   <div class="nav-links">
+    <a href="/indicators">Indicators</a>
+    <a href="/generate">Forecast</a>
     <a href="/dashboard">Live Chart</a>
-    <a href="/">Generator</a>
   </div>
 </nav>
 
