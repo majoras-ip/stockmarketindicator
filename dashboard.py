@@ -190,10 +190,10 @@ def api_pine():
 
 # ── Basic indicator Pine Script templates ────────────────────────────────────
 
-def _pine_volume(ticker: str) -> str:
-    return f"""\
+def _pine_volume() -> str:
+    return """\
 //@version=5
-indicator("24h Volume · {ticker}", overlay=false, max_bars_back=500)
+indicator("Volume", overlay=false, max_bars_back=500)
 
 vol_avg = ta.sma(volume, 20)
 is_high = volume > vol_avg * 1.5
@@ -206,10 +206,10 @@ plot(vol_avg,  "20-bar Avg", color=color.orange, linewidth=2)
 bgcolor(is_high ? color.new(color.red, 90) : na, title="High Volume")
 """
 
-def _pine_vwap(ticker: str) -> str:
-    return f"""\
+def _pine_vwap() -> str:
+    return """\
 //@version=5
-indicator("VWAP · {ticker}", overlay=true, max_bars_back=500)
+indicator("VWAP + Bands", overlay=true, max_bars_back=500)
 
 vwap_val = ta.vwap(hlc3)
 
@@ -218,7 +218,7 @@ lower1 = vwap_val - ta.stdev(hlc3, 20)
 upper2 = vwap_val + 2 * ta.stdev(hlc3, 20)
 lower2 = vwap_val - 2 * ta.stdev(hlc3, 20)
 
-plot(vwap_val, "VWAP",    color=color.new(color.blue,   0), linewidth=2)
+plot(vwap_val, "VWAP",     color=color.new(color.blue,   0), linewidth=2)
 plot(upper1,   "+1 StDev", color=color.new(color.green, 40), linewidth=1)
 plot(lower1,   "-1 StDev", color=color.new(color.green, 40), linewidth=1)
 plot(upper2,   "+2 StDev", color=color.new(color.red,   40), linewidth=1)
@@ -228,50 +228,49 @@ fill(plot(upper1, display=display.none), plot(lower1, display=display.none),
      color=color.new(color.green, 90), title="±1 StDev Band")
 """
 
-def _pine_atr(ticker: str) -> str:
-    return f"""\
+def _pine_atr() -> str:
+    return """\
 //@version=5
-indicator("ATR · {ticker}", overlay=false, max_bars_back=500)
+indicator("ATR", overlay=false, max_bars_back=500)
 
-atr14  = ta.atr(14)
+atr14   = ta.atr(14)
 atr_avg = ta.sma(atr14, 20)
 is_high = atr14 > atr_avg * 1.5
 
 atr_color = is_high ? color.new(color.red, 20) : color.new(color.blue, 40)
 
-plot(atr14,   "ATR(14)",   color=atr_color, linewidth=2)
-plot(atr_avg, "20-bar Avg", color=color.new(color.orange, 0), linewidth=1, style=plot.style_line)
+plot(atr14,   "ATR(14)",    color=atr_color, linewidth=2)
+plot(atr_avg, "20-bar Avg", color=color.new(color.orange, 0), linewidth=1)
 
 bgcolor(is_high ? color.new(color.red, 90) : na, title="High ATR")
-
 hline(0, color=color.new(color.gray, 80))
 """
 
-def _pine_relvol(ticker: str) -> str:
-    return f"""\
+def _pine_relvol() -> str:
+    return """\
 //@version=5
-indicator("Relative Volume · {ticker}", overlay=false, max_bars_back=500)
+indicator("Relative Volume", overlay=false, max_bars_back=500)
 
-lookback  = input.int(20, "Lookback bars", minval=5)
+lookback  = input.int(20,  "Lookback bars",      minval=5)
 threshold = input.float(2.0, "High RVOL threshold", minval=1.0, step=0.1)
 
 avg_vol = ta.sma(volume, lookback)
 rvol    = avg_vol > 0 ? volume / avg_vol : 1.0
 
-is_high = rvol >= threshold
+is_high   = rvol >= threshold
 bar_color = is_high ? color.new(color.red, 20) : rvol >= 1.0 ? color.new(color.teal, 40) : color.new(color.gray, 50)
 
 plot(rvol, "RVOL", style=plot.style_columns, color=bar_color)
-hline(1.0,       "Average",   color=color.new(color.gray,  40), linestyle=hline.style_dashed)
-hline(threshold, "High RVOL", color=color.new(color.red,   40), linestyle=hline.style_dashed)
+hline(1.0,       "Average",   color=color.new(color.gray, 40), linestyle=hline.style_dashed)
+hline(threshold, "High RVOL", color=color.new(color.red,  40), linestyle=hline.style_dashed)
 
 bgcolor(is_high ? color.new(color.red, 90) : na, title="High RVOL")
 """
 
-def _pine_ma_cross(ticker: str) -> str:
-    return f"""\
+def _pine_ma_cross() -> str:
+    return """\
 //@version=5
-indicator("MA Cross · {ticker}", overlay=true, max_bars_back=500)
+indicator("MA Cross", overlay=true, max_bars_back=500)
 
 fast = input.int(50,  "Fast MA", minval=1)
 slow = input.int(200, "Slow MA", minval=1)
@@ -279,10 +278,10 @@ slow = input.int(200, "Slow MA", minval=1)
 ma_fast = ta.sma(close, fast)
 ma_slow = ta.sma(close, slow)
 
-golden = ta.crossover(ma_fast, ma_slow)
+golden = ta.crossover(ma_fast,  ma_slow)
 death  = ta.crossunder(ma_fast, ma_slow)
 
-plot(ma_fast, "Fast MA", color=color.new(color.blue,  0), linewidth=2)
+plot(ma_fast, "Fast MA", color=color.new(color.blue,   0), linewidth=2)
 plot(ma_slow, "Slow MA", color=color.new(color.orange, 0), linewidth=2)
 
 plotshape(golden, "Golden Cross", style=shape.labelup,   location=location.belowbar,
@@ -294,38 +293,32 @@ bgcolor(ma_fast > ma_slow ? color.new(color.green, 95) : color.new(color.red, 95
 """
 
 INDICATORS = {
-    "volume":  ("24h Volume",       _pine_volume,   "Volume bars with 20-bar average. Red = unusually high volume (1.5× avg)."),
-    "vwap":    ("VWAP + Bands",     _pine_vwap,     "Volume Weighted Average Price with ±1 and ±2 standard deviation bands. Overlay on price."),
-    "atr":     ("ATR",              _pine_atr,      "Average True Range (14). Shows how much the stock moves per bar. Red = elevated volatility."),
-    "relvol":  ("Relative Volume",  _pine_relvol,   "Today's volume relative to average. RVOL > 2 = unusually active. Configurable threshold."),
-    "macross": ("MA Cross",         _pine_ma_cross, "50/200 moving average crossover. Labels Golden Cross (bullish) and Death Cross (bearish)."),
+    "volume":  ("Volume",          _pine_volume,   "Volume bars with 20-bar average. Red = unusually high volume (1.5× avg)."),
+    "vwap":    ("VWAP + Bands",    _pine_vwap,     "Volume Weighted Average Price with ±1 and ±2 standard deviation bands. Overlaid on price."),
+    "atr":     ("ATR",             _pine_atr,      "Average True Range (14). Shows how much the asset moves per bar. Red = elevated volatility."),
+    "relvol":  ("Relative Volume", _pine_relvol,   "Today's volume vs average. RVOL > 2 = unusually active. Threshold is adjustable."),
+    "macross": ("MA Cross",        _pine_ma_cross, "50/200 MA crossover. Labels Golden Cross (bullish) and Death Cross (bearish) on the chart."),
 }
 
 
 @app.route("/indicators")
 def indicators_page():
-    kind   = request.args.get("kind", "")
-    ticker = request.args.get("ticker", "SPY").upper()
+    kind = request.args.get("kind", "")
 
-    pine_code = None
+    pine_code   = None
     description = None
-    name = None
-    error = None
+    name        = None
 
-    if kind and kind in INDICATORS and "ticker" in request.args:
-        try:
-            name, fn, description = INDICATORS[kind]
-            pine_code = fn(ticker)
-        except Exception as exc:
-            error = str(exc)
+    if kind and kind in INDICATORS:
+        name, fn, description = INDICATORS[kind]
+        pine_code = fn()
 
     return render_template_string(INDICATORS_HTML,
-        ticker=ticker, kind=kind,
+        kind=kind,
         indicators=INDICATORS,
         pine_code=pine_code,
         name=name,
-        description=description,
-        error=error)
+        description=description)
 
 
 # ── Pine Script generator endpoint ───────────────────────────────────────────
@@ -526,35 +519,14 @@ INDICATORS_HTML = """<!DOCTYPE html>
     {% endfor %}
   </div>
 
-  {% if kind in indicators %}
+  {% if pine_code %}
   <div class="card">
-    <form method="GET" action="/indicators">
-      <input type="hidden" name="kind" value="{{ kind }}">
-      <div class="form-row">
-        <div class="form-group">
-          <label>Ticker</label>
-          <input name="ticker" value="{{ ticker }}" style="width:100px; text-transform:uppercase">
-        </div>
-        <button class="btn-generate" type="submit">Generate</button>
-      </div>
-    </form>
-
-    {% if error %}
-    <div class="error-box" style="margin-top:16px">{{ error }}</div>
-    {% endif %}
-
-    {% if pine_code %}
-    <div style="margin-top:20px">
-      {% if description %}
-      <div class="desc-box">{{ description }}</div>
-      {% endif %}
-      <div class="pine-label">
-        <span>Pine Script v5 — paste into TradingView Pine Editor</span>
-        <button class="btn-copy" onclick="copyPine()">Copy</button>
-      </div>
-      <textarea id="pine-out" readonly>{{ pine_code }}</textarea>
+    <div class="desc-box">{{ description }}</div>
+    <div class="pine-label">
+      <span>Pine Script v5 — works on any chart, no ticker needed</span>
+      <button class="btn-copy" onclick="copyPine()">Copy</button>
     </div>
-    {% endif %}
+    <textarea id="pine-out" readonly>{{ pine_code }}</textarea>
   </div>
   {% endif %}
 </div>
