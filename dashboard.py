@@ -193,17 +193,25 @@ def api_pine():
 def _pine_volume() -> str:
     return """\
 //@version=5
-indicator("Volume", overlay=false, max_bars_back=500)
+indicator("24h Volume", overlay=false, max_bars_back=500)
 
-vol_avg = ta.sma(volume, 20)
-is_high = volume > vol_avg * 1.5
+// Cumulative volume since session open (resets each day)
+is_new_day = dayofweek != dayofweek[1] or na(time[1])
+cum_vol    = ta.cum(volume)
+day_start  = ta.valuewhen(is_new_day, cum_vol - volume, 0)
+vol_24h    = cum_vol - day_start
+
+// Average daily volume (using daily timeframe)
+avg_daily = request.security(syminfo.tickerid, "D", ta.sma(volume, 20))
+
+is_high = vol_24h > avg_daily * 0.75
 
 bar_color = is_high ? color.new(color.red, 20) : close >= open ? color.new(color.teal, 30) : color.new(color.gray, 40)
 
-plot(volume,   "Volume",     style=plot.style_columns, color=bar_color)
-plot(vol_avg,  "20-bar Avg", color=color.orange, linewidth=2)
+plot(vol_24h,   "24h Volume",     style=plot.style_area, color=color.new(color.blue, 60), linewidth=1)
+plot(avg_daily, "Avg Daily Vol",  color=color.orange, linewidth=2)
 
-bgcolor(is_high ? color.new(color.red, 90) : na, title="High Volume")
+bgcolor(is_high ? color.new(color.red, 92) : na, title="Above Avg Volume")
 """
 
 def _pine_vwap() -> str:
@@ -293,7 +301,7 @@ bgcolor(ma_fast > ma_slow ? color.new(color.green, 95) : color.new(color.red, 95
 """
 
 INDICATORS = {
-    "volume":  ("Volume",          _pine_volume,   "Volume bars with 20-bar average. Red = unusually high volume (1.5× avg)."),
+    "volume":  ("24h Volume",       _pine_volume,   "Cumulative volume since market open vs 20-day average daily volume. Red = above average day."),
     "vwap":    ("VWAP + Bands",    _pine_vwap,     "Volume Weighted Average Price with ±1 and ±2 standard deviation bands. Overlaid on price."),
     "atr":     ("ATR",             _pine_atr,      "Average True Range (14). Shows how much the asset moves per bar. Red = elevated volatility."),
     "relvol":  ("Relative Volume", _pine_relvol,   "Today's volume vs average. RVOL > 2 = unusually active. Threshold is adjustable."),
