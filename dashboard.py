@@ -317,6 +317,12 @@ bgcolor(ma_fast > ma_slow ? color.new(color.green, 95) : color.new(color.red, 95
 INDICATORS = {
     "volume":  ("24h Volume",       _pine_volume,   "Cumulative volume since market open vs 20-day average daily volume. Red = above average day."),
     "vwap":    ("VWAP + Bands",    _pine_vwap,     "Volume Weighted Average Price with configurable ±1, ±2, ±3 standard deviation bands. Overlaid on price."),
+    "vwap_only": ("VWAP Only",    lambda: """\
+//@version=5
+indicator("VWAP", overlay=true, max_bars_back=500)
+
+plot(ta.vwap(hlc3), "VWAP", color=color.new(color.blue, 0), linewidth=2)
+""",     "Just the VWAP line, no bands. Clean and simple, overlaid on the price chart."),
     "atr":     ("ATR",             _pine_atr,      "Average True Range (14). Shows how much the asset moves per bar. Red = elevated volatility."),
     "relvol":  ("Relative Volume", _pine_relvol,   "Today's volume vs average. RVOL > 2 = unusually active. Threshold is adjustable."),
     "macross": ("MA Cross",        _pine_ma_cross, "50/200 MA crossover. Labels Golden Cross (bullish) and Death Cross (bearish) on the chart."),
