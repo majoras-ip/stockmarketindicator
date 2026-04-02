@@ -208,8 +208,8 @@ is_high = vol_24h > avg_daily * 0.75
 
 bar_color = is_high ? color.new(color.red, 20) : close >= open ? color.new(color.teal, 30) : color.new(color.gray, 40)
 
-plot(vol_24h,   "24h Volume",     style=plot.style_area, color=color.new(color.blue, 60), linewidth=1)
-plot(avg_daily, "Avg Daily Vol",  color=color.orange, linewidth=2)
+plot(vol_24h,   "24h Volume",    style=plot.style_columns, color=bar_color)
+plot(avg_daily, "Avg Daily Vol", color=color.orange, linewidth=2)
 
 bgcolor(is_high ? color.new(color.red, 92) : na, title="Above Avg Volume")
 """
