@@ -188,6 +188,336 @@ def api_pine():
     return jsonify(result)
 
 
+# ── Pine Script generator endpoint ───────────────────────────────────────────
+
+@app.route("/generate")
+def generate():
+    ticker   = request.args.get("ticker", "SPY").upper()
+    interval = request.args.get("interval", "5m")
+
+    # If user just landed on the page without submitting, show empty form
+    if "ticker" not in request.args:
+        return render_template_string(GENERATOR_HTML,
+            ticker="SPY", interval="5m",
+            pine_code=None, arrow=None, conf=None, error=None)
+
+    try:
+        from data.collector import download
+        from prediction.forecast_exporter import ForecastExporter, _build_forecast_pine
+        from data.forecast_preprocessor import FORECAST_STEPS
+        from models.forecaster import build_sequences
+        from data.preprocessor import _filter_market_hours, _remove_outliers
+        from data.features import build_features
+        from datetime import timezone
+        import numpy as np
+
+        try:
+            from dotenv import load_dotenv
+            load_dotenv(os.path.join(config.BASE_DIR, ".env"))
+            from live.live_feed import fetch_bars
+            interval_map = {"1m": "1Min", "5m": "5Min", "15m": "15Min", "1h": "1Hour"}
+            df = fetch_bars(ticker, interval_map.get(interval, "5Min"))
+        except Exception:
+            df = download(ticker, period="5d", interval=interval, save_csv=False)
+
+        exporter = ForecastExporter()
+        exporter.load()
+
+        df_clean = _remove_outliers(_filter_market_hours(df))
+        features = build_features(df_clean).dropna()
+        if exporter.feature_names:
+            for col in set(exporter.feature_names) - set(features.columns):
+                features[col] = 0.0
+            features = features[exporter.feature_names]
+
+        X_scaled = exporter.scaler.transform(features)
+        dummy_y  = np.zeros(len(X_scaled))
+        X_seq, _ = build_sequences(X_scaled, dummy_y, config.SEQUENCE_LENGTH, FORECAST_STEPS)
+
+        all_preds = exporter.forecaster.predict(X_seq) * exporter.y_scale
+        hist_rv   = all_preds[:, 0]
+        hist_index = features.index[config.SEQUENCE_LENGTH : config.SEQUENCE_LENGTH + len(hist_rv)]
+
+        mean, lower, upper = exporter.forecaster.predict_with_uncertainty(X_seq)
+        mean  = mean  * exporter.y_scale
+        lower = lower * exporter.y_scale
+        upper = upper * exporter.y_scale
+
+        interval_ms_map = {"1m": 60_000, "5m": 300_000, "15m": 900_000, "1h": 3_600_000}
+        bar_ms   = interval_ms_map.get(interval, 300_000)
+        last_ts  = int(hist_index[-1].timestamp() * 1000)
+        future_ts = [last_ts + bar_ms * (i + 1) for i in range(FORECAST_STEPS)]
+
+        direction_up   = None
+        direction_conf = None
+        if exporter.direction_model is not None:
+            proba = exporter.direction_model.predict_proba(features.iloc[[-1]].values)[0]
+            direction_up   = bool(proba[1] >= 0.5)
+            direction_conf = float(max(proba))
+
+        pine_code = _build_forecast_pine(
+            ticker=ticker,
+            interval=interval,
+            timestamps_ms=[int(ts.timestamp() * 1000) for ts in hist_index],
+            hist_values=[round(float(v), 8) for v in hist_rv],
+            future_timestamps_ms=future_ts,
+            future_values=[round(float(v), 8) for v in mean],
+            lower_values=[round(float(v), 8) for v in lower],
+            upper_values=[round(float(v), 8) for v in upper],
+            direction_up=direction_up,
+            direction_conf=direction_conf,
+        )
+
+        arrow = ("▲ UP" if direction_up else "▼ DOWN") if direction_up is not None else "—"
+        conf_pct = f"{direction_conf:.0%}" if direction_conf else "—"
+
+        return render_template_string(GENERATOR_HTML,
+            ticker=ticker, interval=interval,
+            pine_code=pine_code,
+            arrow=arrow, conf=conf_pct,
+            error=None)
+
+    except Exception as exc:
+        log.exception("Generate error")
+        return render_template_string(GENERATOR_HTML,
+            ticker=ticker, interval=interval,
+            pine_code=None, arrow=None, conf=None,
+            error=str(exc))
+
+
+# ── Generator HTML ───────────────────────────────────────────────────────────
+
+GENERATOR_HTML = """<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Volatility Forecast — Free TradingView Pine Script Generator</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: monospace; background: #0d1117; color: #e6edf3; min-height: 100vh; }
+
+    /* Nav */
+    nav {
+      background: #161b22; border-bottom: 1px solid #30363d;
+      padding: 14px 24px; display: flex; align-items: center; justify-content: space-between;
+    }
+    .logo { color: #58a6ff; font-size: 1.1rem; font-weight: bold; text-decoration: none; }
+    .nav-links a { color: #8b949e; text-decoration: none; margin-left: 20px; font-size: 0.9rem; }
+    .nav-links a:hover { color: #e6edf3; }
+
+    /* Hero */
+    .hero {
+      text-align: center; padding: 56px 24px 40px;
+      background: linear-gradient(180deg, #161b22 0%, #0d1117 100%);
+      border-bottom: 1px solid #21262d;
+    }
+    .hero h1 { font-size: 2rem; color: #e6edf3; margin-bottom: 12px; line-height: 1.3; }
+    .hero h1 span { color: #58a6ff; }
+    .hero p { color: #8b949e; font-size: 1rem; max-width: 560px; margin: 0 auto 8px; line-height: 1.6; }
+    .badge-free {
+      display: inline-block; margin-top: 14px;
+      background: #0d3349; color: #58a6ff; border: 1px solid #1f6feb;
+      padding: 4px 14px; border-radius: 20px; font-size: 0.8rem;
+    }
+
+    /* Card */
+    .card {
+      background: #161b22; border: 1px solid #30363d; border-radius: 10px;
+      padding: 28px; margin: 32px auto; max-width: 720px;
+    }
+    .card h2 { color: #58a6ff; font-size: 1rem; margin-bottom: 20px; }
+
+    /* Form row */
+    .form-row { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; }
+    .form-group { display: flex; flex-direction: column; gap: 6px; }
+    label { color: #8b949e; font-size: 0.8rem; }
+    input, select {
+      background: #0d1117; color: #e6edf3; border: 1px solid #30363d;
+      padding: 8px 14px; border-radius: 6px; font-family: monospace; font-size: 0.9rem; min-width: 120px;
+    }
+    input:focus, select:focus { outline: none; border-color: #58a6ff; }
+
+    .btn-generate {
+      background: #1f6feb; color: #fff; border: none;
+      padding: 9px 24px; border-radius: 6px; font-family: monospace;
+      font-size: 0.9rem; cursor: pointer; font-weight: bold;
+    }
+    .btn-generate:hover { background: #388bfd; }
+    .btn-generate:disabled { background: #21262d; color: #484f58; cursor: not-allowed; }
+
+    /* Direction badge */
+    .dir-row { display: flex; gap: 12px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; }
+    .dir-badge {
+      padding: 5px 16px; border-radius: 20px; font-size: 0.9rem; font-weight: bold;
+      border: 1px solid #30363d; background: #21262d;
+    }
+    .dir-badge.up   { border-color: #3fb950; color: #3fb950; background: #0d2a14; }
+    .dir-badge.down { border-color: #f85149; color: #f85149; background: #2d1316; }
+    .conf-badge { color: #8b949e; font-size: 0.85rem; }
+
+    /* Pine code area */
+    .pine-label {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 8px;
+    }
+    .pine-label span { color: #8b949e; font-size: 0.8rem; }
+    .btn-copy {
+      background: #21262d; color: #e6edf3; border: 1px solid #30363d;
+      padding: 5px 14px; border-radius: 6px; font-family: monospace;
+      font-size: 0.8rem; cursor: pointer;
+    }
+    .btn-copy:hover { background: #30363d; }
+    .btn-copy.copied { border-color: #3fb950; color: #3fb950; }
+
+    textarea {
+      width: 100%; height: 380px; background: #0d1117; color: #c9d1d9;
+      border: 1px solid #30363d; border-radius: 6px; padding: 14px;
+      font-family: monospace; font-size: 0.78rem; line-height: 1.55;
+      resize: vertical;
+    }
+    textarea:focus { outline: none; border-color: #58a6ff; }
+
+    /* Steps */
+    .steps { margin-top: 28px; }
+    .steps h3 { color: #8b949e; font-size: 0.8rem; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.05em; }
+    .step {
+      display: flex; gap: 12px; align-items: flex-start;
+      padding: 10px 0; border-bottom: 1px solid #21262d; font-size: 0.88rem;
+    }
+    .step:last-child { border-bottom: none; }
+    .step-num {
+      background: #1f6feb; color: #fff; border-radius: 50%;
+      width: 22px; height: 22px; min-width: 22px; display: flex;
+      align-items: center; justify-content: center; font-size: 0.75rem; font-weight: bold;
+    }
+    .step-text { color: #8b949e; line-height: 1.5; }
+    .step-text strong { color: #e6edf3; }
+
+    /* Error */
+    .error-box {
+      background: #2d1316; border: 1px solid #f85149; border-radius: 6px;
+      padding: 14px; color: #f85149; font-size: 0.85rem; margin-bottom: 16px;
+    }
+
+    /* Spinner */
+    .spinner {
+      display: inline-block; width: 14px; height: 14px;
+      border: 2px solid #30363d; border-top-color: #58a6ff;
+      border-radius: 50%; animation: spin 0.6s linear infinite;
+      vertical-align: middle; margin-right: 6px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    footer {
+      text-align: center; padding: 32px 24px; color: #484f58; font-size: 0.8rem;
+      border-top: 1px solid #21262d; margin-top: 40px;
+    }
+  </style>
+</head>
+<body>
+
+<nav>
+  <a class="logo" href="/">VolForecast</a>
+  <div class="nav-links">
+    <a href="/dashboard">Live Chart</a>
+    <a href="/">Generator</a>
+  </div>
+</nav>
+
+<div class="hero">
+  <h1>Free TradingView<br><span>Volatility Forecast</span> Indicator</h1>
+  <p>Generate a custom Pine Script indicator with an LSTM-powered volatility forecast — no paid TradingView plan required.</p>
+  <span class="badge-free">✓ Works on free TradingView accounts</span>
+</div>
+
+<div class="card">
+  <h2>Generate Your Indicator</h2>
+  <form method="GET" action="/generate" id="genForm">
+    <div class="form-row">
+      <div class="form-group">
+        <label for="ticker">Ticker</label>
+        <input id="ticker" name="ticker" value="{{ ticker }}" placeholder="SPY" style="width:100px; text-transform:uppercase">
+      </div>
+      <div class="form-group">
+        <label for="interval">Interval</label>
+        <select id="interval" name="interval">
+          <option value="5m"  {% if interval == '5m'  %}selected{% endif %}>5m</option>
+          <option value="1m"  {% if interval == '1m'  %}selected{% endif %}>1m</option>
+          <option value="15m" {% if interval == '15m' %}selected{% endif %}>15m</option>
+          <option value="1h"  {% if interval == '1h'  %}selected{% endif %}>1h</option>
+        </select>
+      </div>
+      <button class="btn-generate" type="submit" id="genBtn">Generate</button>
+    </div>
+  </form>
+
+  {% if error %}
+  <div class="error-box" style="margin-top:20px">Error: {{ error }}</div>
+  {% endif %}
+
+  {% if pine_code %}
+  <div style="margin-top:24px">
+    <div class="dir-row">
+      <span class="dir-badge {{ 'up' if '▲' in arrow else 'down' }}">{{ arrow }}</span>
+      <span class="conf-badge">Confidence: {{ conf }}</span>
+    </div>
+
+    <div class="pine-label">
+      <span>Pine Script v5 — paste into TradingView Pine Editor</span>
+      <button class="btn-copy" onclick="copyPine()">Copy</button>
+    </div>
+    <textarea id="pine-out" readonly>{{ pine_code }}</textarea>
+  </div>
+  {% endif %}
+
+  <div class="steps" style="margin-top: {{ '28px' if pine_code else '28px' }}">
+    <h3>How to use</h3>
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-text">Enter a ticker (e.g. <strong>SPY</strong>, <strong>AAPL</strong>) and interval, then click <strong>Generate</strong>.</div>
+    </div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-text">Click <strong>Copy</strong> to copy the generated Pine Script code.</div>
+    </div>
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-text">Open <strong>TradingView</strong> → any chart → click <strong>Pine Script Editor</strong> at the bottom.</div>
+    </div>
+    <div class="step">
+      <div class="step-num">4</div>
+      <div class="step-text">Paste the code → click <strong>Add to chart</strong>. The forecast appears as a separate panel below the chart.</div>
+    </div>
+  </div>
+</div>
+
+<footer>
+  VolForecast — LSTM volatility prediction · Not financial advice
+</footer>
+
+<script>
+  // Show spinner while generating
+  document.getElementById('genForm').addEventListener('submit', function() {
+    const btn = document.getElementById('genBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>Generating…';
+  });
+
+  function copyPine() {
+    const ta = document.getElementById('pine-out');
+    ta.select();
+    document.execCommand('copy');
+    const btn = document.querySelector('.btn-copy');
+    btn.textContent = 'Copied!';
+    btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
+  }
+</script>
+</body>
+</html>"""
+
+
 # ── Dashboard HTML ────────────────────────────────────────────────────────────
 
 DASHBOARD_HTML = """<!DOCTYPE html>
@@ -371,9 +701,15 @@ refresh();
 </html>"""
 
 
-@app.route("/")
+@app.route("/dashboard")
 def dashboard():
     return render_template_string(DASHBOARD_HTML)
+
+
+@app.route("/")
+def index():
+    from flask import redirect
+    return redirect("/generate")
 
 
 # ── Entry point ───────────────────────────────────────────────────────────────
