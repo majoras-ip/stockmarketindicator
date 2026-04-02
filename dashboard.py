@@ -214,27 +214,41 @@ plot(avg_daily, "Avg Daily Vol", color=color.orange, linewidth=2)
 bgcolor(is_high ? color.new(color.red, 92) : na, title="Above Avg Volume")
 """
 
-def _pine_vwap() -> str:
-    return """\
-//@version=5
-indicator("VWAP + Bands", overlay=true, max_bars_back=500)
-
-vwap_val = ta.vwap(hlc3)
-
-upper1 = vwap_val + ta.stdev(hlc3, 20)
-lower1 = vwap_val - ta.stdev(hlc3, 20)
-upper2 = vwap_val + 2 * ta.stdev(hlc3, 20)
-lower2 = vwap_val - 2 * ta.stdev(hlc3, 20)
-
-plot(vwap_val, "VWAP",     color=color.new(color.blue,   0), linewidth=2)
-plot(upper1,   "+1 StDev", color=color.new(color.green, 40), linewidth=1)
-plot(lower1,   "-1 StDev", color=color.new(color.green, 40), linewidth=1)
-plot(upper2,   "+2 StDev", color=color.new(color.red,   40), linewidth=1)
-plot(lower2,   "-2 StDev", color=color.new(color.red,   40), linewidth=1)
-
-fill(plot(upper1, display=display.none), plot(lower1, display=display.none),
-     color=color.new(color.green, 90), title="±1 StDev Band")
-"""
+def _pine_vwap(band1: bool = True, band2: bool = True, band3: bool = False) -> str:
+    lines = [
+        '//@version=5',
+        'indicator("VWAP + Bands", overlay=true, max_bars_back=500)',
+        '',
+        'vwap_val = ta.vwap(hlc3)',
+        'stdev    = ta.stdev(hlc3, 20)',
+        '',
+        'plot(vwap_val, "VWAP", color=color.new(color.blue, 0), linewidth=2)',
+    ]
+    if band1:
+        lines += [
+            'upper1 = vwap_val + stdev',
+            'lower1 = vwap_val - stdev',
+            'p_u1 = plot(upper1, "+1 StDev", color=color.new(color.green, 40), linewidth=1)',
+            'p_l1 = plot(lower1, "-1 StDev", color=color.new(color.green, 40), linewidth=1)',
+            'fill(p_u1, p_l1, color=color.new(color.green, 90), title="±1 Band")',
+        ]
+    if band2:
+        lines += [
+            'upper2 = vwap_val + 2 * stdev',
+            'lower2 = vwap_val - 2 * stdev',
+            'p_u2 = plot(upper2, "+2 StDev", color=color.new(color.red, 40), linewidth=1)',
+            'p_l2 = plot(lower2, "-2 StDev", color=color.new(color.red, 40), linewidth=1)',
+            'fill(p_u2, p_l2, color=color.new(color.red, 92), title="±2 Band")',
+        ]
+    if band3:
+        lines += [
+            'upper3 = vwap_val + 3 * stdev',
+            'lower3 = vwap_val - 3 * stdev',
+            'p_u3 = plot(upper3, "+3 StDev", color=color.new(color.purple, 40), linewidth=1)',
+            'p_l3 = plot(lower3, "-3 StDev", color=color.new(color.purple, 40), linewidth=1)',
+            'fill(p_u3, p_l3, color=color.new(color.purple, 92), title="±3 Band")',
+        ]
+    return '\n'.join(lines) + '\n'
 
 def _pine_atr() -> str:
     return """\
@@ -302,7 +316,7 @@ bgcolor(ma_fast > ma_slow ? color.new(color.green, 95) : color.new(color.red, 95
 
 INDICATORS = {
     "volume":  ("24h Volume",       _pine_volume,   "Cumulative volume since market open vs 20-day average daily volume. Red = above average day."),
-    "vwap":    ("VWAP + Bands",    _pine_vwap,     "Volume Weighted Average Price with ±1 and ±2 standard deviation bands. Overlaid on price."),
+    "vwap":    ("VWAP + Bands",    _pine_vwap,     "Volume Weighted Average Price with configurable ±1, ±2, ±3 standard deviation bands. Overlaid on price."),
     "atr":     ("ATR",             _pine_atr,      "Average True Range (14). Shows how much the asset moves per bar. Red = elevated volatility."),
     "relvol":  ("Relative Volume", _pine_relvol,   "Today's volume vs average. RVOL > 2 = unusually active. Threshold is adjustable."),
     "macross": ("MA Cross",        _pine_ma_cross, "50/200 MA crossover. Labels Golden Cross (bullish) and Death Cross (bearish) on the chart."),
@@ -317,16 +331,25 @@ def indicators_page():
     description = None
     name        = None
 
+    # VWAP band options
+    band1 = request.args.get("band1", "on") == "on"
+    band2 = request.args.get("band2", "on") == "on"
+    band3 = request.args.get("band3", "off") == "on"
+
     if kind and kind in INDICATORS:
         name, fn, description = INDICATORS[kind]
-        pine_code = fn()
+        if kind == "vwap":
+            pine_code = fn(band1=band1, band2=band2, band3=band3)
+        else:
+            pine_code = fn()
 
     return render_template_string(INDICATORS_HTML,
         kind=kind,
         indicators=INDICATORS,
         pine_code=pine_code,
         name=name,
-        description=description)
+        description=description,
+        band1=band1, band2=band2, band3=band3)
 
 
 # ── Pine Script generator endpoint ───────────────────────────────────────────
@@ -527,8 +550,29 @@ INDICATORS_HTML = """<!DOCTYPE html>
     {% endfor %}
   </div>
 
+  {% if kind == 'vwap' %}
+  <div class="card" style="margin-bottom:0; border-bottom-left-radius:0; border-bottom-right-radius:0; border-bottom:none;">
+    <form method="GET" action="/indicators" style="display:flex; gap:20px; align-items:center; flex-wrap:wrap;">
+      <input type="hidden" name="kind" value="vwap">
+      <span style="color:#8b949e; font-size:0.85rem;">Bands:</span>
+      <label style="color:#3fb950; font-size:0.85rem; cursor:pointer;">
+        <input type="checkbox" name="band1" value="on" {% if band1 %}checked{% endif %} onchange="this.form.submit()">
+        ±1 StDev
+      </label>
+      <label style="color:#f85149; font-size:0.85rem; cursor:pointer;">
+        <input type="checkbox" name="band2" value="on" {% if band2 %}checked{% endif %} onchange="this.form.submit()">
+        ±2 StDev
+      </label>
+      <label style="color:#a371f7; font-size:0.85rem; cursor:pointer;">
+        <input type="checkbox" name="band3" value="on" {% if band3 %}checked{% endif %} onchange="this.form.submit()">
+        ±3 StDev
+      </label>
+    </form>
+  </div>
+  {% endif %}
+
   {% if pine_code %}
-  <div class="card">
+  <div class="card" style="{{ 'border-top-left-radius:0; border-top-right-radius:0;' if kind == 'vwap' else '' }}">
     <div class="desc-box">{{ description }}</div>
     <div class="pine-label">
       <span>Pine Script v5 — works on any chart, no ticker needed</span>
