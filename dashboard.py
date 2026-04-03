@@ -358,6 +358,61 @@ bgcolor(is_high ? color.new(color.red, 90) : na, title="High ATR")
 hline(0, color=color.new(color.gray, 80))
 """
 
+def _pine_rsi() -> str:
+    return """\
+//@version=5
+indicator("RSI", overlay=false, max_bars_back=500)
+
+// ── Inputs ────────────────────────────────────────────────────────
+length    = input.int(14,   "RSI Length",        minval=1)
+ob        = input.int(70,   "Overbought Level",  minval=50, maxval=100)
+os        = input.int(30,   "Oversold Level",    minval=0,  maxval=50)
+show_ma   = input.bool(true,"Show Signal MA")
+ma_len    = input.int(9,    "Signal MA Length",  minval=1)
+
+// ── RSI ───────────────────────────────────────────────────────────
+rsi    = ta.rsi(close, length)
+sig    = ta.ema(rsi, ma_len)
+
+// ── Color ─────────────────────────────────────────────────────────
+rsi_color =
+     rsi >= ob ? color.new(color.red,    0) :
+     rsi <= os ? color.new(color.green,  0) :
+                 color.new(color.blue,   0)
+
+// ── Plots ─────────────────────────────────────────────────────────
+plot(rsi,              "RSI",    color=rsi_color, linewidth=2)
+plot(show_ma ? sig : na,"Signal",color=color.new(color.orange, 0), linewidth=1)
+
+hline(ob,  "Overbought", color=color.new(color.red,   40), linestyle=hline.style_dashed)
+hline(50,  "Midline",    color=color.new(color.gray,  60), linestyle=hline.style_dotted)
+hline(os,  "Oversold",   color=color.new(color.green, 40), linestyle=hline.style_dashed)
+
+bgcolor(
+     rsi >= ob ? color.new(color.red,   92) :
+     rsi <= os ? color.new(color.green, 92) : na,
+     title="Zone")
+
+// ── Divergence detection ──────────────────────────────────────────
+ph = ta.pivothigh(rsi,  5, 5)
+pl = ta.pivotlow(rsi,   5, 5)
+
+bull_div = pl and close[5] < ta.valuewhen(ta.pivotlow(close, 5, 5), close[5], 1) and rsi[5] > ta.valuewhen(pl, rsi[5], 1)
+bear_div = ph and close[5] > ta.valuewhen(ta.pivothigh(close, 5, 5), close[5], 1) and rsi[5] < ta.valuewhen(ph, rsi[5], 1)
+
+plotshape(bull_div, "Bull Div", shape.labelup,   location.belowbar, color.new(color.green, 20), text="D+", textcolor=color.white, size=size.tiny, offset=-5)
+plotshape(bear_div, "Bear Div", shape.labeldown, location.abovebar, color.new(color.red,   20), text="D-", textcolor=color.white, size=size.tiny, offset=-5)
+
+// ── Label ─────────────────────────────────────────────────────────
+if barstate.islast
+    zone = rsi >= ob ? "Overbought" : rsi <= os ? "Oversold" : "Neutral"
+    label.new(bar_index, rsi, zone + "  " + str.tostring(math.round(rsi, 1)),
+              style=label.style_label_left, size=size.small,
+              color=color.new(rsi >= ob ? color.red : rsi <= os ? color.green : color.gray, 30),
+              textcolor=color.white)
+"""
+
+
 def _pine_ema() -> str:
     return """\
 //@version=5
@@ -724,6 +779,7 @@ INDICATORS = {
     "vwap":      ("VWAP + Bands",    _pine_vwap,      "VWAP with configurable ±1, ±2, ±3 standard deviation bands. Overlaid directly on the price chart.",    "volume",     "Select which bands to show, then copy and paste onto your chart. Price above VWAP = buyers in control. Price near the ±2 red band = overextended, often snaps back. Use on intraday charts (1m–1h) — VWAP resets each day."),
     "vwap_only": ("VWAP Only",       lambda: "//@version=5\nindicator(\"VWAP\", overlay=true, max_bars_back=500)\n\nplot(ta.vwap(hlc3), \"VWAP\", color=color.new(color.blue, 0), linewidth=2)\n", "Just the VWAP line, no bands. Clean and simple, overlaid on the price chart.", "volume", "Paste onto any intraday chart. A single blue line shows the volume-weighted average price for the session. Price above = bullish bias, price below = bearish bias. Resets at market open each day."),
     "atr":       ("ATR",             _pine_atr,       "Average True Range (14). Shows how much the asset moves per bar. Red = elevated volatility.",           "volatility", "Add to any chart as a separate panel. The red line shows raw volatility per bar. Toggle the orange average line to see whether current volatility is above or below normal. High ATR = bigger stops needed. Low ATR = tight, choppy market."),
+    "rsi":       ("RSI",               _pine_rsi,       "Relative Strength Index with overbought/oversold zones, signal MA, and automatic bullish/bearish divergence labels.", "momentum", "Add as a separate panel. Above 70 = overbought (red zone), below 30 = oversold (green zone). The orange signal line is a 9-bar EMA of RSI — crossovers can signal entries. D+ labels mark bullish divergence (price falling but RSI rising), D- marks bearish divergence. Best used with a trend indicator to filter signals."),
     "ema":       ("EMA Ribbon",       _pine_ema,       "8, 21, 50, 100, and 200 EMAs overlaid on the price chart. Green/red fill between the 50 and 200 shows trend direction.", "trend", "Paste onto your price chart. Toggle which EMAs you want in TradingView settings. Green fill between the 50 and 200 EMA = bullish trend, red = bearish. The 8/21 EMAs react fast and are good for short-term entries. The 50/200 are slower and better for trend confirmation. A label on the last bar shows the current trend."),
     "relvol":    ("Relative Volume", _pine_relvol,    "Today's volume vs average. RVOL > 2 = unusually active. Threshold is adjustable in TradingView.",      "volume",     "Add as a separate panel. RVOL of 1.0 = exactly average. Teal bars = above average. Red bars = unusually high (default threshold: 2×). High RVOL on a breakout confirms the move. High RVOL on a reversal signals a strong change. Low RVOL moves are often noise."),
     "macross":   ("MA Cross",        _pine_ma_cross,  "50/200 MA crossover. Labels Golden Cross (bullish) and Death Cross (bearish) directly on the chart.",  "trend",      "Paste onto your price chart. Green background = uptrend (50 above 200). Red background = downtrend. A 'Golden' label appears when the 50 crosses above the 200 — historically a strong bullish signal. 'Death' appears on the cross below. Best used on daily charts."),
@@ -1189,6 +1245,26 @@ def generate():
             error=str(exc), current_user=current_user())
 
 
+# ── Shared head meta ─────────────────────────────────────────────────────────
+
+_META = """
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📈</text></svg>">
+  <meta name="description" content="Free TradingView Pine Script indicators — VWAP, RSI, MACD, Supertrend, Bollinger Squeeze and more. Works on any free TradingView account.">
+  <meta name="keywords" content="TradingView indicators, Pine Script, free indicators, VWAP, RSI, MACD, Bollinger Bands, Supertrend">
+  <meta property="og:title" content="ChartEdge — Free TradingView Indicators">
+  <meta property="og:description" content="Free Pine Script indicators for TradingView. No paid plan required.">
+  <meta property="og:type" content="website">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="ChartEdge — Free TradingView Indicators">
+  <meta name="twitter:description" content="Free Pine Script indicators for TradingView. No paid plan required.">
+  <script>
+    (function() {
+      var t = localStorage.getItem('theme') || 'dark';
+      document.documentElement.setAttribute('data-theme', t);
+    })();
+  </script>
+"""
+
 # ── Shared nav macro ─────────────────────────────────────────────────────────
 
 _NAV_CSS = """
@@ -1291,15 +1367,19 @@ document.addEventListener('click', function() {
 function toggleTheme() {
   const html = document.documentElement;
   const isDark = html.getAttribute('data-theme') === 'dark';
-  html.setAttribute('data-theme', isDark ? 'light' : 'dark');
-  document.querySelector('.theme-toggle').textContent = isDark ? '☾ Dark' : '☀ Light';
-  localStorage.setItem('theme', isDark ? 'light' : 'dark');
+  const next = isDark ? 'light' : 'dark';
+  html.setAttribute('data-theme', next);
+  document.querySelector('.theme-toggle').textContent = next === 'dark' ? '☀ Light' : '☾ Dark';
+  localStorage.setItem('theme', next);
 }
-const saved = localStorage.getItem('theme');
-if (saved) {
+(function() {
+  const saved = localStorage.getItem('theme') || 'dark';
   document.documentElement.setAttribute('data-theme', saved);
-  document.querySelector('.theme-toggle').textContent = saved === 'light' ? '☾ Dark' : '☀ Light';
-}
+  document.addEventListener('DOMContentLoaded', function() {
+    const btn = document.querySelector('.theme-toggle');
+    if (btn) btn.textContent = saved === 'dark' ? '☀ Light' : '☾ Dark';
+  });
+})();
 """
 
 # ── Auth HTML ─────────────────────────────────────────────────────────────────
@@ -1308,7 +1388,7 @@ AUTH_HTML = """<!DOCTYPE html>
 <html data-theme="dark">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1">""" + _META + """
   <title>{{ 'Register' if mode == 'register' else 'Login' }} — ChartEdge</title>
   <style>
     :root[data-theme="dark"]  { --bg:#0d1117; --bg2:#161b22; --bg3:#21262d; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --red:#f85149; }
@@ -1396,7 +1476,7 @@ FAVORITES_HTML = """<!DOCTYPE html>
 <html data-theme="dark">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1">""" + _META + """
   <title>Favorites — ChartEdge</title>
   <style>
     :root[data-theme="dark"]  { --bg:#0d1117; --bg2:#161b22; --bg3:#21262d; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --red:#f85149; }
@@ -1462,7 +1542,7 @@ REQUEST_HTML = """<!DOCTYPE html>
 <html data-theme="dark">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1">""" + _META + """
   <title>Request an Indicator — ChartEdge</title>
   <style>
     :root[data-theme="dark"]  { --bg:#0d1117; --bg2:#161b22; --bg3:#21262d; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --green:#3fb950; --red:#f85149; }
@@ -1585,7 +1665,7 @@ INDICATORS_HTML = """<!DOCTYPE html>
 <html data-theme="dark">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1">""" + _META + """
   <title>Free TradingView Indicators — Pine Script Generator</title>
   <style>
     :root[data-theme="dark"] {
@@ -1869,7 +1949,7 @@ HOME_HTML = """<!DOCTYPE html>
 <html data-theme="dark">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1">""" + _META + """
   <title>ChartEdge — Free TradingView Pine Script Indicators</title>
   <style>
     :root[data-theme="dark"]  { --bg:#0d1117; --bg2:#161b22; --bg3:#21262d; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --green:#3fb950; --red:#f85149; }
@@ -2069,7 +2149,7 @@ GENERATOR_HTML = """<!DOCTYPE html>
 <html data-theme="dark">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1">""" + _META + """
   <title>Volatility Forecast — Free TradingView Pine Script Generator</title>
   <style>
     :root[data-theme="dark"]  { --bg:#0d1117; --bg2:#161b22; --bg3:#21262d; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --green:#3fb950; --red:#f85149; }
@@ -2303,7 +2383,7 @@ EARNINGS_HTML = """<!DOCTYPE html>
 <html data-theme="dark">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1">""" + _META + """
   <title>Earnings Calendar — ChartEdge</title>
   <style>
     :root[data-theme="dark"]  { --bg:#0d1117; --bg2:#161b22; --bg3:#21262d; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --green:#3fb950; --red:#f85149; }
@@ -2378,7 +2458,7 @@ FAQ_HTML = """<!DOCTYPE html>
 <html data-theme="dark">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1">""" + _META + """
   <title>FAQ — ChartEdge</title>
   <style>
     :root[data-theme="dark"]  { --bg:#0d1117; --bg2:#161b22; --bg3:#21262d; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --green:#3fb950; --red:#f85149; }
@@ -2552,7 +2632,7 @@ NEWS_HTML = """<!DOCTYPE html>
 <html data-theme="dark">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1">""" + _META + """
   <title>Market News — ChartEdge</title>
   <style>
     :root[data-theme="dark"]  { --bg:#0d1117; --bg2:#161b22; --bg3:#21262d; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --green:#3fb950; --red:#f85149; }
@@ -2720,7 +2800,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 <html data-theme="dark">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1">""" + _META + """
   <title>Live Chart — ChartEdge</title>
   <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
   <style>
