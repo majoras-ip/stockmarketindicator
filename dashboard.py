@@ -745,6 +745,7 @@ def generate():
 # ── Shared nav macro ─────────────────────────────────────────────────────────
 
 _NAV_CSS = """
+  nav { position: relative; z-index: 1000; overflow: visible !important; }
   .nav-links { display: flex; align-items: center; gap: 4px; }
   .nav-links a { color: var(--muted); text-decoration: none; font-size: 0.9rem; padding: 6px 12px; border-radius: 6px; }
   .nav-links a:hover { color: var(--text); background: var(--bg3); }
@@ -759,8 +760,8 @@ _NAV_CSS = """
   .drop-menu {
     display: none; position: absolute; top: calc(100% + 6px); right: 0;
     background: var(--bg2); border: 1px solid var(--border); border-radius: 8px;
-    min-width: 160px; z-index: 100; overflow: hidden;
-    box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+    min-width: 160px; z-index: 9999; overflow: hidden;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
   }
   .drop-menu.open { display: block; }
   .drop-menu a {
