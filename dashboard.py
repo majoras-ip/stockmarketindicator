@@ -344,8 +344,9 @@ ma_pct    = (close - ma125) / ma125 * 100
 ma_score  = math.min(math.max(50 + ma_pct * 2, 0), 100)
 
 // 3. Bollinger Band width — low width = greed, high = fear (invert)
-basis     = ta.sma(close, 20)
-bb_width  = (ta.bb(close, 20, 2)[1] - ta.bb(close, 20, 2)[2]) / basis * 100
+basis              = ta.sma(close, 20)
+[bb_mid, bb_upper, bb_lower] = ta.bb(close, 20, 2)
+bb_width  = (bb_upper - bb_lower) / basis * 100
 bb_avg    = ta.sma(bb_width, 50)
 bb_score  = math.min(math.max(50 - (bb_width - bb_avg) * 5, 0), 100)
 
