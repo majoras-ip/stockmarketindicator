@@ -391,6 +391,60 @@ plotshape(death,  "Death Cross",  style=shape.labeldown, location=location.above
 bgcolor(ma_fast > ma_slow ? color.new(color.green, 95) : color.new(color.red, 95), title="Trend")
 """
 
+def _pine_unusual_options() -> str:
+    return """\
+//@version=5
+indicator("Unusual Options Volume", overlay=false, max_bars_back=500)
+
+// ── Inputs ────────────────────────────────────────────────────────
+thresh    = input.float(2.0, "Spike Threshold (× avg)", minval=1.0, step=0.1,
+              tooltip="Bars this many times above average are flagged as unusual")
+len       = input.int(20, "Lookback (bars)", minval=5)
+
+// ── Volume & moving average ───────────────────────────────────────
+vol     = volume
+vol_avg = ta.sma(vol, len)
+ratio   = vol / vol_avg
+
+// ── Classify each bar ─────────────────────────────────────────────
+is_unusual = ratio >= thresh
+is_high    = ratio >= thresh * 0.6 and ratio < thresh
+
+bar_color =
+     is_unusual ? color.new(color.red,    0)  :
+     is_high    ? color.new(color.orange, 20) :
+     close >= open ? color.new(color.teal, 30) :
+                     color.new(color.gray, 40)
+
+// ── Plots ─────────────────────────────────────────────────────────
+plot(ratio, "Vol Ratio", color=bar_color, style=plot.style_columns, linewidth=2)
+plot(1.0,   "Average",   color=color.new(color.white,  50), linewidth=1, style=plot.style_line)
+plot(thresh,"Threshold", color=color.new(color.red,    40), linewidth=1, style=plot.style_line)
+
+hline(thresh, "Spike Level", color=color.new(color.red, 50), linestyle=hline.style_dashed)
+hline(1.0,    "1× Avg",      color=color.new(color.gray,60), linestyle=hline.style_dotted)
+
+// ── Alert label on unusual bars ───────────────────────────────────
+if is_unusual
+    label.new(bar_index, ratio + 0.1,
+              "⚡ " + str.tostring(math.round(ratio, 1)) + "×",
+              style=label.style_label_down, size=size.tiny,
+              color=color.new(color.red, 20), textcolor=color.white)
+
+// ── Background flash on unusual bars ─────────────────────────────
+bgcolor(is_unusual ? color.new(color.red, 88) : na, title="Unusual Spike")
+
+// ── Last bar summary ──────────────────────────────────────────────
+if barstate.islast
+    zone = is_unusual ? "⚡ UNUSUAL" : is_high ? "↑ Elevated" : "Normal"
+    label.new(bar_index, ratio,
+              zone + "  " + str.tostring(math.round(ratio, 2)) + "× avg",
+              style=label.style_label_left, size=size.small,
+              color=color.new(is_unusual ? color.red : is_high ? color.orange : color.gray, 30),
+              textcolor=color.white)
+"""
+
+
 def _pine_feargreed() -> str:
     return """\
 //@version=5
@@ -463,7 +517,8 @@ INDICATORS = {
     "atr":       ("ATR",             _pine_atr,       "Average True Range (14). Shows how much the asset moves per bar. Red = elevated volatility.",           "volatility", "Add to any chart as a separate panel. The red line shows raw volatility per bar. Toggle the orange average line to see whether current volatility is above or below normal. High ATR = bigger stops needed. Low ATR = tight, choppy market."),
     "relvol":    ("Relative Volume", _pine_relvol,    "Today's volume vs average. RVOL > 2 = unusually active. Threshold is adjustable in TradingView.",      "volume",     "Add as a separate panel. RVOL of 1.0 = exactly average. Teal bars = above average. Red bars = unusually high (default threshold: 2×). High RVOL on a breakout confirms the move. High RVOL on a reversal signals a strong change. Low RVOL moves are often noise."),
     "macross":   ("MA Cross",        _pine_ma_cross,  "50/200 MA crossover. Labels Golden Cross (bullish) and Death Cross (bearish) directly on the chart.",  "trend",      "Paste onto your price chart. Green background = uptrend (50 above 200). Red background = downtrend. A 'Golden' label appears when the 50 crosses above the 200 — historically a strong bullish signal. 'Death' appears on the cross below. Best used on daily charts."),
-    "feargreed": ("Fear & Greed",    _pine_feargreed, "Composite 0–100 index built from RSI, trend strength, volatility, VIX, and 52-week momentum.",         "momentum",   "Add as a separate panel on any chart. Reads 0–100: below 25 = Extreme Fear (often a buying opportunity), above 75 = Extreme Greed (market may be overheated). The label on the last bar shows the current reading and zone. Works on any ticker — uses VIX as one of its inputs."),
+    "feargreed":     ("Fear & Greed",           _pine_feargreed,     "Composite 0–100 index built from RSI, trend strength, volatility, VIX, and 52-week momentum.",         "momentum", "Add as a separate panel on any chart. Reads 0–100: below 25 = Extreme Fear (often a buying opportunity), above 75 = Extreme Greed (market may be overheated). The label on the last bar shows the current reading and zone. Works on any ticker — uses VIX as one of its inputs."),
+    "unusualopts":   ("Unusual Options Volume", _pine_unusual_options, "Flags bars where volume spikes above a multiple of the 20-bar average. Red = unusual, orange = elevated.", "volume",   "Add as a separate panel. Each bar shows today's volume as a multiple of the average (1.0 = normal). Red bars with a ⚡ label = unusual spike (default 2× threshold). Orange = elevated but not extreme. Adjust the threshold in TradingView settings. High spikes often precede big moves — watch for them before earnings or news."),
 }
 
 CATEGORIES = {
