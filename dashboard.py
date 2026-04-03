@@ -435,6 +435,100 @@ plotshape(death,  "Death Cross",  style=shape.labeldown, location=location.above
 bgcolor(ma_fast > ma_slow ? color.new(color.green, 95) : color.new(color.red, 95), title="Trend")
 """
 
+def _pine_macd() -> str:
+    return """\
+//@version=5
+indicator("MACD", overlay=false, max_bars_back=500)
+
+// ── Inputs ────────────────────────────────────────────────────────
+fast   = input.int(12, "Fast Length",   minval=1)
+slow   = input.int(26, "Slow Length",   minval=1)
+signal = input.int(9,  "Signal Length", minval=1)
+
+// ── MACD ──────────────────────────────────────────────────────────
+[macd_line, signal_line, hist] = ta.macd(close, fast, slow, signal)
+
+// ── Colors ────────────────────────────────────────────────────────
+hist_color =
+     hist >= 0 and hist >= hist[1] ? color.new(color.green,  0)  :
+     hist >= 0 and hist <  hist[1] ? color.new(color.green,  40) :
+     hist <  0 and hist <= hist[1] ? color.new(color.red,    0)  :
+                                     color.new(color.red,    40)
+
+// ── Plots ─────────────────────────────────────────────────────────
+plot(macd_line,   "MACD",     color=color.new(color.blue,   0), linewidth=2)
+plot(signal_line, "Signal",   color=color.new(color.orange, 0), linewidth=1)
+plot(hist,        "Histogram",color=hist_color, style=plot.style_columns)
+hline(0, "Zero", color=color.new(color.gray, 50), linestyle=hline.style_dashed)
+
+// ── Cross labels ──────────────────────────────────────────────────
+bullCross = ta.crossover(macd_line,  signal_line)
+bearCross = ta.crossunder(macd_line, signal_line)
+
+plotshape(bullCross, "Bull Cross", shape.labelup,   location.belowbar, color.new(color.green, 20), text="▲", textcolor=color.white, size=size.tiny)
+plotshape(bearCross, "Bear Cross", shape.labeldown, location.abovebar, color.new(color.red,   20), text="▼", textcolor=color.white, size=size.tiny)
+"""
+
+
+def _pine_supertrend() -> str:
+    return """\
+//@version=5
+indicator("Supertrend", overlay=true, max_bars_back=500)
+
+// ── Inputs ────────────────────────────────────────────────────────
+atr_len    = input.int(10,  "ATR Length",     minval=1)
+multiplier = input.float(3.0, "ATR Multiplier", minval=0.1, step=0.1)
+
+// ── Supertrend ────────────────────────────────────────────────────
+[supertrend, direction] = ta.supertrend(multiplier, atr_len)
+
+// ── Plots ─────────────────────────────────────────────────────────
+upTrend   = direction < 0
+downTrend = direction > 0
+
+plot(upTrend   ? supertrend : na, "Uptrend",   color=color.new(color.green, 0), linewidth=2, style=plot.style_linebr)
+plot(downTrend ? supertrend : na, "Downtrend", color=color.new(color.red,   0), linewidth=2, style=plot.style_linebr)
+
+bgcolor(upTrend ? color.new(color.green, 94) : color.new(color.red, 94), title="Trend Background")
+
+// ── Buy / Sell signals ────────────────────────────────────────────
+buySignal  = direction[1] > 0 and direction < 0
+sellSignal = direction[1] < 0 and direction > 0
+
+plotshape(buySignal,  "Buy",  shape.labelup,   location.belowbar, color.new(color.green, 10), text="BUY",  textcolor=color.white, size=size.small)
+plotshape(sellSignal, "Sell", shape.labeldown, location.abovebar, color.new(color.red,   10), text="SELL", textcolor=color.white, size=size.small)
+"""
+
+
+def _pine_ichimoku() -> str:
+    return """\
+//@version=5
+indicator("Ichimoku Cloud", overlay=true, max_bars_back=500)
+
+// ── Inputs ────────────────────────────────────────────────────────
+tenkan_len  = input.int(9,  "Tenkan (Conversion)")
+kijun_len   = input.int(26, "Kijun (Base)")
+senkou_len  = input.int(52, "Senkou B Length")
+displacement = input.int(26, "Cloud Displacement")
+
+// ── Lines ─────────────────────────────────────────────────────────
+tenkan  = (ta.highest(high, tenkan_len)  + ta.lowest(low, tenkan_len))  / 2
+kijun   = (ta.highest(high, kijun_len)   + ta.lowest(low, kijun_len))   / 2
+senkou_a = (tenkan + kijun) / 2
+senkou_b = (ta.highest(high, senkou_len) + ta.lowest(low, senkou_len))  / 2
+chikou  = close
+
+// ── Plots ─────────────────────────────────────────────────────────
+plot(tenkan,  "Tenkan",  color=color.new(color.blue,   0), linewidth=1)
+plot(kijun,   "Kijun",   color=color.new(color.red,    0), linewidth=2)
+plot(chikou,  "Chikou",  color=color.new(color.purple, 40), linewidth=1, offset=-displacement)
+
+sa = plot(senkou_a, "Senkou A", color=color.new(color.green, 0), offset=displacement, linewidth=1)
+sb = plot(senkou_b, "Senkou B", color=color.new(color.red,   0), offset=displacement, linewidth=1)
+fill(sa, sb, color=senkou_a > senkou_b ? color.new(color.green, 80) : color.new(color.red, 80), title="Cloud")
+"""
+
+
 def _pine_unusual_options() -> str:
     return """\
 //@version=5
@@ -562,6 +656,9 @@ INDICATORS = {
     "ema":       ("EMA Ribbon",       _pine_ema,       "8, 21, 50, 100, and 200 EMAs overlaid on the price chart. Green/red fill between the 50 and 200 shows trend direction.", "trend", "Paste onto your price chart. Toggle which EMAs you want in TradingView settings. Green fill between the 50 and 200 EMA = bullish trend, red = bearish. The 8/21 EMAs react fast and are good for short-term entries. The 50/200 are slower and better for trend confirmation. A label on the last bar shows the current trend."),
     "relvol":    ("Relative Volume", _pine_relvol,    "Today's volume vs average. RVOL > 2 = unusually active. Threshold is adjustable in TradingView.",      "volume",     "Add as a separate panel. RVOL of 1.0 = exactly average. Teal bars = above average. Red bars = unusually high (default threshold: 2×). High RVOL on a breakout confirms the move. High RVOL on a reversal signals a strong change. Low RVOL moves are often noise."),
     "macross":   ("MA Cross",        _pine_ma_cross,  "50/200 MA crossover. Labels Golden Cross (bullish) and Death Cross (bearish) directly on the chart.",  "trend",      "Paste onto your price chart. Green background = uptrend (50 above 200). Red background = downtrend. A 'Golden' label appears when the 50 crosses above the 200 — historically a strong bullish signal. 'Death' appears on the cross below. Best used on daily charts."),
+    "macd":      ("MACD",            _pine_macd,      "MACD line, signal line, and histogram. ▲/▼ labels mark bullish and bearish crossovers.",                  "trend",      "Add as a separate panel. The blue MACD line crossing above the orange signal line = bullish momentum. Crossing below = bearish. The histogram shows the gap between the two — green bars growing = strengthening uptrend, red bars growing = strengthening downtrend."),
+    "supertrend":("Supertrend",      _pine_supertrend,"Dynamic support/resistance line that flips direction. BUY/SELL labels on every trend change.",             "trend",      "Paste onto your price chart. Green line below price = uptrend. Red line above price = downtrend. BUY label appears when trend flips bullish, SELL when it flips bearish. Adjust the ATR multiplier in settings — higher = fewer signals, less noise."),
+    "ichimoku":  ("Ichimoku Cloud",  _pine_ichimoku,  "Full Ichimoku system: Tenkan, Kijun, cloud (Senkou A/B), and Chikou span overlaid on price.",             "trend",      "Paste onto your price chart. Green cloud = bullish, red cloud = bearish. Price above the cloud = strong uptrend. Price inside the cloud = consolidation. Price below = downtrend. The Tenkan/Kijun cross is a short-term signal. Best used on daily or 4h charts."),
     "feargreed":     ("Fear & Greed",           _pine_feargreed,     "Composite 0–100 index built from RSI, trend strength, volatility, VIX, and 52-week momentum.",         "momentum", "Add as a separate panel on any chart. Reads 0–100: below 25 = Extreme Fear (often a buying opportunity), above 75 = Extreme Greed (market may be overheated). The label on the last bar shows the current reading and zone. Works on any ticker — uses VIX as one of its inputs."),
     "unusualopts":   ("Unusual Options Volume", _pine_unusual_options, "Flags bars where volume spikes above a multiple of the 20-bar average. Red = unusual, orange = elevated.", "volume",   "Add as a separate panel. Each bar shows today's volume as a multiple of the average (1.0 = normal). Red bars with a ⚡ label = unusual spike (default 2× threshold). Orange = elevated but not extreme. Adjust the threshold in TradingView settings. High spikes often precede big moves — watch for them before earnings or news."),
 }
