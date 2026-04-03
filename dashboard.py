@@ -377,28 +377,35 @@ if barstate.islast
 """
 
 
+# Each entry: (name, fn, short_description, category, how_to_use)
 INDICATORS = {
-    "volume":  ("24h Volume",       _pine_volume,   "Cumulative volume since market open vs 20-day average daily volume. Red = above average day."),
-    "vwap":    ("VWAP + Bands",    _pine_vwap,     "Volume Weighted Average Price with configurable ±1, ±2, ±3 standard deviation bands. Overlaid on price."),
-    "vwap_only": ("VWAP Only",    lambda: """\
-//@version=5
-indicator("VWAP", overlay=true, max_bars_back=500)
+    "volume":    ("24h Volume",      _pine_volume,    "Cumulative volume since market open vs 20-day average daily volume. Red = above average day.",          "volume",     "Add to any chart. Appears as a separate panel below the price. Green bars = normal up-volume, red bars = unusually high volume (1.5× avg). Orange line is the average daily volume benchmark — when the bars are tracking above it, today is an active day."),
+    "vwap":      ("VWAP + Bands",    _pine_vwap,      "VWAP with configurable ±1, ±2, ±3 standard deviation bands. Overlaid directly on the price chart.",    "volume",     "Select which bands to show, then copy and paste onto your chart. Price above VWAP = buyers in control. Price near the ±2 red band = overextended, often snaps back. Use on intraday charts (1m–1h) — VWAP resets each day."),
+    "vwap_only": ("VWAP Only",       lambda: "//@version=5\nindicator(\"VWAP\", overlay=true, max_bars_back=500)\n\nplot(ta.vwap(hlc3), \"VWAP\", color=color.new(color.blue, 0), linewidth=2)\n", "Just the VWAP line, no bands. Clean and simple, overlaid on the price chart.", "volume", "Paste onto any intraday chart. A single blue line shows the volume-weighted average price for the session. Price above = bullish bias, price below = bearish bias. Resets at market open each day."),
+    "atr":       ("ATR",             _pine_atr,       "Average True Range (14). Shows how much the asset moves per bar. Red = elevated volatility.",           "volatility", "Add to any chart as a separate panel. The red line shows raw volatility per bar. Toggle the orange average line to see whether current volatility is above or below normal. High ATR = bigger stops needed. Low ATR = tight, choppy market."),
+    "relvol":    ("Relative Volume", _pine_relvol,    "Today's volume vs average. RVOL > 2 = unusually active. Threshold is adjustable in TradingView.",      "volume",     "Add as a separate panel. RVOL of 1.0 = exactly average. Teal bars = above average. Red bars = unusually high (default threshold: 2×). High RVOL on a breakout confirms the move. High RVOL on a reversal signals a strong change. Low RVOL moves are often noise."),
+    "macross":   ("MA Cross",        _pine_ma_cross,  "50/200 MA crossover. Labels Golden Cross (bullish) and Death Cross (bearish) directly on the chart.",  "trend",      "Paste onto your price chart. Green background = uptrend (50 above 200). Red background = downtrend. A 'Golden' label appears when the 50 crosses above the 200 — historically a strong bullish signal. 'Death' appears on the cross below. Best used on daily charts."),
+    "feargreed": ("Fear & Greed",    _pine_feargreed, "Composite 0–100 index built from RSI, trend strength, volatility, VIX, and 52-week momentum.",         "momentum",   "Add as a separate panel on any chart. Reads 0–100: below 25 = Extreme Fear (often a buying opportunity), above 75 = Extreme Greed (market may be overheated). The label on the last bar shows the current reading and zone. Works on any ticker — uses VIX as one of its inputs."),
+}
 
-plot(ta.vwap(hlc3), "VWAP", color=color.new(color.blue, 0), linewidth=2)
-""",     "Just the VWAP line, no bands. Clean and simple, overlaid on the price chart."),
-    "atr":     ("ATR",             _pine_atr,      "Average True Range (14). Shows how much the asset moves per bar. Red = elevated volatility."),
-    "relvol":  ("Relative Volume", _pine_relvol,   "Today's volume vs average. RVOL > 2 = unusually active. Threshold is adjustable."),
-    "macross": ("MA Cross",        _pine_ma_cross, "50/200 MA crossover. Labels Golden Cross (bullish) and Death Cross (bearish) on the chart."),
-    "feargreed": ("Fear & Greed",  _pine_feargreed, "Composite 0–100 index built from RSI, trend strength, volatility, VIX, and momentum. Works on any chart."),
+CATEGORIES = {
+    "all":        "All",
+    "trend":      "Trend",
+    "momentum":   "Momentum",
+    "volume":     "Volume",
+    "volatility": "Volatility",
 }
 
 
 @app.route("/indicators")
 def indicators_page():
-    kind = request.args.get("kind", "")
+    kind     = request.args.get("kind", "")
+    search   = request.args.get("q", "").lower()
+    category = request.args.get("cat", "all")
 
     pine_code   = None
     description = None
+    how_to      = None
     name        = None
 
     # VWAP band options
@@ -410,7 +417,7 @@ def indicators_page():
     atr_avg = request.args.get("atr_avg", "off") == "on"
 
     if kind and kind in INDICATORS:
-        name, fn, description = INDICATORS[kind]
+        name, fn, description, cat, how_to = INDICATORS[kind]
         if kind == "vwap":
             pine_code = fn(band1=band1, band2=band2, band3=band3)
         elif kind == "atr":
@@ -418,12 +425,23 @@ def indicators_page():
         else:
             pine_code = fn()
 
+    # Filter indicators for display
+    def visible(k, v):
+        iname, _, idesc, icat, _ = v
+        if category != "all" and icat != category:
+            return False
+        if search and search not in iname.lower() and search not in idesc.lower():
+            return False
+        return True
+
+    filtered = {k: v for k, v in INDICATORS.items() if visible(k, v)}
+
     return render_template_string(INDICATORS_HTML,
-        kind=kind,
-        indicators=INDICATORS,
-        pine_code=pine_code,
-        name=name,
-        description=description,
+        kind=kind, search=search, category=category,
+        indicators=filtered, all_indicators=INDICATORS,
+        categories=CATEGORIES,
+        pine_code=pine_code, name=name,
+        description=description, how_to=how_to,
         band1=band1, band2=band2, band3=band3,
         atr_avg=atr_avg)
 
@@ -528,76 +546,109 @@ def generate():
 # ── Indicators HTML ──────────────────────────────────────────────────────────
 
 INDICATORS_HTML = """<!DOCTYPE html>
-<html>
+<html data-theme="dark">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Free TradingView Indicators — Pine Script Generator</title>
   <style>
+    :root[data-theme="dark"] {
+      --bg: #0d1117; --bg2: #161b22; --bg3: #21262d;
+      --border: #30363d; --text: #e6edf3; --muted: #8b949e;
+      --accent: #58a6ff; --green: #3fb950; --red: #f85149;
+      --orange: #f0883e; --purple: #a371f7;
+    }
+    :root[data-theme="light"] {
+      --bg: #ffffff; --bg2: #f6f8fa; --bg3: #eaeef2;
+      --border: #d0d7de; --text: #1f2328; --muted: #636c76;
+      --accent: #0969da; --green: #1a7f37; --red: #cf222e;
+      --orange: #bc4c00; --purple: #8250df;
+    }
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: monospace; background: #0d1117; color: #e6edf3; min-height: 100vh; }
+    body { font-family: monospace; background: var(--bg); color: var(--text); min-height: 100vh; transition: background 0.2s, color 0.2s; }
+
     nav {
-      background: #161b22; border-bottom: 1px solid #30363d;
+      background: var(--bg2); border-bottom: 1px solid var(--border);
       padding: 14px 24px; display: flex; align-items: center; justify-content: space-between;
     }
-    .logo { color: #58a6ff; font-size: 1.1rem; font-weight: bold; text-decoration: none; }
-    .nav-links a { color: #8b949e; text-decoration: none; margin-left: 20px; font-size: 0.9rem; }
-    .nav-links a:hover { color: #e6edf3; }
+    .logo { color: var(--accent); font-size: 1.1rem; font-weight: bold; text-decoration: none; }
+    .nav-links { display: flex; align-items: center; gap: 20px; }
+    .nav-links a { color: var(--muted); text-decoration: none; font-size: 0.9rem; }
+    .nav-links a:hover { color: var(--text); }
+    .theme-toggle {
+      background: var(--bg3); border: 1px solid var(--border); color: var(--text);
+      padding: 4px 10px; border-radius: 6px; cursor: pointer; font-size: 0.8rem; font-family: monospace;
+    }
 
-    .hero { text-align: center; padding: 48px 24px 32px; border-bottom: 1px solid #21262d; }
-    .hero h1 { font-size: 1.8rem; color: #e6edf3; margin-bottom: 10px; }
-    .hero h1 span { color: #58a6ff; }
-    .hero p { color: #8b949e; font-size: 0.95rem; max-width: 520px; margin: 0 auto; }
+    .hero { text-align: center; padding: 48px 24px 32px; border-bottom: 1px solid var(--border); }
+    .hero h1 { font-size: 1.8rem; color: var(--text); margin-bottom: 10px; }
+    .hero h1 span { color: var(--accent); }
+    .hero p { color: var(--muted); font-size: 0.95rem; max-width: 520px; margin: 0 auto; }
 
-    .container { max-width: 760px; margin: 0 auto; padding: 32px 24px; }
+    .container { max-width: 800px; margin: 0 auto; padding: 28px 24px; }
+
+    /* Search + filters */
+    .toolbar { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; align-items: center; }
+    .search-box {
+      flex: 1; min-width: 180px; background: var(--bg2); color: var(--text);
+      border: 1px solid var(--border); padding: 8px 14px; border-radius: 6px;
+      font-family: monospace; font-size: 0.9rem;
+    }
+    .search-box:focus { outline: none; border-color: var(--accent); }
+    .cat-btn {
+      background: var(--bg2); color: var(--muted); border: 1px solid var(--border);
+      padding: 6px 14px; border-radius: 20px; font-family: monospace; font-size: 0.8rem;
+      cursor: pointer; text-decoration: none;
+    }
+    .cat-btn:hover { border-color: var(--accent); color: var(--text); }
+    .cat-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
 
     /* Indicator cards */
-    .indicator-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; margin-bottom: 28px; }
+    .indicator-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 12px; margin-bottom: 28px; }
     .ind-card {
-      background: #161b22; border: 1px solid #30363d; border-radius: 8px;
+      background: var(--bg2); border: 1px solid var(--border); border-radius: 8px;
       padding: 14px 16px; cursor: pointer; transition: border-color 0.15s;
       text-decoration: none; display: block;
     }
-    .ind-card:hover { border-color: #58a6ff; }
-    .ind-card.active { border-color: #58a6ff; background: #0d2a4a; }
-    .ind-card .ind-name { color: #e6edf3; font-size: 0.9rem; font-weight: bold; margin-bottom: 4px; }
-    .ind-card .ind-desc { color: #8b949e; font-size: 0.75rem; line-height: 1.4; }
+    .ind-card:hover { border-color: var(--accent); }
+    .ind-card.active { border-color: var(--accent); background: #0d2a4a; }
+    .ind-card .cat-tag { font-size: 0.68rem; color: var(--muted); text-transform: uppercase; margin-bottom: 4px; letter-spacing: 0.05em; }
+    .ind-card .ind-name { color: var(--text); font-size: 0.9rem; font-weight: bold; margin-bottom: 4px; }
+    .ind-card .ind-desc { color: var(--muted); font-size: 0.75rem; line-height: 1.4; }
+    .no-results { color: var(--muted); font-size: 0.9rem; padding: 20px 0; }
 
-    /* Form */
-    .card { background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 24px; margin-bottom: 24px; }
-    .form-row { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; }
-    .form-group { display: flex; flex-direction: column; gap: 6px; }
-    label { color: #8b949e; font-size: 0.8rem; }
-    input, select {
-      background: #0d1117; color: #e6edf3; border: 1px solid #30363d;
-      padding: 8px 14px; border-radius: 6px; font-family: monospace; font-size: 0.9rem;
-    }
-    input:focus, select:focus { outline: none; border-color: #58a6ff; }
-    .btn-generate {
-      background: #1f6feb; color: #fff; border: none;
-      padding: 9px 24px; border-radius: 6px; font-family: monospace;
-      font-size: 0.9rem; cursor: pointer; font-weight: bold;
-    }
-    .btn-generate:hover { background: #388bfd; }
+    /* Options + output cards */
+    .card { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 24px; margin-bottom: 24px; }
+    .card.options { margin-bottom: 0; border-bottom-left-radius: 0; border-bottom-right-radius: 0; border-bottom: none; padding: 14px 24px; }
+    .card.output  { border-top-left-radius: 0; border-top-right-radius: 0; }
+    label { color: var(--muted); font-size: 0.8rem; cursor: pointer; }
 
-    /* Output */
     .pine-label { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
-    .pine-label span { color: #8b949e; font-size: 0.8rem; }
+    .pine-label span { color: var(--muted); font-size: 0.8rem; }
     .btn-copy {
-      background: #21262d; color: #e6edf3; border: 1px solid #30363d;
+      background: var(--bg3); color: var(--text); border: 1px solid var(--border);
       padding: 5px 14px; border-radius: 6px; font-family: monospace; font-size: 0.8rem; cursor: pointer;
     }
-    .btn-copy:hover { background: #30363d; }
-    .btn-copy.copied { border-color: #3fb950; color: #3fb950; }
+    .btn-copy:hover { background: var(--border); }
+    .btn-copy.copied { border-color: var(--green); color: var(--green); }
+
     textarea {
-      width: 100%; height: 320px; background: #0d1117; color: #c9d1d9;
-      border: 1px solid #30363d; border-radius: 6px; padding: 14px;
+      width: 100%; height: 280px; background: var(--bg); color: #c9d1d9;
+      border: 1px solid var(--border); border-radius: 6px; padding: 14px;
       font-family: monospace; font-size: 0.78rem; line-height: 1.55; resize: vertical;
     }
-    .desc-box { background: #0d2a14; border: 1px solid #3fb950; border-radius: 6px; padding: 10px 14px; margin-bottom: 16px; color: #3fb950; font-size: 0.85rem; }
-    .error-box { background: #2d1316; border: 1px solid #f85149; border-radius: 6px; padding: 14px; color: #f85149; font-size: 0.85rem; }
 
-    footer { text-align: center; padding: 32px 24px; color: #484f58; font-size: 0.8rem; border-top: 1px solid #21262d; margin-top: 40px; }
+    /* How to use */
+    .how-to { margin-top: 16px; border-top: 1px solid var(--border); padding-top: 14px; }
+    .how-to-title {
+      color: var(--muted); font-size: 0.75rem; text-transform: uppercase;
+      letter-spacing: 0.05em; margin-bottom: 8px; cursor: pointer; user-select: none;
+    }
+    .how-to-title:hover { color: var(--text); }
+    .how-to-body { color: var(--muted); font-size: 0.85rem; line-height: 1.6; display: none; }
+    .how-to-body.open { display: block; }
+
+    footer { text-align: center; padding: 32px 24px; color: var(--muted); font-size: 0.8rem; border-top: 1px solid var(--border); margin-top: 40px; }
   </style>
 </head>
 <body>
@@ -607,67 +658,91 @@ INDICATORS_HTML = """<!DOCTYPE html>
     <a href="/indicators">Indicators</a>
     <a href="/generate">Forecast</a>
     <a href="/dashboard">Live Chart</a>
+    <button class="theme-toggle" onclick="toggleTheme()">☀ Light</button>
   </div>
 </nav>
 
 <div class="hero">
   <h1>Free <span>TradingView</span> Indicators</h1>
-  <p>Pick an indicator, enter a ticker, and get Pine Script to paste directly into TradingView. No paid plan needed.</p>
+  <p>Pick an indicator and copy the Pine Script — works on any TradingView chart, no paid plan needed.</p>
 </div>
 
 <div class="container">
-  <div class="indicator-grid">
-    {% for key, (iname, _, idesc) in indicators.items() %}
-    <a class="ind-card {{ 'active' if key == kind else '' }}"
-       href="/indicators?kind={{ key }}&ticker={{ ticker }}">
-      <div class="ind-name">{{ iname }}</div>
-      <div class="ind-desc">{{ idesc[:60] }}…</div>
-    </a>
+  <!-- Search + category filter -->
+  <div class="toolbar">
+    <input class="search-box" id="search" placeholder="Search indicators…"
+           value="{{ search }}" oninput="filterCards()">
+    {% for cat_key, cat_label in categories.items() %}
+    <a class="cat-btn {{ 'active' if category == cat_key else '' }}"
+       href="/indicators?cat={{ cat_key }}{{ ('&kind=' + kind) if kind else '' }}">{{ cat_label }}</a>
     {% endfor %}
   </div>
 
-  {% if kind == 'atr' %}
-  <div class="card" style="margin-bottom:0; border-bottom-left-radius:0; border-bottom-right-radius:0; border-bottom:none;">
-    <form method="GET" action="/indicators" style="display:flex; gap:20px; align-items:center; flex-wrap:wrap;">
-      <input type="hidden" name="kind" value="atr">
-      <span style="color:#8b949e; font-size:0.85rem;">Options:</span>
-      <label style="color:#f0883e; font-size:0.85rem; cursor:pointer;">
-        <input type="checkbox" name="atr_avg" value="on" {% if atr_avg %}checked{% endif %} onchange="this.form.submit()">
-        Show 20-bar avg (orange)
-      </label>
-    </form>
+  <!-- Indicator grid -->
+  <div class="indicator-grid" id="grid">
+    {% for key, (iname, _, idesc, icat, _) in indicators.items() %}
+    <a class="ind-card {{ 'active' if key == kind else '' }}"
+       href="/indicators?kind={{ key }}&cat={{ category }}{{ ('&q=' + search) if search else '' }}"
+       data-name="{{ iname.lower() }}" data-desc="{{ idesc.lower() }}">
+      <div class="cat-tag">{{ icat }}</div>
+      <div class="ind-name">{{ iname }}</div>
+      <div class="ind-desc">{{ idesc[:65] }}…</div>
+    </a>
+    {% endfor %}
+    {% if not indicators %}
+    <div class="no-results">No indicators match "{{ search }}".</div>
+    {% endif %}
   </div>
-  {% endif %}
 
+  <!-- VWAP options -->
   {% if kind == 'vwap' %}
-  <div class="card" style="margin-bottom:0; border-bottom-left-radius:0; border-bottom-right-radius:0; border-bottom:none;">
+  <div class="card options">
     <form method="GET" action="/indicators" style="display:flex; gap:20px; align-items:center; flex-wrap:wrap;">
       <input type="hidden" name="kind" value="vwap">
-      <span style="color:#8b949e; font-size:0.85rem;">Bands:</span>
-      <label style="color:#3fb950; font-size:0.85rem; cursor:pointer;">
-        <input type="checkbox" name="band1" value="on" {% if band1 %}checked{% endif %} onchange="this.form.submit()">
-        ±1 StDev
+      <input type="hidden" name="cat" value="{{ category }}">
+      <span style="color:var(--muted); font-size:0.85rem;">Bands:</span>
+      <label style="color:var(--green);">
+        <input type="checkbox" name="band1" value="on" {% if band1 %}checked{% endif %} onchange="this.form.submit()"> ±1 StDev
       </label>
-      <label style="color:#f85149; font-size:0.85rem; cursor:pointer;">
-        <input type="checkbox" name="band2" value="on" {% if band2 %}checked{% endif %} onchange="this.form.submit()">
-        ±2 StDev
+      <label style="color:var(--red);">
+        <input type="checkbox" name="band2" value="on" {% if band2 %}checked{% endif %} onchange="this.form.submit()"> ±2 StDev
       </label>
-      <label style="color:#a371f7; font-size:0.85rem; cursor:pointer;">
-        <input type="checkbox" name="band3" value="on" {% if band3 %}checked{% endif %} onchange="this.form.submit()">
-        ±3 StDev
+      <label style="color:var(--purple);">
+        <input type="checkbox" name="band3" value="on" {% if band3 %}checked{% endif %} onchange="this.form.submit()"> ±3 StDev
       </label>
     </form>
   </div>
   {% endif %}
 
+  <!-- ATR options -->
+  {% if kind == 'atr' %}
+  <div class="card options">
+    <form method="GET" action="/indicators" style="display:flex; gap:20px; align-items:center; flex-wrap:wrap;">
+      <input type="hidden" name="kind" value="atr">
+      <input type="hidden" name="cat" value="{{ category }}">
+      <span style="color:var(--muted); font-size:0.85rem;">Options:</span>
+      <label style="color:var(--orange);">
+        <input type="checkbox" name="atr_avg" value="on" {% if atr_avg %}checked{% endif %} onchange="this.form.submit()"> Show 20-bar avg (orange)
+      </label>
+    </form>
+  </div>
+  {% endif %}
+
+  <!-- Pine Script output -->
   {% if pine_code %}
-  <div class="card" style="{{ 'border-top-left-radius:0; border-top-right-radius:0;' if kind in ['vwap', 'atr'] else '' }}">
-    <div class="desc-box">{{ description }}</div>
+  <div class="card {{ 'output' if kind in ['vwap', 'atr'] else '' }}">
     <div class="pine-label">
       <span>Pine Script v5 — works on any chart, no ticker needed</span>
       <button class="btn-copy" onclick="copyPine()">Copy</button>
     </div>
     <textarea id="pine-out" readonly>{{ pine_code }}</textarea>
+
+    {% if how_to %}
+    <div class="how-to">
+      <div class="how-to-title" onclick="toggleHowTo()">▶ How to use</div>
+      <div class="how-to-body" id="howto-body">{{ how_to }}</div>
+    </div>
+    {% endif %}
   </div>
   {% endif %}
 </div>
@@ -675,14 +750,46 @@ INDICATORS_HTML = """<!DOCTYPE html>
 <footer>VolForecast — Free Pine Script indicators · Not financial advice</footer>
 
 <script>
+// Copy Pine Script
 function copyPine() {
-  const ta = document.getElementById('pine-out');
-  ta.select();
+  document.getElementById('pine-out').select();
   document.execCommand('copy');
   const btn = document.querySelector('.btn-copy');
   btn.textContent = 'Copied!';
   btn.classList.add('copied');
   setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
+}
+
+// How to use toggle
+function toggleHowTo() {
+  const body = document.getElementById('howto-body');
+  const title = document.querySelector('.how-to-title');
+  body.classList.toggle('open');
+  title.textContent = body.classList.contains('open') ? '▼ How to use' : '▶ How to use';
+}
+
+// Client-side search filtering
+function filterCards() {
+  const q = document.getElementById('search').value.toLowerCase();
+  document.querySelectorAll('.ind-card').forEach(card => {
+    const match = card.dataset.name.includes(q) || card.dataset.desc.includes(q);
+    card.style.display = match ? '' : 'none';
+  });
+}
+
+// Dark / light mode
+function toggleTheme() {
+  const html = document.documentElement;
+  const isDark = html.getAttribute('data-theme') === 'dark';
+  html.setAttribute('data-theme', isDark ? 'light' : 'dark');
+  document.querySelector('.theme-toggle').textContent = isDark ? '☾ Dark' : '☀ Light';
+  localStorage.setItem('theme', isDark ? 'light' : 'dark');
+}
+// Restore saved theme
+const saved = localStorage.getItem('theme');
+if (saved) {
+  document.documentElement.setAttribute('data-theme', saved);
+  document.querySelector('.theme-toggle').textContent = saved === 'light' ? '☾ Dark' : '☀ Light';
 }
 </script>
 </body>
