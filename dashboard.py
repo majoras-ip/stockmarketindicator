@@ -1766,6 +1766,7 @@ GENERATOR_HTML = """<!DOCTYPE html>
     btn.classList.add('copied');
     setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
   }
+""" + _THEME_JS + """
 </script>
 </body>
 </html>"""
@@ -2168,6 +2169,7 @@ function drawChart(d) {
 
 // Initial load
 refresh();
+""" + _THEME_JS + """
 </script>
 </body>
 </html>"""
