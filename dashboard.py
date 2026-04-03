@@ -1271,7 +1271,9 @@ def _fetch_news(max_per_feed: int = 8) -> list[dict]:
                 if hasattr(entry, "published_parsed") and entry.published_parsed:
                     t = entry.published_parsed
                     ts = calendar.timegm(t)
-                    published = f"{t.tm_mon}/{t.tm_mday} {t.tm_hour:02d}:{t.tm_min:02d}"
+                    hour = t.tm_hour % 12 or 12
+                    ampm = "AM" if t.tm_hour < 12 else "PM"
+                    published = f"{t.tm_mon}/{t.tm_mday} {hour}:{t.tm_min:02d} {ampm}"
                 summary = re.sub(r"<[^>]+>", "", getattr(entry, "summary", "") or "")[:200]
                 articles.append({
                     "source":    source,
