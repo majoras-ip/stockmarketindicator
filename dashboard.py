@@ -313,22 +313,6 @@ plotshape(death,  "Death Cross",  style=shape.labeldown, location=location.above
 bgcolor(ma_fast > ma_slow ? color.new(color.green, 95) : color.new(color.red, 95), title="Trend")
 """
 
-INDICATORS = {
-    "volume":  ("24h Volume",       _pine_volume,   "Cumulative volume since market open vs 20-day average daily volume. Red = above average day."),
-    "vwap":    ("VWAP + Bands",    _pine_vwap,     "Volume Weighted Average Price with configurable ±1, ±2, ±3 standard deviation bands. Overlaid on price."),
-    "vwap_only": ("VWAP Only",    lambda: """\
-//@version=5
-indicator("VWAP", overlay=true, max_bars_back=500)
-
-plot(ta.vwap(hlc3), "VWAP", color=color.new(color.blue, 0), linewidth=2)
-""",     "Just the VWAP line, no bands. Clean and simple, overlaid on the price chart."),
-    "atr":     ("ATR",             _pine_atr,      "Average True Range (14). Shows how much the asset moves per bar. Red = elevated volatility."),
-    "relvol":  ("Relative Volume", _pine_relvol,   "Today's volume vs average. RVOL > 2 = unusually active. Threshold is adjustable."),
-    "macross": ("MA Cross",        _pine_ma_cross, "50/200 MA crossover. Labels Golden Cross (bullish) and Death Cross (bearish) on the chart."),
-    "feargreed": ("Fear & Greed",  _pine_feargreed, "Composite 0–100 index built from RSI, trend strength, volatility, VIX, and momentum. Works on any chart."),
-}
-
-
 def _pine_feargreed() -> str:
     return """\
 //@version=5
@@ -344,7 +328,7 @@ ma_pct    = (close - ma125) / ma125 * 100
 ma_score  = math.min(math.max(50 + ma_pct * 2, 0), 100)
 
 // 3. Bollinger Band width — low width = greed, high = fear (invert)
-basis              = ta.sma(close, 20)
+basis = ta.sma(close, 20)
 [bb_mid, bb_upper, bb_lower] = ta.bb(close, 20, 2)
 bb_width  = (bb_upper - bb_lower) / basis * 100
 bb_avg    = ta.sma(bb_width, 50)
@@ -391,6 +375,22 @@ if barstate.islast
               style=label.style_label_left, size=size.small,
               color=fg_color, textcolor=color.white)
 """
+
+
+INDICATORS = {
+    "volume":  ("24h Volume",       _pine_volume,   "Cumulative volume since market open vs 20-day average daily volume. Red = above average day."),
+    "vwap":    ("VWAP + Bands",    _pine_vwap,     "Volume Weighted Average Price with configurable ±1, ±2, ±3 standard deviation bands. Overlaid on price."),
+    "vwap_only": ("VWAP Only",    lambda: """\
+//@version=5
+indicator("VWAP", overlay=true, max_bars_back=500)
+
+plot(ta.vwap(hlc3), "VWAP", color=color.new(color.blue, 0), linewidth=2)
+""",     "Just the VWAP line, no bands. Clean and simple, overlaid on the price chart."),
+    "atr":     ("ATR",             _pine_atr,      "Average True Range (14). Shows how much the asset moves per bar. Red = elevated volatility."),
+    "relvol":  ("Relative Volume", _pine_relvol,   "Today's volume vs average. RVOL > 2 = unusually active. Threshold is adjustable."),
+    "macross": ("MA Cross",        _pine_ma_cross, "50/200 MA crossover. Labels Golden Cross (bullish) and Death Cross (bearish) on the chart."),
+    "feargreed": ("Fear & Greed",  _pine_feargreed, "Composite 0–100 index built from RSI, trend strength, volatility, VIX, and momentum. Works on any chart."),
+}
 
 
 @app.route("/indicators")
