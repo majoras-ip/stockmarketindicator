@@ -1540,7 +1540,7 @@ FAVORITES_HTML = """<!DOCTYPE html>
   </div>
   {% endif %}
 </div>
-<footer>ChartEdge — Free Pine Script indicators · Not financial advice · <a href="/privacy" style="color:inherit">Privacy</a> · <a href="/terms" style="color:inherit">Terms</a></footer>
+<footer>© 2026 ChartEdge · Free Pine Script indicators · Not financial advice · <a href="/privacy" style="color:inherit">Privacy</a> · <a href="/terms" style="color:inherit">Terms</a></footer>
 <script>""" + _THEME_JS + """</script>
 </body>
 </html>"""
@@ -1654,7 +1654,7 @@ REQUEST_HTML = """<!DOCTYPE html>
     {% endif %}
   </div>
 </div>
-<footer>ChartEdge — Free Pine Script indicators · Not financial advice · <a href="/privacy" style="color:inherit">Privacy</a> · <a href="/terms" style="color:inherit">Terms</a></footer>
+<footer>© 2026 ChartEdge · Free Pine Script indicators · Not financial advice · <a href="/privacy" style="color:inherit">Privacy</a> · <a href="/terms" style="color:inherit">Terms</a></footer>
 <script>
 async function vote(id) {
   const res  = await fetch('/api/request/' + id + '/vote', {method: 'POST'});
@@ -1905,7 +1905,7 @@ INDICATORS_HTML = """<!DOCTYPE html>
   {% endif %}
 </div>
 
-<footer>ChartEdge — Free Pine Script indicators · Not financial advice · <a href="/privacy" style="color:inherit">Privacy</a> · <a href="/terms" style="color:inherit">Terms</a></footer>
+<footer>© 2026 ChartEdge · Free Pine Script indicators · Not financial advice · <a href="/privacy" style="color:inherit">Privacy</a> · <a href="/terms" style="color:inherit">Terms</a></footer>
 
 <script>
 function copyPine() {
@@ -2144,7 +2144,7 @@ HOME_HTML = """<!DOCTYPE html>
   </div>
 </div>
 
-<footer>ChartEdge — Free Pine Script indicators · Not financial advice · <a href="/privacy" style="color:inherit">Privacy</a> · <a href="/terms" style="color:inherit">Terms</a></footer>
+<footer>© 2026 ChartEdge · Free Pine Script indicators · Not financial advice · <a href="/privacy" style="color:inherit">Privacy</a> · <a href="/terms" style="color:inherit">Terms</a></footer>
 
 <script>
 """ + _THEME_JS + """
@@ -2361,7 +2361,7 @@ GENERATOR_HTML = """<!DOCTYPE html>
 </div>
 
 <footer>
-  ChartEdge — LSTM volatility prediction · Not financial advice
+  © 2026 ChartEdge · LSTM volatility prediction · Not financial advice
 </footer>
 
 <script>
@@ -2456,7 +2456,7 @@ EARNINGS_HTML = """<!DOCTYPE html>
   <div class="empty">No upcoming earnings found for tracked tickers in the next 30 days.</div>
   {% endif %}
 </div>
-<footer>ChartEdge — Not financial advice</footer>
+<footer>© 2026 ChartEdge · Not financial advice · <a href="/privacy" style="color:inherit">Privacy</a> · <a href="/terms" style="color:inherit">Terms</a></footer>
 <script>""" + _THEME_JS + """</script>
 </body>
 </html>"""
@@ -2568,7 +2568,7 @@ FAQ_HTML = """<!DOCTYPE html>
   </div>
 
 </div>
-<footer>ChartEdge — Not financial advice</footer>
+<footer>© 2026 ChartEdge · Not financial advice · <a href="/privacy" style="color:inherit">Privacy</a> · <a href="/terms" style="color:inherit">Terms</a></footer>
 <script>
 function toggleFaq(btn) {
   const answer = btn.nextElementSibling;
@@ -2654,7 +2654,7 @@ PRIVACY_HTML = """<!DOCTYPE html>
   <h2>6. Contact</h2>
   <p>Questions? Email: <a href="mailto:ayden.j.folkerts@gmail.com">ayden.j.folkerts@gmail.com</a></p>
 </div>
-<footer>ChartEdge — Not financial advice</footer>
+<footer>© 2026 ChartEdge · Not financial advice · <a href="/privacy" style="color:inherit">Privacy</a> · <a href="/terms" style="color:inherit">Terms</a></footer>
 <script>""" + _THEME_JS + """</script>
 </body>
 </html>"""
@@ -2720,7 +2720,7 @@ TERMS_HTML = """<!DOCTYPE html>
   <h2>8. Contact</h2>
   <p>Questions? Email: <a href="mailto:ayden.j.folkerts@gmail.com">ayden.j.folkerts@gmail.com</a></p>
 </div>
-<footer>ChartEdge — Not financial advice</footer>
+<footer>© 2026 ChartEdge · Not financial advice · <a href="/privacy" style="color:inherit">Privacy</a> · <a href="/terms" style="color:inherit">Terms</a></footer>
 <script>""" + _THEME_JS + """</script>
 </body>
 </html>"""
@@ -2892,7 +2892,7 @@ NEWS_HTML = """<!DOCTYPE html>
   <div id="status"></div>
 </div>
 
-<footer>ChartEdge — News sourced from public RSS feeds · Not financial advice</footer>
+<footer>© 2026 ChartEdge · News sourced from public RSS feeds · Not financial advice · <a href="/privacy" style="color:inherit">Privacy</a> · <a href="/terms" style="color:inherit">Terms</a></footer>
 
 <script>
 let activeSource = 'all';
