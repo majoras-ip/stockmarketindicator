@@ -755,14 +755,14 @@ _NAV_CSS = """
     font-size: 0.9rem; cursor: pointer; display: flex; align-items: center; gap: 4px;
   }
   .dropdown > .drop-btn:hover { background: var(--bg3); border-color: var(--border); color: var(--text); }
-  .dropdown:hover > .drop-btn { background: var(--bg3); border-color: var(--border); color: var(--text); }
+  .dropdown > .drop-btn.open { background: var(--bg3); border-color: var(--border); color: var(--text); }
   .drop-menu {
     display: none; position: absolute; top: calc(100% + 6px); right: 0;
     background: var(--bg2); border: 1px solid var(--border); border-radius: 8px;
     min-width: 160px; z-index: 100; overflow: hidden;
     box-shadow: 0 8px 24px rgba(0,0,0,0.3);
   }
-  .dropdown:hover .drop-menu { display: block; }
+  .drop-menu.open { display: block; }
   .drop-menu a {
     display: block; padding: 9px 16px; color: var(--muted);
     text-decoration: none; font-size: 0.88rem; border-bottom: 1px solid var(--border);
@@ -774,7 +774,7 @@ _NAV_CSS = """
 
 _NAV_LINKS = """
     <div class="dropdown">
-      <button class="drop-btn">Tools ▾</button>
+      <button class="drop-btn" onclick="toggleDrop(this)">Tools ▾</button>
       <div class="drop-menu">
         <a href="/indicators">Indicators</a>
         <a href="/generate">Forecast</a>
@@ -783,7 +783,7 @@ _NAV_LINKS = """
       </div>
     </div>
     <div class="dropdown">
-      <button class="drop-btn">Community ▾</button>
+      <button class="drop-btn" onclick="toggleDrop(this)">Community ▾</button>
       <div class="drop-menu">
         <a href="/request">Request Indicator</a>
         {% if current_user %}<a href="/favorites">♥ My Favorites</a>{% endif %}
@@ -791,13 +791,13 @@ _NAV_LINKS = """
     </div>
     <div class="dropdown">
       {% if current_user %}
-      <button class="drop-btn">{{ current_user }} ▾</button>
+      <button class="drop-btn" onclick="toggleDrop(this)">{{ current_user }} ▾</button>
       <div class="drop-menu">
         <a href="/favorites">♥ Favorites</a>
         <a href="/logout">Logout</a>
       </div>
       {% else %}
-      <button class="drop-btn">Account ▾</button>
+      <button class="drop-btn" onclick="toggleDrop(this)">Account ▾</button>
       <div class="drop-menu">
         <a href="/login">Login</a>
         <a href="/register">Register</a>
@@ -808,6 +808,20 @@ _NAV_LINKS = """
 """
 
 _THEME_JS = """
+function toggleDrop(btn) {
+  const menu = btn.nextElementSibling;
+  const isOpen = menu.classList.contains('open');
+  // close all
+  document.querySelectorAll('.drop-menu').forEach(m => m.classList.remove('open'));
+  document.querySelectorAll('.drop-btn').forEach(b => b.classList.remove('open'));
+  if (!isOpen) { menu.classList.add('open'); btn.classList.add('open'); }
+}
+document.addEventListener('click', function(e) {
+  if (!e.target.closest('.dropdown')) {
+    document.querySelectorAll('.drop-menu').forEach(m => m.classList.remove('open'));
+    document.querySelectorAll('.drop-btn').forEach(b => b.classList.remove('open'));
+  }
+});
 function toggleTheme() {
   const html = document.documentElement;
   const isDark = html.getAttribute('data-theme') === 'dark';
