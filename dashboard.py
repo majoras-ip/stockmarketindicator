@@ -325,7 +325,71 @@ plot(ta.vwap(hlc3), "VWAP", color=color.new(color.blue, 0), linewidth=2)
     "atr":     ("ATR",             _pine_atr,      "Average True Range (14). Shows how much the asset moves per bar. Red = elevated volatility."),
     "relvol":  ("Relative Volume", _pine_relvol,   "Today's volume vs average. RVOL > 2 = unusually active. Threshold is adjustable."),
     "macross": ("MA Cross",        _pine_ma_cross, "50/200 MA crossover. Labels Golden Cross (bullish) and Death Cross (bearish) on the chart."),
+    "feargreed": ("Fear & Greed",  _pine_feargreed, "Composite 0–100 index built from RSI, trend strength, volatility, VIX, and momentum. Works on any chart."),
 }
+
+
+def _pine_feargreed() -> str:
+    return """\
+//@version=5
+indicator("Fear & Greed Index", overlay=false, max_bars_back=500)
+
+// ── Components ────────────────────────────────────────────────────
+// 1. RSI momentum (already 0-100)
+rsi_raw = ta.rsi(close, 14)
+
+// 2. Price vs 125-day MA (normalize to 0-100)
+ma125     = ta.sma(close, 125)
+ma_pct    = (close - ma125) / ma125 * 100
+ma_score  = math.min(math.max(50 + ma_pct * 2, 0), 100)
+
+// 3. Bollinger Band width — low width = greed, high = fear (invert)
+basis     = ta.sma(close, 20)
+bb_width  = (ta.bb(close, 20, 2)[1] - ta.bb(close, 20, 2)[2]) / basis * 100
+bb_avg    = ta.sma(bb_width, 50)
+bb_score  = math.min(math.max(50 - (bb_width - bb_avg) * 5, 0), 100)
+
+// 4. VIX — fear when high (invert: VIX 10=greed 100, VIX 40=fear 0)
+vix       = request.security("CBOE:VIX", timeframe.period, close)
+vix_score = math.min(math.max(100 - (vix - 10) * (100 / 30), 0), 100)
+
+// 5. 52-week momentum — rate of change
+roc52     = ta.roc(close, 252)
+roc_score = math.min(math.max(50 + roc52, 0), 100)
+
+// ── Composite (weighted average) ─────────────────────────────────
+fg = (rsi_raw * 0.25 + ma_score * 0.25 + bb_score * 0.15 + vix_score * 0.20 + roc_score * 0.15)
+
+// ── Color by zone ─────────────────────────────────────────────────
+fg_color =
+     fg < 25 ? color.new(color.red,    0) :
+     fg < 45 ? color.new(color.orange, 0) :
+     fg < 55 ? color.new(color.yellow, 0) :
+     fg < 75 ? color.new(color.teal,   0) :
+               color.new(color.green,  0)
+
+// ── Plot ──────────────────────────────────────────────────────────
+plot(fg, "Fear & Greed", color=fg_color, linewidth=3, style=plot.style_line)
+
+hline(75, "Extreme Greed", color=color.new(color.green,  40), linestyle=hline.style_dashed)
+hline(55, "Greed",         color=color.new(color.teal,   40), linestyle=hline.style_dashed)
+hline(45, "Fear",          color=color.new(color.orange, 40), linestyle=hline.style_dashed)
+hline(25, "Extreme Fear",  color=color.new(color.red,    40), linestyle=hline.style_dashed)
+
+bgcolor(
+     fg < 25 ? color.new(color.red,    92) :
+     fg < 45 ? color.new(color.orange, 92) :
+     fg < 55 ? color.new(color.yellow, 92) :
+     fg < 75 ? color.new(color.teal,   92) :
+               color.new(color.green,  92), title="Zone")
+
+// ── Label on last bar ─────────────────────────────────────────────
+if barstate.islast
+    txt = fg < 25 ? "Extreme Fear" : fg < 45 ? "Fear" : fg < 55 ? "Neutral" : fg < 75 ? "Greed" : "Extreme Greed"
+    label.new(bar_index, fg, txt + "  " + str.tostring(math.round(fg)),
+              style=label.style_label_left, size=size.small,
+              color=fg_color, textcolor=color.white)
+"""
 
 
 @app.route("/indicators")
