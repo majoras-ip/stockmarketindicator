@@ -657,6 +657,7 @@ INDICATORS_HTML = """<!DOCTYPE html>
   <div class="nav-links">
     <a href="/indicators">Indicators</a>
     <a href="/generate">Forecast</a>
+    <a href="/news">News</a>
     <a href="/dashboard">Live Chart</a>
     <button class="theme-toggle" onclick="toggleTheme()">☀ Light</button>
   </div>
@@ -889,6 +890,7 @@ HOME_HTML = """<!DOCTYPE html>
   <div class="nav-links">
     <a href="/indicators">Indicators</a>
     <a href="/generate">Forecast</a>
+    <a href="/news">News</a>
     <a href="/dashboard">Live Chart</a>
     <button class="theme-toggle" onclick="toggleTheme()">☀ Light</button>
   </div>
@@ -1150,6 +1152,7 @@ GENERATOR_HTML = """<!DOCTYPE html>
   <div class="nav-links">
     <a href="/indicators">Indicators</a>
     <a href="/generate">Forecast</a>
+    <a href="/news">News</a>
     <a href="/dashboard">Live Chart</a>
   </div>
 </nav>
@@ -1242,6 +1245,238 @@ GENERATOR_HTML = """<!DOCTYPE html>
     btn.classList.add('copied');
     setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
   }
+</script>
+</body>
+</html>"""
+
+
+# ── News ─────────────────────────────────────────────────────────────────────
+
+NEWS_FEEDS = [
+    ("Yahoo Finance",  "https://finance.yahoo.com/news/rssindex"),
+    ("Reuters",        "https://feeds.reuters.com/reuters/businessNews"),
+    ("MarketWatch",    "https://feeds.marketwatch.com/marketwatch/topstories/"),
+    ("Seeking Alpha",  "https://seekingalpha.com/market_currents.xml"),
+]
+
+def _fetch_news(max_per_feed: int = 8) -> list[dict]:
+    import feedparser, time
+    articles = []
+    for source, url in NEWS_FEEDS:
+        try:
+            feed = feedparser.parse(url)
+            for entry in feed.entries[:max_per_feed]:
+                published = ""
+                if hasattr(entry, "published_parsed") and entry.published_parsed:
+                    t = entry.published_parsed
+                    published = f"{t.tm_mon}/{t.tm_mday} {t.tm_hour:02d}:{t.tm_min:02d}"
+                summary = getattr(entry, "summary", "") or ""
+                # strip HTML tags from summary
+                import re
+                summary = re.sub(r"<[^>]+>", "", summary)[:200]
+                articles.append({
+                    "source":    source,
+                    "title":     entry.get("title", ""),
+                    "link":      entry.get("link", "#"),
+                    "published": published,
+                    "summary":   summary,
+                })
+        except Exception as exc:
+            log.warning("Feed %s failed: %s", source, exc)
+    # sort by source order (already interleaved nicely)
+    return articles
+
+
+@app.route("/news")
+def news_page():
+    articles = _fetch_news()
+    return render_template_string(NEWS_HTML, articles=articles)
+
+
+@app.route("/api/news")
+def api_news():
+    return jsonify(_fetch_news())
+
+
+NEWS_HTML = """<!DOCTYPE html>
+<html data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Market News — VolForecast</title>
+  <style>
+    :root[data-theme="dark"]  { --bg:#0d1117; --bg2:#161b22; --bg3:#21262d; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --green:#3fb950; --red:#f85149; }
+    :root[data-theme="light"] { --bg:#ffffff; --bg2:#f6f8fa; --bg3:#eaeef2; --border:#d0d7de; --text:#1f2328; --muted:#636c76; --accent:#0969da; --green:#1a7f37; --red:#cf222e; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: monospace; background: var(--bg); color: var(--text); min-height: 100vh; }
+    nav {
+      background: var(--bg2); border-bottom: 1px solid var(--border);
+      padding: 14px 24px; display: flex; align-items: center; justify-content: space-between;
+    }
+    .logo { color: var(--accent); font-size: 1.1rem; font-weight: bold; text-decoration: none; }
+    .nav-links { display: flex; align-items: center; gap: 20px; }
+    .nav-links a { color: var(--muted); text-decoration: none; font-size: 0.9rem; }
+    .nav-links a:hover { color: var(--text); }
+    .theme-toggle { background: var(--bg3); border: 1px solid var(--border); color: var(--text); padding: 4px 10px; border-radius: 6px; cursor: pointer; font-size: 0.8rem; font-family: monospace; }
+
+    .hero { padding: 40px 24px 28px; border-bottom: 1px solid var(--border); text-align: center; }
+    .hero h1 { font-size: 1.6rem; margin-bottom: 8px; }
+    .hero h1 span { color: var(--accent); }
+    .hero p { color: var(--muted); font-size: 0.9rem; }
+
+    .container { max-width: 860px; margin: 0 auto; padding: 28px 24px; }
+
+    /* Filter bar */
+    .filter-bar { display: flex; gap: 10px; margin-bottom: 24px; flex-wrap: wrap; align-items: center; }
+    .filter-bar input {
+      flex: 1; min-width: 200px; background: var(--bg2); color: var(--text);
+      border: 1px solid var(--border); padding: 8px 14px; border-radius: 6px;
+      font-family: monospace; font-size: 0.9rem;
+    }
+    .filter-bar input:focus { outline: none; border-color: var(--accent); }
+    .src-btn {
+      background: var(--bg2); color: var(--muted); border: 1px solid var(--border);
+      padding: 6px 14px; border-radius: 20px; font-size: 0.8rem; cursor: pointer;
+      font-family: monospace;
+    }
+    .src-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .refresh-btn {
+      background: var(--bg2); color: var(--text); border: 1px solid var(--border);
+      padding: 6px 14px; border-radius: 6px; font-size: 0.8rem; cursor: pointer;
+      font-family: monospace; margin-left: auto;
+    }
+    .refresh-btn:hover { border-color: var(--accent); }
+
+    /* News list */
+    .news-list { display: flex; flex-direction: column; gap: 12px; }
+    .news-card {
+      background: var(--bg2); border: 1px solid var(--border); border-radius: 8px;
+      padding: 16px 20px; transition: border-color 0.15s;
+    }
+    .news-card:hover { border-color: var(--accent); }
+    .news-meta { display: flex; gap: 10px; align-items: center; margin-bottom: 6px; flex-wrap: wrap; }
+    .source-tag {
+      font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em;
+      background: var(--bg3); border: 1px solid var(--border);
+      padding: 2px 8px; border-radius: 4px; color: var(--muted);
+    }
+    .news-time { color: var(--muted); font-size: 0.75rem; }
+    .news-title { font-size: 0.95rem; font-weight: bold; margin-bottom: 6px; }
+    .news-title a { color: var(--text); text-decoration: none; }
+    .news-title a:hover { color: var(--accent); }
+    .news-summary { color: var(--muted); font-size: 0.8rem; line-height: 1.55; }
+    .no-news { color: var(--muted); text-align: center; padding: 40px; }
+    #status { color: var(--muted); font-size: 0.78rem; margin-top: 16px; text-align: center; }
+
+    footer { text-align: center; padding: 32px 24px; color: var(--muted); font-size: 0.8rem; border-top: 1px solid var(--border); margin-top: 40px; }
+  </style>
+</head>
+<body>
+<nav>
+  <a class="logo" href="/">VolForecast</a>
+  <div class="nav-links">
+    <a href="/indicators">Indicators</a>
+    <a href="/generate">Forecast</a>
+    <a href="/news">News</a>
+    <a href="/dashboard">Live Chart</a>
+    <button class="theme-toggle" onclick="toggleTheme()">☀ Light</button>
+  </div>
+</nav>
+
+<div class="hero">
+  <h1><span>Market</span> News</h1>
+  <p>Live financial news from Yahoo Finance, Reuters, and MarketWatch. Auto-refreshes every 5 minutes.</p>
+</div>
+
+<div class="container">
+  <div class="filter-bar">
+    <input id="search" placeholder="Search news…" oninput="filterNews()">
+    <button class="src-btn active" onclick="filterSource(this, 'all')">All</button>
+    <button class="src-btn" onclick="filterSource(this, 'Yahoo Finance')">Yahoo Finance</button>
+    <button class="src-btn" onclick="filterSource(this, 'Reuters')">Reuters</button>
+    <button class="src-btn" onclick="filterSource(this, 'MarketWatch')">MarketWatch</button>
+    <button class="refresh-btn" onclick="loadNews()">↻ Refresh</button>
+  </div>
+
+  <div class="news-list" id="news-list">
+    {% for a in articles %}
+    <div class="news-card" data-source="{{ a.source }}" data-title="{{ a.title.lower() }}" data-summary="{{ a.summary.lower() }}">
+      <div class="news-meta">
+        <span class="source-tag">{{ a.source }}</span>
+        <span class="news-time">{{ a.published }}</span>
+      </div>
+      <div class="news-title"><a href="{{ a.link }}" target="_blank" rel="noopener">{{ a.title }}</a></div>
+      {% if a.summary %}<div class="news-summary">{{ a.summary }}…</div>{% endif %}
+    </div>
+    {% endfor %}
+    {% if not articles %}
+    <div class="no-news">No news available right now. Try refreshing.</div>
+    {% endif %}
+  </div>
+  <div id="status"></div>
+</div>
+
+<footer>VolForecast — News sourced from public RSS feeds · Not financial advice</footer>
+
+<script>
+let activeSource = 'all';
+
+function filterSource(btn, source) {
+  activeSource = source;
+  document.querySelectorAll('.src-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  filterNews();
+}
+
+function filterNews() {
+  const q = document.getElementById('search').value.toLowerCase();
+  document.querySelectorAll('.news-card').forEach(card => {
+    const srcMatch  = activeSource === 'all' || card.dataset.source === activeSource;
+    const textMatch = !q || card.dataset.title.includes(q) || card.dataset.summary.includes(q);
+    card.style.display = srcMatch && textMatch ? '' : 'none';
+  });
+}
+
+async function loadNews() {
+  document.getElementById('status').textContent = 'Refreshing…';
+  try {
+    const res  = await fetch('/api/news');
+    const data = await res.json();
+    const list = document.getElementById('news-list');
+    list.innerHTML = data.length === 0
+      ? '<div class="no-news">No news available right now.</div>'
+      : data.map(a => `
+        <div class="news-card" data-source="${a.source}" data-title="${a.title.toLowerCase()}" data-summary="${(a.summary||'').toLowerCase()}">
+          <div class="news-meta">
+            <span class="source-tag">${a.source}</span>
+            <span class="news-time">${a.published}</span>
+          </div>
+          <div class="news-title"><a href="${a.link}" target="_blank" rel="noopener">${a.title}</a></div>
+          ${a.summary ? `<div class="news-summary">${a.summary}…</div>` : ''}
+        </div>`).join('');
+    document.getElementById('status').textContent = 'Updated ' + new Date().toLocaleTimeString();
+    filterNews();
+  } catch(e) {
+    document.getElementById('status').textContent = 'Error fetching news: ' + e.message;
+  }
+}
+
+// Auto-refresh every 5 min
+setInterval(loadNews, 5 * 60 * 1000);
+
+// Theme
+function toggleTheme() {
+  const html = document.documentElement;
+  const isDark = html.getAttribute('data-theme') === 'dark';
+  html.setAttribute('data-theme', isDark ? 'light' : 'dark');
+  document.querySelector('.theme-toggle').textContent = isDark ? '☾ Dark' : '☀ Light';
+  localStorage.setItem('theme', isDark ? 'light' : 'dark');
+}
+const saved = localStorage.getItem('theme');
+if (saved) {
+  document.documentElement.setAttribute('data-theme', saved);
+  document.querySelector('.theme-toggle').textContent = saved === 'light' ? '☾ Dark' : '☀ Light';
+}
 </script>
 </body>
 </html>"""
