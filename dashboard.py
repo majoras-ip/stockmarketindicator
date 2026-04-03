@@ -542,6 +542,64 @@ fill(sa, sb, color=senkou_a > senkou_b ? color.new(color.green, 80) : color.new(
 """
 
 
+def _pine_bb_squeeze() -> str:
+    return """\
+//@version=5
+indicator("Bollinger Band Squeeze", overlay=false, max_bars_back=500)
+
+// ── Inputs ────────────────────────────────────────────────────────
+bb_len   = input.int(20,  "BB Length",         minval=1)
+bb_mult  = input.float(2.0,"BB Multiplier",    minval=0.1, step=0.1)
+kc_len   = input.int(20,  "Keltner Length",    minval=1)
+kc_mult  = input.float(1.5,"Keltner Multiplier",minval=0.1, step=0.1)
+
+// ── Bollinger Bands ───────────────────────────────────────────────
+basis    = ta.sma(close, bb_len)
+dev      = bb_mult * ta.stdev(close, bb_len)
+bb_upper = basis + dev
+bb_lower = basis - dev
+
+// ── Keltner Channels ──────────────────────────────────────────────
+kc_mid   = ta.ema(close, kc_len)
+kc_range = ta.atr(kc_len) * kc_mult
+kc_upper = kc_mid + kc_range
+kc_lower = kc_mid - kc_range
+
+// ── Squeeze detection ─────────────────────────────────────────────
+squeeze  = bb_upper < kc_upper and bb_lower > kc_lower
+no_sqz   = bb_upper > kc_upper and bb_lower < kc_lower
+
+// ── Momentum histogram ────────────────────────────────────────────
+val = ta.linreg(close - math.avg(math.avg(ta.highest(high, kc_len), ta.lowest(low, kc_len)), ta.sma(close, kc_len)), kc_len, 0)
+
+hist_color =
+     val > 0 and val >= val[1] ? color.new(color.green,  0)  :
+     val > 0 and val <  val[1] ? color.new(color.green,  40) :
+     val < 0 and val <= val[1] ? color.new(color.red,    0)  :
+                                  color.new(color.red,    40)
+
+plot(val, "Momentum", style=plot.style_columns, color=hist_color)
+plot(0,   "Zero",     color=color.new(color.gray, 60), linewidth=1)
+
+// ── Squeeze dots ──────────────────────────────────────────────────
+sqz_color =
+     squeeze ? color.new(color.orange, 0) :
+     no_sqz  ? color.new(color.blue,   0) :
+               color.new(color.gray,   0)
+
+plot(0, "Squeeze", style=plot.style_circles, linewidth=3, color=sqz_color)
+
+// ── Label ─────────────────────────────────────────────────────────
+if barstate.islast
+    state = squeeze ? "⚡ IN SQUEEZE" : no_sqz ? "↗ FIRED" : "Normal"
+    label.new(bar_index, val,
+              state,
+              style=label.style_label_left, size=size.small,
+              color=color.new(squeeze ? color.orange : no_sqz ? color.blue : color.gray, 30),
+              textcolor=color.white)
+"""
+
+
 def _pine_unusual_options() -> str:
     return """\
 //@version=5
@@ -673,6 +731,7 @@ INDICATORS = {
     "supertrend":("Supertrend",      _pine_supertrend,"Dynamic support/resistance line that flips direction. BUY/SELL labels on every trend change.",             "trend",      "Paste onto your price chart. Green line below price = uptrend. Red line above price = downtrend. BUY label appears when trend flips bullish, SELL when it flips bearish. Adjust the ATR multiplier in settings — higher = fewer signals, less noise."),
     "ichimoku":  ("Ichimoku Cloud",  _pine_ichimoku,  "Full Ichimoku system: Tenkan, Kijun, cloud (Senkou A/B), and Chikou span overlaid on price.",             "trend",      "Paste onto your price chart. Green cloud = bullish, red cloud = bearish. Price above the cloud = strong uptrend. Price inside the cloud = consolidation. Price below = downtrend. The Tenkan/Kijun cross is a short-term signal. Best used on daily or 4h charts."),
     "feargreed":     ("Fear & Greed",           _pine_feargreed,     "Composite 0–100 index built from RSI, trend strength, volatility, VIX, and 52-week momentum.",         "momentum", "Add as a separate panel on any chart. Reads 0–100: below 25 = Extreme Fear (often a buying opportunity), above 75 = Extreme Greed (market may be overheated). The label on the last bar shows the current reading and zone. Works on any ticker — uses VIX as one of its inputs."),
+    "bbsqueeze":     ("Bollinger Squeeze",      _pine_bb_squeeze,      "Detects when Bollinger Bands contract inside Keltner Channels — a coiling signal before a big move. Orange dot = in squeeze, blue = fired.", "volatility", "Add as a separate panel. Orange dots on the zero line = squeeze is active (market coiling). Blue dots = squeeze just fired (potential breakout). Green histogram = bullish momentum building, red = bearish. The bigger the histogram bars after the squeeze fires, the stronger the move."),
     "unusualopts":   ("Unusual Options Volume", _pine_unusual_options, "Flags bars where volume spikes above a multiple of the 20-bar average. Red = unusual, orange = elevated.", "volume",   "Add as a separate panel. Each bar shows today's volume as a multiple of the average (1.0 = normal). Red bars with a ⚡ label = unusual spike (default 2× threshold). Orange = elevated but not extreme. Adjust the threshold in TradingView settings. High spikes often precede big moves — watch for them before earnings or news."),
 }
 
@@ -1159,6 +1218,17 @@ _NAV_CSS = """
   .drop-menu a:last-child { border-bottom: none; }
   .drop-menu a:hover { background: var(--bg3); color: var(--text); }
   .theme-toggle { background: var(--bg3); border: 1px solid var(--border); color: var(--text); padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 0.85rem; font-family: monospace; margin-left: 4px; }
+  .hamburger { display: none; background: none; border: 1px solid var(--border); color: var(--text); padding: 6px 10px; border-radius: 6px; cursor: pointer; font-size: 1.1rem; }
+  @media (max-width: 640px) {
+    .hamburger { display: block; }
+    .nav-links { display: none; flex-direction: column; align-items: flex-start; gap: 0; position: absolute; top: 100%; left: 0; right: 0; background: var(--bg2); border-bottom: 1px solid var(--border); padding: 8px 16px; z-index: 9998; }
+    .nav-links.open { display: flex; }
+    .dropdown { width: 100%; }
+    .dropdown > .drop-btn { width: 100%; justify-content: space-between; padding: 10px 4px; border: none; border-bottom: 1px solid var(--border); border-radius: 0; }
+    .drop-menu { position: static; box-shadow: none; border: none; border-radius: 0; background: var(--bg3); }
+    .drop-menu a { padding: 8px 16px; font-size: 0.9rem; }
+    .theme-toggle { width: 100%; margin: 8px 0 4px; }
+  }
 """
 
 _NAV_LINKS = """
@@ -1207,9 +1277,16 @@ function toggleDrop(btn, event) {
   document.querySelectorAll('.drop-btn').forEach(b => b.classList.remove('open'));
   if (!isOpen) { menu.classList.add('open'); btn.classList.add('open'); }
 }
+function toggleMobileNav(event) {
+  event.stopPropagation();
+  const nav = document.getElementById('mobile-nav');
+  nav.classList.toggle('open');
+}
 document.addEventListener('click', function() {
   document.querySelectorAll('.drop-menu').forEach(m => m.classList.remove('open'));
   document.querySelectorAll('.drop-btn').forEach(b => b.classList.remove('open'));
+  const nav = document.getElementById('mobile-nav');
+  if (nav) nav.classList.remove('open');
 });
 function toggleTheme() {
   const html = document.documentElement;
@@ -1348,7 +1425,8 @@ FAVORITES_HTML = """<!DOCTYPE html>
 <body>
 <nav>
   <a class="logo" href="/">ChartEdge</a>
-  <div class="nav-links">""" + _NAV_LINKS + """</div>
+  <button class="hamburger" onclick="toggleMobileNav(event)">☰</button>
+  <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
 </nav>
 <div class="hero">
   <h1>♥ <span>Favorites</span></h1>
@@ -1433,7 +1511,8 @@ REQUEST_HTML = """<!DOCTYPE html>
 <body>
 <nav>
   <a class="logo" href="/">ChartEdge</a>
-  <div class="nav-links">""" + _NAV_LINKS + """</div>
+  <button class="hamburger" onclick="toggleMobileNav(event)">☰</button>
+  <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
 </nav>
 <div class="hero">
   <h1>Request an <span>Indicator</span></h1>
@@ -1616,7 +1695,8 @@ INDICATORS_HTML = """<!DOCTYPE html>
 <body>
 <nav>
   <a class="logo" href="/">ChartEdge</a>
-  <div class="nav-links">""" + _NAV_LINKS + """</div>
+  <button class="hamburger" onclick="toggleMobileNav(event)">☰</button>
+  <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
 </nav>
 
 <div class="hero">
@@ -2252,7 +2332,8 @@ EARNINGS_HTML = """<!DOCTYPE html>
 <body>
 <nav>
   <a class="logo" href="/">ChartEdge</a>
-  <div class="nav-links">""" + _NAV_LINKS + """</div>
+  <button class="hamburger" onclick="toggleMobileNav(event)">☰</button>
+  <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
 </nav>
 <div class="hero">
   <h1>Earnings <span>Calendar</span></h1>
@@ -2331,7 +2412,8 @@ FAQ_HTML = """<!DOCTYPE html>
 <body>
 <nav>
   <a class="logo" href="/">ChartEdge</a>
-  <div class="nav-links">""" + _NAV_LINKS + """</div>
+  <button class="hamburger" onclick="toggleMobileNav(event)">☰</button>
+  <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
 </nav>
 <div class="hero">
   <h1>Frequently Asked <span>Questions</span></h1>
