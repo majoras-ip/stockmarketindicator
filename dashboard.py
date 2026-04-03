@@ -1333,18 +1333,7 @@ function filterCards() {
     card.style.display = (card.dataset.name.includes(q) || card.dataset.desc.includes(q)) ? '' : 'none';
   });
 }
-function toggleTheme() {
-  const html = document.documentElement;
-  const isDark = html.getAttribute('data-theme') === 'dark';
-  html.setAttribute('data-theme', isDark ? 'light' : 'dark');
-  document.querySelector('.theme-toggle').textContent = isDark ? '☾ Dark' : '☀ Light';
-  localStorage.setItem('theme', isDark ? 'light' : 'dark');
-}
-const saved = localStorage.getItem('theme');
-if (saved) {
-  document.documentElement.setAttribute('data-theme', saved);
-  document.querySelector('.theme-toggle').textContent = saved === 'light' ? '☾ Dark' : '☀ Light';
-}
+""" + _THEME_JS + """
 </script>
 </body>
 </html>"""
@@ -1544,18 +1533,7 @@ HOME_HTML = """<!DOCTYPE html>
 <footer>VolForecast — Free Pine Script indicators · Not financial advice</footer>
 
 <script>
-function toggleTheme() {
-  const html = document.documentElement;
-  const isDark = html.getAttribute('data-theme') === 'dark';
-  html.setAttribute('data-theme', isDark ? 'light' : 'dark');
-  document.querySelector('.theme-toggle').textContent = isDark ? '☾ Dark' : '☀ Light';
-  localStorage.setItem('theme', isDark ? 'light' : 'dark');
-}
-const saved = localStorage.getItem('theme');
-if (saved) {
-  document.documentElement.setAttribute('data-theme', saved);
-  document.querySelector('.theme-toggle').textContent = saved === 'light' ? '☾ Dark' : '☀ Light';
-}
+""" + _THEME_JS + """
 </script>
 </body>
 </html>"""
@@ -2005,18 +1983,7 @@ async function loadNews() {
 setInterval(loadNews, 5 * 60 * 1000);
 
 // Theme
-function toggleTheme() {
-  const html = document.documentElement;
-  const isDark = html.getAttribute('data-theme') === 'dark';
-  html.setAttribute('data-theme', isDark ? 'light' : 'dark');
-  document.querySelector('.theme-toggle').textContent = isDark ? '☾ Dark' : '☀ Light';
-  localStorage.setItem('theme', isDark ? 'light' : 'dark');
-}
-const saved = localStorage.getItem('theme');
-if (saved) {
-  document.documentElement.setAttribute('data-theme', saved);
-  document.querySelector('.theme-toggle').textContent = saved === 'light' ? '☾ Dark' : '☀ Light';
-}
+""" + _THEME_JS + """
 </script>
 </body>
 </html>"""
