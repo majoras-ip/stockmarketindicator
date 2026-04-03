@@ -80,6 +80,19 @@ def _migrate_db():
     try:
         with get_db() as conn:
             conn.execute("""
+                CREATE TABLE IF NOT EXISTS watchlist (
+                    user_id INTEGER NOT NULL,
+                    ticker  TEXT NOT NULL,
+                    added   TEXT DEFAULT (datetime('now')),
+                    PRIMARY KEY (user_id, ticker),
+                    FOREIGN KEY (user_id) REFERENCES users(id)
+                )
+            """)
+    except Exception:
+        pass
+    try:
+        with get_db() as conn:
+            conn.execute("""
                 CREATE TABLE IF NOT EXISTS indicator_ratings (
                     user_id       INTEGER NOT NULL,
                     indicator_key TEXT NOT NULL,
@@ -597,6 +610,56 @@ fill(sa, sb, color=senkou_a > senkou_b ? color.new(color.green, 80) : color.new(
 """
 
 
+def _pine_obv() -> str:
+    return """\
+//@version=5
+indicator("OBV — On-Balance Volume", overlay=false, max_bars_back=500)
+
+// ── Inputs ────────────────────────────────────────────────────────
+ma_len   = input.int(20, "Signal MA Length", minval=1)
+show_ma  = input.bool(true, "Show Signal MA")
+
+// ── OBV ───────────────────────────────────────────────────────────
+obv = ta.obv
+
+// ── Signal line ───────────────────────────────────────────────────
+sig = ta.ema(obv, ma_len)
+
+// ── Color — bullish if OBV above signal, bearish if below ─────────
+bull = obv >= sig
+obv_color = bull ? color.new(color.teal, 0) : color.new(color.red, 0)
+
+// ── Plots ─────────────────────────────────────────────────────────
+plot(obv,              "OBV",    color=obv_color, linewidth=2)
+plot(show_ma ? sig : na,"Signal",color=color.new(color.orange, 0), linewidth=1)
+
+// ── Fill between OBV and signal ───────────────────────────────────
+p1 = plot(obv, display=display.none)
+p2 = plot(show_ma ? sig : na, display=display.none)
+fill(p1, p2, color=bull ? color.new(color.teal, 85) : color.new(color.red, 85))
+
+// ── Divergence: OBV rising but price falling = bullish div ────────
+price_falling = close < close[10]
+obv_rising    = obv > obv[10]
+price_rising  = close > close[10]
+obv_falling   = obv < obv[10]
+
+bull_div = barstate.isconfirmed and price_falling and obv_rising
+bear_div = barstate.isconfirmed and price_rising  and obv_falling
+
+plotshape(bull_div, "Bull Div", shape.labelup,   location.belowbar, color.new(color.green, 20), text="D+", textcolor=color.white, size=size.tiny)
+plotshape(bear_div, "Bear Div", shape.labeldown, location.abovebar, color.new(color.red,   20), text="D-", textcolor=color.white, size=size.tiny)
+
+// ── Label ─────────────────────────────────────────────────────────
+if barstate.islast
+    trend = bull ? "Bullish flow" : "Bearish flow"
+    label.new(bar_index, obv, trend,
+              style=label.style_label_left, size=size.small,
+              color=color.new(bull ? color.teal : color.red, 30),
+              textcolor=color.white)
+"""
+
+
 def _pine_bb_squeeze() -> str:
     return """\
 //@version=5
@@ -787,6 +850,7 @@ INDICATORS = {
     "supertrend":("Supertrend",      _pine_supertrend,"Dynamic support/resistance line that flips direction. BUY/SELL labels on every trend change.",             "trend",      "Paste onto your price chart. Green line below price = uptrend. Red line above price = downtrend. BUY label appears when trend flips bullish, SELL when it flips bearish. Adjust the ATR multiplier in settings — higher = fewer signals, less noise."),
     "ichimoku":  ("Ichimoku Cloud",  _pine_ichimoku,  "Full Ichimoku system: Tenkan, Kijun, cloud (Senkou A/B), and Chikou span overlaid on price.",             "trend",      "Paste onto your price chart. Green cloud = bullish, red cloud = bearish. Price above the cloud = strong uptrend. Price inside the cloud = consolidation. Price below = downtrend. The Tenkan/Kijun cross is a short-term signal. Best used on daily or 4h charts."),
     "feargreed":     ("Fear & Greed",           _pine_feargreed,     "Composite 0–100 index built from RSI, trend strength, volatility, VIX, and 52-week momentum.",         "momentum", "Add as a separate panel on any chart. Reads 0–100: below 25 = Extreme Fear (often a buying opportunity), above 75 = Extreme Greed (market may be overheated). The label on the last bar shows the current reading and zone. Works on any ticker — uses VIX as one of its inputs."),
+    "obv":           ("OBV",               _pine_obv,       "On-Balance Volume — tracks whether volume is flowing into or out of a stock. Divergence labels flag when price and OBV disagree.", "volume", "Add as a separate panel. OBV rising = money flowing in (bullish). OBV falling = money flowing out (bearish). When OBV diverges from price — price falling but OBV rising (D+ label) = smart money buying the dip. Orange signal line helps confirm trend direction."),
     "bbsqueeze":     ("Bollinger Squeeze",      _pine_bb_squeeze,      "Detects when Bollinger Bands contract inside Keltner Channels — a coiling signal before a big move. Orange dot = in squeeze, blue = fired.", "volatility", "Add as a separate panel. Orange dots on the zero line = squeeze is active (market coiling). Blue dots = squeeze just fired (potential breakout). Green histogram = bullish momentum building, red = bearish. The bigger the histogram bars after the squeeze fires, the stronger the move."),
     "unusualopts":   ("Unusual Options Volume", _pine_unusual_options, "Flags bars where volume spikes above a multiple of the 20-bar average. Red = unusual, orange = elevated.", "volume",   "Add as a separate panel. Each bar shows today's volume as a multiple of the average (1.0 = normal). Red bars with a ⚡ label = unusual spike (default 2× threshold). Orange = elevated but not extreme. Adjust the threshold in TradingView settings. High spikes often precede big moves — watch for them before earnings or news."),
 }
@@ -1039,6 +1103,67 @@ def indicators_page():
         current_user=current_user())
 
 
+# ── Watchlist ─────────────────────────────────────────────────────────────────
+
+@app.route("/watchlist")
+@login_required
+def watchlist_page():
+    user_id = session["user_id"]
+    rows = get_db().execute(
+        "SELECT ticker FROM watchlist WHERE user_id=? ORDER BY added ASC", (user_id,)
+    ).fetchall()
+    tickers = [r["ticker"] for r in rows]
+    return render_template_string(WATCHLIST_HTML, tickers=tickers, current_user=current_user())
+
+
+@app.route("/api/watchlist/<ticker>", methods=["POST"])
+@login_required
+def toggle_watchlist(ticker):
+    ticker = ticker.upper()[:10]
+    user_id = session["user_id"]
+    with get_db() as conn:
+        existing = conn.execute(
+            "SELECT 1 FROM watchlist WHERE user_id=? AND ticker=?", (user_id, ticker)
+        ).fetchone()
+        if existing:
+            conn.execute("DELETE FROM watchlist WHERE user_id=? AND ticker=?", (user_id, ticker))
+            return jsonify({"watching": False})
+        else:
+            conn.execute("INSERT INTO watchlist (user_id, ticker) VALUES (?, ?)", (user_id, ticker))
+            return jsonify({"watching": True})
+
+
+@app.route("/api/watchlist/prices")
+@login_required
+def watchlist_prices():
+    import yfinance as yf
+    user_id = session["user_id"]
+    rows = get_db().execute(
+        "SELECT ticker FROM watchlist WHERE user_id=?", (user_id,)
+    ).fetchall()
+    tickers = [r["ticker"] for r in rows]
+    if not tickers:
+        return jsonify([])
+    results = []
+    for ticker in tickers:
+        try:
+            t = yf.Ticker(ticker)
+            info = t.fast_info
+            price = round(float(info.last_price), 2)
+            prev  = round(float(info.previous_close), 2)
+            chg   = round(price - prev, 2)
+            chg_pct = round((chg / prev) * 100, 2) if prev else 0
+            results.append({
+                "ticker":   ticker,
+                "price":    price,
+                "change":   chg,
+                "change_pct": chg_pct,
+            })
+        except Exception:
+            results.append({"ticker": ticker, "price": None, "change": None, "change_pct": None})
+    return jsonify(results)
+
+
 # ── Ratings API ──────────────────────────────────────────────────────────────
 
 def _get_ratings(keys: list[str], user_id: int | None) -> dict:
@@ -1136,8 +1261,16 @@ def _fetch_earnings() -> list[dict]:
 
 @app.route("/earnings")
 def earnings_page():
-    earnings = _fetch_earnings()
-    return render_template_string(EARNINGS_HTML, earnings=earnings, current_user=current_user())
+    return render_template_string(EARNINGS_HTML, current_user=current_user())
+
+
+@app.route("/api/earnings")
+def earnings_api():
+    try:
+        earnings = _fetch_earnings()
+        return jsonify({"earnings": earnings})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 # ── FAQ ───────────────────────────────────────────────────────────────────────
@@ -1257,6 +1390,11 @@ def generate():
 
 # ── Shared head meta ─────────────────────────────────────────────────────────
 
+_GA_ID = os.environ.get("GA_ID", "")
+_GA_SCRIPT = ("""
+  <script async src="https://www.googletagmanager.com/gtag/js?id=""" + _GA_ID + """"></script>
+  <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','""" + _GA_ID + """');</script>""") if _GA_ID else ""
+
 _META = """
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📈</text></svg>">
   <meta name="description" content="Free TradingView Pine Script indicators — VWAP, RSI, MACD, Supertrend, Bollinger Squeeze and more. Works on any free TradingView account.">
@@ -1266,7 +1404,7 @@ _META = """
   <meta property="og:type" content="website">
   <meta name="twitter:card" content="summary">
   <meta name="twitter:title" content="ChartEdge — Free TradingView Indicators">
-  <meta name="twitter:description" content="Free Pine Script indicators for TradingView. No paid plan required.">
+  <meta name="twitter:description" content="Free Pine Script indicators for TradingView. No paid plan required.">""" + _GA_SCRIPT + """
   <script>
     (function() {
       var t = localStorage.getItem('theme') || 'dark';
@@ -1334,6 +1472,7 @@ _NAV_LINKS = """
         <a href="/request">Request Indicator</a>
         <a href="/faq">FAQ</a>
         {% if current_user %}<a href="/favorites">♥ My Favorites</a>{% endif %}
+        {% if current_user %}<a href="/watchlist">📋 Watchlist</a>{% endif %}
       </div>
     </div>
     <div class="dropdown">
@@ -2415,6 +2554,8 @@ EARNINGS_HTML = """<!DOCTYPE html>
     .ticker { color: var(--accent); font-weight: bold; font-size: 0.95rem; }
     .empty { text-align: center; padding: 60px 24px; color: var(--muted); }
     .loading { text-align: center; padding: 60px 24px; color: var(--muted); font-size: 0.9rem; }
+    .spin { width: 36px; height: 36px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto; }
+    @keyframes spin { to { transform: rotate(360deg); } }
     .disclaimer { color: var(--muted); font-size: 0.78rem; margin-top: 20px; padding: 12px; background: var(--bg2); border-radius: 6px; border: 1px solid var(--border); }
     footer { text-align: center; padding: 32px 24px; color: var(--muted); font-size: 0.8rem; border-top: 1px solid var(--border); margin-top: 40px; }
   </style>
@@ -2429,35 +2570,39 @@ EARNINGS_HTML = """<!DOCTYPE html>
   <h1>Earnings <span>Calendar</span></h1>
   <p>Upcoming earnings for major tickers — next 30 days</p>
 </div>
-<div class="container">
-  {% if earnings %}
-  <table>
-    <thead>
-      <tr>
-        <th>Ticker</th>
-        <th>Date</th>
-        <th>EPS Estimate</th>
-        <th>Revenue Estimate</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for e in earnings %}
-      <tr>
-        <td><span class="ticker">{{ e.ticker }}</span></td>
-        <td>{{ e.date }}</td>
-        <td>{{ e.eps_est }}</td>
-        <td>{{ e.rev_est }}</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-  <div class="disclaimer">⚠ Earnings dates and estimates from Yahoo Finance. Dates may shift — always verify before trading.</div>
-  {% else %}
-  <div class="empty">No upcoming earnings found for tracked tickers in the next 30 days.</div>
-  {% endif %}
+<div class="container" id="earnings-container">
+  <div class="loading" id="spinner">
+    <div class="spin"></div>
+    <p style="margin-top:16px">Fetching earnings data…</p>
+  </div>
+  <div id="earnings-content" style="display:none"></div>
 </div>
 <footer>© 2026 ChartEdge · Not financial advice · <a href="/privacy" style="color:inherit">Privacy</a> · <a href="/terms" style="color:inherit">Terms</a></footer>
-<script>""" + _THEME_JS + """</script>
+<script>
+async function loadEarnings() {
+  try {
+    const res  = await fetch('/api/earnings');
+    const data = await res.json();
+    document.getElementById('spinner').style.display = 'none';
+    const el = document.getElementById('earnings-content');
+    el.style.display = 'block';
+    if (data.error || !data.earnings || data.earnings.length === 0) {
+      el.innerHTML = '<div class="empty">No upcoming earnings found for tracked tickers in the next 30 days.</div>';
+      return;
+    }
+    let html = '<table><thead><tr><th>Ticker</th><th>Date</th><th>EPS Estimate</th><th>Revenue Estimate</th></tr></thead><tbody>';
+    data.earnings.forEach(e => {
+      html += '<tr><td><span class="ticker">' + e.ticker + '</span></td><td>' + e.date + '</td><td>' + e.eps_est + '</td><td>' + e.rev_est + '</td></tr>';
+    });
+    html += '</tbody></table><div class="disclaimer">⚠ Earnings dates and estimates from Yahoo Finance. Dates may shift — always verify before trading.</div>';
+    el.innerHTML = html;
+  } catch(e) {
+    document.getElementById('spinner').innerHTML = '<p style="color:var(--red)">Failed to load earnings data.</p>';
+  }
+}
+loadEarnings();
+""" + _THEME_JS + """
+</script>
 </body>
 </html>"""
 
@@ -2722,6 +2867,148 @@ TERMS_HTML = """<!DOCTYPE html>
 </div>
 <footer>© 2026 ChartEdge · Not financial advice · <a href="/privacy" style="color:inherit">Privacy</a> · <a href="/terms" style="color:inherit">Terms</a></footer>
 <script>""" + _THEME_JS + """</script>
+</body>
+</html>"""
+
+
+# ── Watchlist HTML ───────────────────────────────────────────────────────────
+
+WATCHLIST_HTML = """<!DOCTYPE html>
+<html data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">""" + _META + """
+  <title>Watchlist — ChartEdge</title>
+  <style>
+    :root[data-theme="dark"]  { --bg:#0d1117; --bg2:#161b22; --bg3:#21262d; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --green:#3fb950; --red:#f85149; }
+    :root[data-theme="light"] { --bg:#ffffff; --bg2:#f6f8fa; --bg3:#eaeef2; --border:#d0d7de; --text:#1f2328; --muted:#636c76; --accent:#0969da; --green:#1a7f37; --red:#cf222e; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: monospace; background: var(--bg); color: var(--text); min-height: 100vh; transition: background 0.2s, color 0.2s; }
+    nav { background: var(--bg2); border-bottom: 1px solid var(--border); padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; }
+    .logo { color: var(--accent); font-size: 1.1rem; font-weight: bold; text-decoration: none; }
+    """ + _NAV_CSS + """
+    .hero { text-align: center; padding: 40px 24px 28px; border-bottom: 1px solid var(--border); }
+    .hero h1 { font-size: 1.6rem; margin-bottom: 8px; }
+    .hero h1 span { color: var(--accent); }
+    .hero p { color: var(--muted); font-size: 0.9rem; }
+    .container { max-width: 700px; margin: 0 auto; padding: 28px 24px; }
+    .add-row { display: flex; gap: 10px; margin-bottom: 28px; }
+    .add-row input {
+      flex: 1; background: var(--bg2); color: var(--text); border: 1px solid var(--border);
+      padding: 9px 14px; border-radius: 6px; font-family: monospace; font-size: 0.9rem; text-transform: uppercase;
+    }
+    .add-row input:focus { outline: none; border-color: var(--accent); }
+    .btn-add { background: var(--accent); color: #fff; border: none; padding: 9px 20px; border-radius: 6px; font-family: monospace; font-size: 0.9rem; cursor: pointer; font-weight: bold; }
+    .btn-add:hover { opacity: 0.88; }
+    .ticker-grid { display: flex; flex-direction: column; gap: 10px; }
+    .ticker-card {
+      background: var(--bg2); border: 1px solid var(--border); border-radius: 8px;
+      padding: 14px 18px; display: flex; align-items: center; justify-content: space-between;
+    }
+    .ticker-left { display: flex; flex-direction: column; gap: 4px; }
+    .ticker-sym { font-size: 1.1rem; font-weight: bold; color: var(--accent); }
+    .ticker-price { font-size: 1.2rem; color: var(--text); }
+    .ticker-chg { font-size: 0.85rem; }
+    .up   { color: var(--green); }
+    .down { color: var(--red); }
+    .btn-remove { background: none; border: 1px solid var(--border); color: var(--muted); padding: 5px 12px; border-radius: 6px; font-family: monospace; font-size: 0.8rem; cursor: pointer; }
+    .btn-remove:hover { border-color: var(--red); color: var(--red); }
+    .empty { text-align: center; padding: 60px 24px; color: var(--muted); }
+    .spin { width: 28px; height: 28px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; display: inline-block; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .last-updated { color: var(--muted); font-size: 0.75rem; margin-bottom: 14px; }
+    footer { text-align: center; padding: 32px 24px; color: var(--muted); font-size: 0.8rem; border-top: 1px solid var(--border); margin-top: 40px; }
+  </style>
+</head>
+<body>
+<nav>
+  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span></a>
+  <button class="hamburger" onclick="toggleMobileNav(event)">☰</button>
+  <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
+</nav>
+<div class="hero">
+  <h1>My <span>Watchlist</span></h1>
+  <p>Track your favorite tickers with live prices</p>
+</div>
+<div class="container">
+  <div class="add-row">
+    <input id="ticker-input" placeholder="Add ticker… (e.g. AAPL)" maxlength="10"
+           onkeydown="if(event.key==='Enter') addTicker()">
+    <button class="btn-add" onclick="addTicker()">+ Add</button>
+  </div>
+  <div class="last-updated" id="last-updated"></div>
+  <div class="ticker-grid" id="ticker-grid">
+    {% if tickers %}
+    {% for t in tickers %}
+    <div class="ticker-card" id="card-{{ t }}">
+      <div class="ticker-left">
+        <span class="ticker-sym">{{ t }}</span>
+        <span class="ticker-price" id="price-{{ t }}"><span class="spin"></span></span>
+        <span class="ticker-chg"  id="chg-{{ t }}"></span>
+      </div>
+      <button class="btn-remove" onclick="removeTicker('{{ t }}')">✕ Remove</button>
+    </div>
+    {% endfor %}
+    {% else %}
+    <div class="empty" id="empty-msg">No tickers yet — add one above.</div>
+    {% endif %}
+  </div>
+</div>
+<footer>© 2026 ChartEdge · Not financial advice · <a href="/privacy" style="color:inherit">Privacy</a> · <a href="/terms" style="color:inherit">Terms</a></footer>
+<script>
+async function loadPrices() {
+  try {
+    const res  = await fetch('/api/watchlist/prices');
+    const data = await res.json();
+    data.forEach(item => {
+      const priceEl = document.getElementById('price-' + item.ticker);
+      const chgEl   = document.getElementById('chg-'   + item.ticker);
+      if (!priceEl) return;
+      if (item.price === null) {
+        priceEl.textContent = '—';
+        return;
+      }
+      priceEl.textContent = '$' + item.price.toFixed(2);
+      const sign = item.change >= 0 ? '+' : '';
+      chgEl.textContent = sign + item.change.toFixed(2) + ' (' + sign + item.change_pct.toFixed(2) + '%)';
+      chgEl.className = 'ticker-chg ' + (item.change >= 0 ? 'up' : 'down');
+    });
+    document.getElementById('last-updated').textContent =
+      'Updated ' + new Date().toLocaleTimeString();
+  } catch(e) {}
+}
+
+async function addTicker() {
+  const input  = document.getElementById('ticker-input');
+  const ticker = input.value.trim().toUpperCase();
+  if (!ticker) return;
+  const res  = await fetch('/api/watchlist/' + ticker, {method: 'POST'});
+  const data = await res.json();
+  if (data.watching) {
+    input.value = '';
+    document.getElementById('empty-msg') && document.getElementById('empty-msg').remove();
+    const grid = document.getElementById('ticker-grid');
+    const card = document.createElement('div');
+    card.className = 'ticker-card';
+    card.id = 'card-' + ticker;
+    card.innerHTML = '<div class="ticker-left"><span class="ticker-sym">' + ticker + '</span><span class="ticker-price" id="price-' + ticker + '"><span class="spin"></span></span><span class="ticker-chg" id="chg-' + ticker + '"></span></div><button class="btn-remove" onclick="removeTicker(\'' + ticker + '\')">✕ Remove</button>';
+    grid.appendChild(card);
+    loadPrices();
+  }
+}
+
+async function removeTicker(ticker) {
+  await fetch('/api/watchlist/' + ticker, {method: 'POST'});
+  const card = document.getElementById('card-' + ticker);
+  if (card) card.remove();
+  if (!document.querySelector('.ticker-card')) {
+    document.getElementById('ticker-grid').innerHTML = '<div class="empty" id="empty-msg">No tickers yet — add one above.</div>';
+  }
+}
+
+{% if tickers %}loadPrices();{% endif %}
+""" + _THEME_JS + """
+</script>
 </body>
 </html>"""
 
