@@ -345,6 +345,50 @@ bgcolor(is_high ? color.new(color.red, 90) : na, title="High ATR")
 hline(0, color=color.new(color.gray, 80))
 """
 
+def _pine_ema() -> str:
+    return """\
+//@version=5
+indicator("EMA Ribbon", overlay=true, max_bars_back=500)
+
+// ── Inputs ────────────────────────────────────────────────────────
+show_8   = input.bool(true,  "EMA 8")
+show_21  = input.bool(true,  "EMA 21")
+show_50  = input.bool(true,  "EMA 50")
+show_100 = input.bool(false, "EMA 100")
+show_200 = input.bool(true,  "EMA 200")
+
+// ── EMAs ──────────────────────────────────────────────────────────
+ema8   = ta.ema(close, 8)
+ema21  = ta.ema(close, 21)
+ema50  = ta.ema(close, 50)
+ema100 = ta.ema(close, 100)
+ema200 = ta.ema(close, 200)
+
+// ── Plots ─────────────────────────────────────────────────────────
+plot(show_8   ? ema8   : na, "EMA 8",   color=color.new(color.yellow, 0),  linewidth=1)
+plot(show_21  ? ema21  : na, "EMA 21",  color=color.new(color.orange, 0),  linewidth=1)
+plot(show_50  ? ema50  : na, "EMA 50",  color=color.new(color.aqua,   0),  linewidth=2)
+plot(show_100 ? ema100 : na, "EMA 100", color=color.new(color.purple, 0),  linewidth=1)
+plot(show_200 ? ema200 : na, "EMA 200", color=color.new(color.red,    0),  linewidth=2)
+
+// ── Trend fill between EMA 50 and 200 ────────────────────────────
+bull = ema50 > ema200
+fill_col = bull ? color.new(color.green, 88) : color.new(color.red, 88)
+p50  = plot(show_50  ? ema50  : na, display=display.none)
+p200 = plot(show_200 ? ema200 : na, display=display.none)
+fill(p50, p200, color=fill_col, title="Trend Fill")
+
+// ── Label on last bar ─────────────────────────────────────────────
+if barstate.islast
+    trend = bull ? "Bullish" : "Bearish"
+    label.new(bar_index, ema50,
+              trend + " — 50/200",
+              style=label.style_label_left, size=size.small,
+              color=color.new(bull ? color.green : color.red, 30),
+              textcolor=color.white)
+"""
+
+
 def _pine_relvol() -> str:
     return """\
 //@version=5
@@ -515,6 +559,7 @@ INDICATORS = {
     "vwap":      ("VWAP + Bands",    _pine_vwap,      "VWAP with configurable ±1, ±2, ±3 standard deviation bands. Overlaid directly on the price chart.",    "volume",     "Select which bands to show, then copy and paste onto your chart. Price above VWAP = buyers in control. Price near the ±2 red band = overextended, often snaps back. Use on intraday charts (1m–1h) — VWAP resets each day."),
     "vwap_only": ("VWAP Only",       lambda: "//@version=5\nindicator(\"VWAP\", overlay=true, max_bars_back=500)\n\nplot(ta.vwap(hlc3), \"VWAP\", color=color.new(color.blue, 0), linewidth=2)\n", "Just the VWAP line, no bands. Clean and simple, overlaid on the price chart.", "volume", "Paste onto any intraday chart. A single blue line shows the volume-weighted average price for the session. Price above = bullish bias, price below = bearish bias. Resets at market open each day."),
     "atr":       ("ATR",             _pine_atr,       "Average True Range (14). Shows how much the asset moves per bar. Red = elevated volatility.",           "volatility", "Add to any chart as a separate panel. The red line shows raw volatility per bar. Toggle the orange average line to see whether current volatility is above or below normal. High ATR = bigger stops needed. Low ATR = tight, choppy market."),
+    "ema":       ("EMA Ribbon",       _pine_ema,       "8, 21, 50, 100, and 200 EMAs overlaid on the price chart. Green/red fill between the 50 and 200 shows trend direction.", "trend", "Paste onto your price chart. Toggle which EMAs you want in TradingView settings. Green fill between the 50 and 200 EMA = bullish trend, red = bearish. The 8/21 EMAs react fast and are good for short-term entries. The 50/200 are slower and better for trend confirmation. A label on the last bar shows the current trend."),
     "relvol":    ("Relative Volume", _pine_relvol,    "Today's volume vs average. RVOL > 2 = unusually active. Threshold is adjustable in TradingView.",      "volume",     "Add as a separate panel. RVOL of 1.0 = exactly average. Teal bars = above average. Red bars = unusually high (default threshold: 2×). High RVOL on a breakout confirms the move. High RVOL on a reversal signals a strong change. Low RVOL moves are often noise."),
     "macross":   ("MA Cross",        _pine_ma_cross,  "50/200 MA crossover. Labels Golden Cross (bullish) and Death Cross (bearish) directly on the chart.",  "trend",      "Paste onto your price chart. Green background = uptrend (50 above 200). Red background = downtrend. A 'Golden' label appears when the 50 crosses above the 200 — historically a strong bullish signal. 'Death' appears on the cross below. Best used on daily charts."),
     "feargreed":     ("Fear & Greed",           _pine_feargreed,     "Composite 0–100 index built from RSI, trend strength, volatility, VIX, and 52-week momentum.",         "momentum", "Add as a separate panel on any chart. Reads 0–100: below 25 = Extreme Fear (often a buying opportunity), above 75 = Extreme Greed (market may be overheated). The label on the last bar shows the current reading and zone. Works on any ticker — uses VIX as one of its inputs."),
