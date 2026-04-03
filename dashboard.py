@@ -583,7 +583,8 @@ def logout():
 def debug_google():
     cid = os.environ.get("GOOGLE_CLIENT_ID", "NOT SET")
     csec = os.environ.get("GOOGLE_CLIENT_SECRET", "NOT SET")
-    return jsonify({"client_id": cid, "secret_set": csec != "NOT SET", "secret_prefix": csec[:8] if csec != "NOT SET" else "NOT SET"})
+    redirect_uri = url_for("google_callback", _external=True)
+    return jsonify({"client_id": cid, "secret_set": csec != "NOT SET", "secret_prefix": csec[:8] if csec != "NOT SET" else "NOT SET", "redirect_uri": redirect_uri})
 
 
 @app.route("/login/google")
