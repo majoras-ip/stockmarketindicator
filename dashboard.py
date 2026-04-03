@@ -1997,35 +1997,52 @@ setInterval(loadNews, 5 * 60 * 1000);
 # ── Dashboard HTML ────────────────────────────────────────────────────────────
 
 DASHBOARD_HTML = """<!DOCTYPE html>
-<html>
+<html data-theme="dark">
 <head>
-  <title>Volatility Forecast Dashboard</title>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Live Chart — VolForecast</title>
   <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
   <style>
+    :root[data-theme="dark"]  { --bg:#0d1117; --bg2:#161b22; --bg3:#21262d; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --green:#3fb950; --red:#f85149; }
+    :root[data-theme="light"] { --bg:#ffffff; --bg2:#f6f8fa; --bg3:#eaeef2; --border:#d0d7de; --text:#1f2328; --muted:#636c76; --accent:#0969da; --green:#1a7f37; --red:#cf222e; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: monospace; background: #0d1117; color: #e6edf3; padding: 20px; }
-    h1 { color: #58a6ff; margin-bottom: 16px; font-size: 1.4rem; }
+    body { font-family: monospace; background: var(--bg); color: var(--text); min-height: 100vh; transition: background 0.2s, color 0.2s; }
+    nav { background: var(--bg2); border-bottom: 1px solid var(--border); padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; }
+    .logo { color: var(--accent); font-size: 1.1rem; font-weight: bold; text-decoration: none; }
+    """ + _NAV_CSS + """
+    .page { padding: 28px 24px; max-width: 1100px; margin: 0 auto; }
+    h1 { color: var(--accent); margin-bottom: 16px; font-size: 1.4rem; }
     .controls { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; align-items: center; }
     input, select, button {
-      background: #161b22; color: #e6edf3; border: 1px solid #30363d;
+      background: var(--bg2); color: var(--text); border: 1px solid var(--border);
       padding: 6px 12px; border-radius: 6px; font-family: monospace; font-size: 0.9rem;
     }
-    button { background: #21262d; cursor: pointer; }
-    button:hover { background: #30363d; }
+    button { background: var(--bg3); cursor: pointer; }
+    button:hover { background: var(--border); }
     #chart { width: 100%; height: 500px; }
     .info-bar { display: flex; gap: 20px; margin-bottom: 12px; flex-wrap: wrap; }
     .badge {
       padding: 4px 12px; border-radius: 20px; font-size: 0.85rem;
-      background: #21262d; border: 1px solid #30363d;
+      background: var(--bg3); border: 1px solid var(--border);
     }
-    .badge.up   { border-color: #3fb950; color: #3fb950; }
-    .badge.down { border-color: #f85149; color: #f85149; }
-    .badge.vol  { border-color: #58a6ff; color: #58a6ff; }
-    #status { color: #8b949e; font-size: 0.8rem; margin-top: 8px; }
+    .badge.up   { border-color: var(--green); color: var(--green); }
+    .badge.down { border-color: var(--red);   color: var(--red); }
+    .badge.vol  { border-color: var(--accent); color: var(--accent); }
+    #status { color: var(--muted); font-size: 0.8rem; margin-top: 8px; }
   </style>
 </head>
 <body>
-  <h1>Volatility Forecast Dashboard</h1>
+
+<nav>
+  <a class="logo" href="/">VolForecast</a>
+  <div class="nav-links">
+""" + _NAV_LINKS + """
+  </div>
+</nav>
+
+<div class="page">
+  <h1>Live Chart</h1>
 
   <div class="controls">
     <input id="ticker" value="SPY" style="width:80px; text-transform:uppercase">
@@ -2174,6 +2191,7 @@ function drawChart(d) {
 refresh();
 """ + _THEME_JS + """
 </script>
+</div>
 </body>
 </html>"""
 
