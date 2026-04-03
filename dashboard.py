@@ -2061,6 +2061,8 @@ NEWS_FEEDS = [
     ("Reuters",        "https://feeds.reuters.com/reuters/businessNews"),
     ("MarketWatch",    "https://feeds.marketwatch.com/marketwatch/topstories/"),
     ("Seeking Alpha",  "https://seekingalpha.com/market_currents.xml"),
+    ("CNBC",           "https://www.cnbc.com/id/100003114/device/rss/rss.html"),
+    ("Benzinga",       "https://www.benzinga.com/feed"),
 ]
 
 def _fetch_news(max_per_feed: int = 8) -> list[dict]:
