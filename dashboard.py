@@ -2347,7 +2347,7 @@ FAQ_HTML = """<!DOCTYPE html>
   </div>
   <div class="faq-item">
     <button class="faq-q" onclick="toggleFaq(this)">How do I add an indicator to TradingView? <span class="arrow">▶</span></button>
-    <div class="faq-a">1. Go to the Indicators page and pick an indicator.<br>2. Click <strong>Copy</strong> to copy the Pine Script code.<br>3. In TradingView, open the Pine Script editor (bottom of the chart).<br>4. Paste the code and click <strong>Add to chart</strong>.</div>
+    <div class="faq-a">1. Go to the Indicators page and pick an indicator.<br>2. Click <strong>Copy</strong> to copy the Pine Script code.<br>3. In TradingView, open the Pine Script editor (bottom of the chart).<br>4. Paste the code and click <strong>Add to chart</strong>.<br><br><strong>OR</strong><br><br>1. Go to the Indicators page and pick an indicator.<br>2. Click <strong>Source code</strong> on the indicator in TradingView.<br>3. Create a working copy and delete the original code.<br>4. Paste the code you want to use and click <strong>Add to chart</strong>.</div>
   </div>
   <div class="faq-item">
     <button class="faq-q" onclick="toggleFaq(this)">Do I need a paid TradingView account? <span class="arrow">▶</span></button>
