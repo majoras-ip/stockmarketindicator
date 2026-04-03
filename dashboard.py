@@ -250,8 +250,9 @@ def _pine_vwap(band1: bool = True, band2: bool = True, band3: bool = False) -> s
         ]
     return '\n'.join(lines) + '\n'
 
-def _pine_atr() -> str:
-    return """\
+def _pine_atr(show_avg: bool = False) -> str:
+    avg_line = 'plot(atr_avg, "20-bar Avg", color=color.new(color.orange, 0), linewidth=1)' if show_avg else ''
+    return f"""\
 //@version=5
 indicator("ATR", overlay=false, max_bars_back=500)
 
@@ -259,8 +260,8 @@ atr14   = ta.atr(14)
 atr_avg = ta.sma(atr14, 20)
 is_high = atr14 > atr_avg * 1.5
 
-plot(atr14,   "ATR(14)",    color=color.new(color.red, 0), linewidth=2)
-plot(atr_avg, "20-bar Avg", color=color.new(color.orange, 0), linewidth=1)
+plot(atr14, "ATR(14)", color=color.new(color.red, 0), linewidth=2)
+{avg_line}
 
 bgcolor(is_high ? color.new(color.red, 90) : na, title="High ATR")
 hline(0, color=color.new(color.gray, 80))
@@ -340,10 +341,15 @@ def indicators_page():
     band2 = request.args.get("band2", "on") == "on"
     band3 = request.args.get("band3", "off") == "on"
 
+    # ATR options
+    atr_avg = request.args.get("atr_avg", "off") == "on"
+
     if kind and kind in INDICATORS:
         name, fn, description = INDICATORS[kind]
         if kind == "vwap":
             pine_code = fn(band1=band1, band2=band2, band3=band3)
+        elif kind == "atr":
+            pine_code = fn(show_avg=atr_avg)
         else:
             pine_code = fn()
 
@@ -353,7 +359,8 @@ def indicators_page():
         pine_code=pine_code,
         name=name,
         description=description,
-        band1=band1, band2=band2, band3=band3)
+        band1=band1, band2=band2, band3=band3,
+        atr_avg=atr_avg)
 
 
 # ── Pine Script generator endpoint ───────────────────────────────────────────
@@ -554,6 +561,19 @@ INDICATORS_HTML = """<!DOCTYPE html>
     {% endfor %}
   </div>
 
+  {% if kind == 'atr' %}
+  <div class="card" style="margin-bottom:0; border-bottom-left-radius:0; border-bottom-right-radius:0; border-bottom:none;">
+    <form method="GET" action="/indicators" style="display:flex; gap:20px; align-items:center; flex-wrap:wrap;">
+      <input type="hidden" name="kind" value="atr">
+      <span style="color:#8b949e; font-size:0.85rem;">Options:</span>
+      <label style="color:#f0883e; font-size:0.85rem; cursor:pointer;">
+        <input type="checkbox" name="atr_avg" value="on" {% if atr_avg %}checked{% endif %} onchange="this.form.submit()">
+        Show 20-bar avg (orange)
+      </label>
+    </form>
+  </div>
+  {% endif %}
+
   {% if kind == 'vwap' %}
   <div class="card" style="margin-bottom:0; border-bottom-left-radius:0; border-bottom-right-radius:0; border-bottom:none;">
     <form method="GET" action="/indicators" style="display:flex; gap:20px; align-items:center; flex-wrap:wrap;">
@@ -576,7 +596,7 @@ INDICATORS_HTML = """<!DOCTYPE html>
   {% endif %}
 
   {% if pine_code %}
-  <div class="card" style="{{ 'border-top-left-radius:0; border-top-right-radius:0;' if kind == 'vwap' else '' }}">
+  <div class="card" style="{{ 'border-top-left-radius:0; border-top-right-radius:0;' if kind in ['vwap', 'atr'] else '' }}">
     <div class="desc-box">{{ description }}</div>
     <div class="pine-label">
       <span>Pine Script v5 — works on any chart, no ticker needed</span>
