@@ -76,7 +76,20 @@ def _migrate_db():
         with get_db() as conn:
             conn.execute("ALTER TABLE users ADD COLUMN google_id TEXT")
     except Exception:
-        pass  # column already exists
+        pass
+    try:
+        with get_db() as conn:
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS indicator_ratings (
+                    user_id       INTEGER NOT NULL,
+                    indicator_key TEXT NOT NULL,
+                    vote          INTEGER NOT NULL,
+                    PRIMARY KEY (user_id, indicator_key),
+                    FOREIGN KEY (user_id) REFERENCES users(id)
+                )
+            """)
+    except Exception:
+        pass
 
 init_db()
 _migrate_db()
@@ -894,6 +907,10 @@ def indicators_page():
         ).fetchone()
         is_favorited = bool(row)
 
+    # Ratings
+    user_id = session.get("user_id")
+    ratings = _get_ratings(list(filtered.keys()), user_id)
+
     return render_template_string(INDICATORS_HTML,
         kind=kind, search=search, category=category,
         indicators=filtered, all_indicators=INDICATORS,
@@ -903,7 +920,116 @@ def indicators_page():
         band1=band1, band2=band2, band3=band3,
         atr_avg=atr_avg,
         is_favorited=is_favorited,
+        ratings=ratings,
         current_user=current_user())
+
+
+# ── Ratings API ──────────────────────────────────────────────────────────────
+
+def _get_ratings(keys: list[str], user_id: int | None) -> dict:
+    """Return {key: {"ups": N, "downs": N, "user_vote": 0/1/-1}} for each key."""
+    db = get_db()
+    result = {k: {"ups": 0, "downs": 0, "user_vote": 0} for k in keys}
+    rows = db.execute(
+        "SELECT indicator_key, vote FROM indicator_ratings WHERE indicator_key IN ({})".format(
+            ",".join("?" * len(keys))), keys
+    ).fetchall()
+    for r in rows:
+        if r["vote"] == 1:
+            result[r["indicator_key"]]["ups"] += 1
+        else:
+            result[r["indicator_key"]]["downs"] += 1
+    if user_id:
+        urows = db.execute(
+            "SELECT indicator_key, vote FROM indicator_ratings WHERE user_id=? AND indicator_key IN ({})".format(
+                ",".join("?" * len(keys))), [user_id] + keys
+        ).fetchall()
+        for r in urows:
+            result[r["indicator_key"]]["user_vote"] = r["vote"]
+    return result
+
+
+@app.route("/api/rate/<key>/<vote>", methods=["POST"])
+@login_required
+def rate_indicator(key, vote):
+    if key not in INDICATORS or vote not in ("up", "down"):
+        return jsonify({"error": "invalid"}), 400
+    user_id  = session["user_id"]
+    vote_val = 1 if vote == "up" else -1
+    with get_db() as conn:
+        existing = conn.execute(
+            "SELECT vote FROM indicator_ratings WHERE user_id=? AND indicator_key=?",
+            (user_id, key)
+        ).fetchone()
+        if existing and existing["vote"] == vote_val:
+            conn.execute("DELETE FROM indicator_ratings WHERE user_id=? AND indicator_key=?", (user_id, key))
+            user_vote = 0
+        else:
+            conn.execute(
+                "INSERT OR REPLACE INTO indicator_ratings (user_id, indicator_key, vote) VALUES (?, ?, ?)",
+                (user_id, key, vote_val)
+            )
+            user_vote = vote_val
+    ratings = _get_ratings([key], user_id)
+    return jsonify({**ratings[key], "user_vote": user_vote})
+
+
+# ── Earnings Calendar ─────────────────────────────────────────────────────────
+
+EARNINGS_TICKERS = [
+    "AAPL","MSFT","NVDA","AMZN","GOOGL","META","TSLA","NFLX",
+    "AMD","INTC","JPM","BAC","GS","MS","V","MA","WMT","COST",
+    "SPY","QQQ","DIS","UBER","COIN","PLTR","SNAP","ROKU",
+]
+
+def _fetch_earnings() -> list[dict]:
+    import yfinance as yf
+    from datetime import date, timedelta
+    results = []
+    today = date.today()
+    cutoff = today + timedelta(days=30)
+    for ticker in EARNINGS_TICKERS:
+        try:
+            t = yf.Ticker(ticker)
+            cal = t.calendar
+            if cal is None:
+                continue
+            # calendar is a dict with 'Earnings Date' key (list of timestamps)
+            dates = cal.get("Earnings Date", [])
+            if not dates:
+                continue
+            earn_date = dates[0]
+            if hasattr(earn_date, "date"):
+                earn_date = earn_date.date()
+            if today <= earn_date <= cutoff:
+                eps_est = cal.get("EPS Estimate", [None])
+                eps_est = eps_est[0] if isinstance(eps_est, list) and eps_est else eps_est
+                rev_est = cal.get("Revenue Estimate", [None])
+                rev_est = rev_est[0] if isinstance(rev_est, list) and rev_est else rev_est
+                results.append({
+                    "ticker":   ticker,
+                    "date":     earn_date.strftime("%b %d, %Y"),
+                    "date_ord": earn_date.toordinal(),
+                    "eps_est":  f"${eps_est:.2f}" if eps_est and eps_est == eps_est else "—",
+                    "rev_est":  f"${rev_est/1e9:.1f}B" if rev_est and rev_est == rev_est else "—",
+                })
+        except Exception:
+            continue
+    results.sort(key=lambda x: x["date_ord"])
+    return results
+
+
+@app.route("/earnings")
+def earnings_page():
+    earnings = _fetch_earnings()
+    return render_template_string(EARNINGS_HTML, earnings=earnings, current_user=current_user())
+
+
+# ── FAQ ───────────────────────────────────────────────────────────────────────
+
+@app.route("/faq")
+def faq_page():
+    return render_template_string(FAQ_HTML, current_user=current_user())
 
 
 # ── Pine Script generator endpoint ───────────────────────────────────────────
@@ -1042,6 +1168,7 @@ _NAV_LINKS = """
         <a href="/indicators">Indicators</a>
         <a href="/generate">Forecast</a>
         <a href="/dashboard">Live Chart</a>
+        <a href="/earnings">Earnings Calendar</a>
         <a href="/news">News</a>
       </div>
     </div>
@@ -1049,6 +1176,7 @@ _NAV_LINKS = """
       <button class="drop-btn" onclick="toggleDrop(this, event)">Community ▾</button>
       <div class="drop-menu">
         <a href="/request">Request Indicator</a>
+        <a href="/faq">FAQ</a>
         {% if current_user %}<a href="/favorites">♥ My Favorites</a>{% endif %}
       </div>
     </div>
@@ -1471,6 +1599,17 @@ INDICATORS_HTML = """<!DOCTYPE html>
     .how-to-body { color: var(--muted); font-size: 0.85rem; line-height: 1.6; display: none; }
     .how-to-body.open { display: block; }
 
+    .card-rating { display: flex; gap: 8px; margin-top: 8px; }
+    .rating-up   { color: var(--green); font-size: 0.75rem; }
+    .rating-down { color: var(--red);   font-size: 0.75rem; }
+    .btn-rate {
+      background: var(--bg3); color: var(--muted); border: 1px solid var(--border);
+      padding: 5px 12px; border-radius: 6px; font-family: monospace;
+      font-size: 0.85rem; cursor: pointer;
+    }
+    .btn-rate:hover { border-color: var(--accent); color: var(--text); }
+    .rate-active-up   { border-color: var(--green) !important; color: var(--green) !important; }
+    .rate-active-down { border-color: var(--red)   !important; color: var(--red)   !important; }
     footer { text-align: center; padding: 32px 24px; color: var(--muted); font-size: 0.8rem; border-top: 1px solid var(--border); margin-top: 40px; }
   </style>
 </head>
@@ -1505,6 +1644,10 @@ INDICATORS_HTML = """<!DOCTYPE html>
       <div class="cat-tag">{{ icat }}</div>
       <div class="ind-name">{{ iname }}</div>
       <div class="ind-desc">{{ idesc[:65] }}…</div>
+      <div class="card-rating">
+        <span class="rating-up">▲ {{ ratings[key].ups }}</span>
+        <span class="rating-down">▼ {{ ratings[key].downs }}</span>
+      </div>
     </a>
     {% endfor %}
     {% if not indicators %}
@@ -1546,17 +1689,29 @@ INDICATORS_HTML = """<!DOCTYPE html>
   </div>
   {% endif %}
 
-  <!-- Shareable link + favorite -->
+  <!-- Shareable link + favorite + ratings -->
   {% if kind %}
-  <div style="display:flex; gap:10px; margin-bottom:12px; align-items:center;">
+  <div style="display:flex; gap:10px; margin-bottom:12px; align-items:center; flex-wrap:wrap;">
     <button class="btn-copy" onclick="copyLink(this)">🔗 Copy link</button>
     {% if current_user %}
     <button class="btn-copy {{ 'copied' if is_favorited else '' }}"
             id="heart-btn" onclick="toggleFavorite('{{ kind }}')">
       {{ '♥ Saved' if is_favorited else '♡ Save' }}
     </button>
+    {% set r = ratings.get(kind, {}) %}
+    <button class="btn-rate {{ 'rate-active-up' if r.get('user_vote') == 1 else '' }}"
+            id="rate-up" onclick="rateIndicator('{{ kind }}', 'up')">
+      ▲ <span id="ups-count">{{ r.get('ups', 0) }}</span>
+    </button>
+    <button class="btn-rate {{ 'rate-active-down' if r.get('user_vote') == -1 else '' }}"
+            id="rate-down" onclick="rateIndicator('{{ kind }}', 'down')">
+      ▼ <span id="downs-count">{{ r.get('downs', 0) }}</span>
+    </button>
     {% else %}
     <a href="/login" class="btn-copy" style="text-decoration:none;">♡ Save (login)</a>
+    {% set r = ratings.get(kind, {}) %}
+    <span class="btn-rate">▲ {{ r.get('ups', 0) }}</span>
+    <span class="btn-rate">▼ {{ r.get('downs', 0) }}</span>
     {% endif %}
   </div>
   {% endif %}
@@ -1601,6 +1756,14 @@ async function toggleFavorite(key) {
   const btn  = document.getElementById('heart-btn');
   btn.textContent = data.favorited ? '♥ Saved' : '♡ Save';
   btn.classList.toggle('copied', data.favorited);
+}
+async function rateIndicator(key, vote) {
+  const res  = await fetch('/api/rate/' + key + '/' + vote, {method: 'POST'});
+  const data = await res.json();
+  document.getElementById('ups-count').textContent   = data.ups;
+  document.getElementById('downs-count').textContent = data.downs;
+  document.getElementById('rate-up').className   = 'btn-rate' + (data.user_vote === 1  ? ' rate-active-up'   : '');
+  document.getElementById('rate-down').className = 'btn-rate' + (data.user_vote === -1 ? ' rate-active-down' : '');
 }
 function toggleHowTo() {
   const body = document.getElementById('howto-body');
@@ -2048,6 +2211,200 @@ GENERATOR_HTML = """<!DOCTYPE html>
     btn.classList.add('copied');
     setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
   }
+""" + _THEME_JS + """
+</script>
+</body>
+</html>"""
+
+
+# ── Earnings HTML ────────────────────────────────────────────────────────────
+
+EARNINGS_HTML = """<!DOCTYPE html>
+<html data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Earnings Calendar — ChartEdge</title>
+  <style>
+    :root[data-theme="dark"]  { --bg:#0d1117; --bg2:#161b22; --bg3:#21262d; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --green:#3fb950; --red:#f85149; }
+    :root[data-theme="light"] { --bg:#ffffff; --bg2:#f6f8fa; --bg3:#eaeef2; --border:#d0d7de; --text:#1f2328; --muted:#636c76; --accent:#0969da; --green:#1a7f37; --red:#cf222e; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: monospace; background: var(--bg); color: var(--text); min-height: 100vh; transition: background 0.2s, color 0.2s; }
+    nav { background: var(--bg2); border-bottom: 1px solid var(--border); padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; }
+    .logo { color: var(--accent); font-size: 1.1rem; font-weight: bold; text-decoration: none; }
+    """ + _NAV_CSS + """
+    .hero { text-align: center; padding: 40px 24px 28px; border-bottom: 1px solid var(--border); }
+    .hero h1 { font-size: 1.6rem; margin-bottom: 8px; }
+    .hero h1 span { color: var(--accent); }
+    .hero p { color: var(--muted); font-size: 0.9rem; }
+    .container { max-width: 900px; margin: 0 auto; padding: 28px 24px; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+    th { color: var(--muted); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; padding: 8px 14px; border-bottom: 1px solid var(--border); text-align: left; }
+    td { padding: 12px 14px; border-bottom: 1px solid var(--border); }
+    tr:hover td { background: var(--bg2); }
+    .ticker { color: var(--accent); font-weight: bold; font-size: 0.95rem; }
+    .empty { text-align: center; padding: 60px 24px; color: var(--muted); }
+    .loading { text-align: center; padding: 60px 24px; color: var(--muted); font-size: 0.9rem; }
+    .disclaimer { color: var(--muted); font-size: 0.78rem; margin-top: 20px; padding: 12px; background: var(--bg2); border-radius: 6px; border: 1px solid var(--border); }
+    footer { text-align: center; padding: 32px 24px; color: var(--muted); font-size: 0.8rem; border-top: 1px solid var(--border); margin-top: 40px; }
+  </style>
+</head>
+<body>
+<nav>
+  <a class="logo" href="/">ChartEdge</a>
+  <div class="nav-links">""" + _NAV_LINKS + """</div>
+</nav>
+<div class="hero">
+  <h1>Earnings <span>Calendar</span></h1>
+  <p>Upcoming earnings for major tickers — next 30 days</p>
+</div>
+<div class="container">
+  {% if earnings %}
+  <table>
+    <thead>
+      <tr>
+        <th>Ticker</th>
+        <th>Date</th>
+        <th>EPS Estimate</th>
+        <th>Revenue Estimate</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for e in earnings %}
+      <tr>
+        <td><span class="ticker">{{ e.ticker }}</span></td>
+        <td>{{ e.date }}</td>
+        <td>{{ e.eps_est }}</td>
+        <td>{{ e.rev_est }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <div class="disclaimer">⚠ Earnings dates and estimates from Yahoo Finance. Dates may shift — always verify before trading.</div>
+  {% else %}
+  <div class="empty">No upcoming earnings found for tracked tickers in the next 30 days.</div>
+  {% endif %}
+</div>
+<footer>ChartEdge — Not financial advice</footer>
+<script>""" + _THEME_JS + """</script>
+</body>
+</html>"""
+
+
+# ── FAQ HTML ──────────────────────────────────────────────────────────────────
+
+FAQ_HTML = """<!DOCTYPE html>
+<html data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FAQ — ChartEdge</title>
+  <style>
+    :root[data-theme="dark"]  { --bg:#0d1117; --bg2:#161b22; --bg3:#21262d; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --green:#3fb950; --red:#f85149; }
+    :root[data-theme="light"] { --bg:#ffffff; --bg2:#f6f8fa; --bg3:#eaeef2; --border:#d0d7de; --text:#1f2328; --muted:#636c76; --accent:#0969da; --green:#1a7f37; --red:#cf222e; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: monospace; background: var(--bg); color: var(--text); min-height: 100vh; transition: background 0.2s, color 0.2s; }
+    nav { background: var(--bg2); border-bottom: 1px solid var(--border); padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; }
+    .logo { color: var(--accent); font-size: 1.1rem; font-weight: bold; text-decoration: none; }
+    """ + _NAV_CSS + """
+    .hero { text-align: center; padding: 40px 24px 28px; border-bottom: 1px solid var(--border); }
+    .hero h1 { font-size: 1.6rem; margin-bottom: 8px; }
+    .hero h1 span { color: var(--accent); }
+    .hero p { color: var(--muted); font-size: 0.9rem; }
+    .container { max-width: 760px; margin: 0 auto; padding: 36px 24px; }
+    .faq-item { border-bottom: 1px solid var(--border); }
+    .faq-q {
+      width: 100%; text-align: left; background: none; border: none;
+      color: var(--text); font-family: monospace; font-size: 0.95rem;
+      padding: 18px 0; cursor: pointer; display: flex; justify-content: space-between; align-items: center;
+    }
+    .faq-q:hover { color: var(--accent); }
+    .faq-q .arrow { color: var(--muted); font-size: 0.8rem; transition: transform 0.2s; }
+    .faq-q.open .arrow { transform: rotate(90deg); }
+    .faq-a { color: var(--muted); font-size: 0.88rem; line-height: 1.7; padding-bottom: 18px; display: none; }
+    .faq-a.open { display: block; }
+    .faq-a a { color: var(--accent); text-decoration: none; }
+    .section-title { color: var(--muted); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.1em; margin: 32px 0 8px; }
+    footer { text-align: center; padding: 32px 24px; color: var(--muted); font-size: 0.8rem; border-top: 1px solid var(--border); margin-top: 40px; }
+  </style>
+</head>
+<body>
+<nav>
+  <a class="logo" href="/">ChartEdge</a>
+  <div class="nav-links">""" + _NAV_LINKS + """</div>
+</nav>
+<div class="hero">
+  <h1>Frequently Asked <span>Questions</span></h1>
+  <p>Everything you need to know about ChartEdge and our indicators</p>
+</div>
+<div class="container">
+
+  <div class="section-title">Getting Started</div>
+
+  <div class="faq-item">
+    <button class="faq-q" onclick="toggleFaq(this)">What is ChartEdge? <span class="arrow">▶</span></button>
+    <div class="faq-a">ChartEdge is a free platform that provides Pine Script indicators for TradingView. All indicators work on free TradingView accounts — no paid plan required.</div>
+  </div>
+  <div class="faq-item">
+    <button class="faq-q" onclick="toggleFaq(this)">How do I add an indicator to TradingView? <span class="arrow">▶</span></button>
+    <div class="faq-a">1. Go to the Indicators page and pick an indicator.<br>2. Click <strong>Copy</strong> to copy the Pine Script code.<br>3. In TradingView, open the Pine Script editor (bottom of the chart).<br>4. Paste the code and click <strong>Add to chart</strong>.</div>
+  </div>
+  <div class="faq-item">
+    <button class="faq-q" onclick="toggleFaq(this)">Do I need a paid TradingView account? <span class="arrow">▶</span></button>
+    <div class="faq-a">No. All indicators on ChartEdge are written in Pine Script v5 and work on free TradingView accounts.</div>
+  </div>
+
+  <div class="section-title">Indicators</div>
+
+  <div class="faq-item">
+    <button class="faq-q" onclick="toggleFaq(this)">What is VWAP and when should I use it? <span class="arrow">▶</span></button>
+    <div class="faq-a">VWAP (Volume Weighted Average Price) is the average price weighted by volume. It resets each day at market open. Traders use it as a benchmark — price above VWAP = buyers in control, price below = sellers. Best used on intraday charts (1m–1h).</div>
+  </div>
+  <div class="faq-item">
+    <button class="faq-q" onclick="toggleFaq(this)">What does the Fear & Greed indicator measure? <span class="arrow">▶</span></button>
+    <div class="faq-a">It combines five factors — RSI, price vs 125-day MA, Bollinger Band width, VIX, and 52-week momentum — into a single 0–100 score. Below 25 = Extreme Fear (potential buying opportunity), above 75 = Extreme Greed (market may be overheated).</div>
+  </div>
+  <div class="faq-item">
+    <button class="faq-q" onclick="toggleFaq(this)">What is Unusual Options Volume? <span class="arrow">▶</span></button>
+    <div class="faq-a">It shows today's volume as a multiple of the recent average. A ⚡ spike (red bar) means volume is 2× or more above normal, which can signal institutional activity or an upcoming move. High spikes before earnings or news are especially significant.</div>
+  </div>
+  <div class="faq-item">
+    <button class="faq-q" onclick="toggleFaq(this)">What is the Supertrend indicator? <span class="arrow">▶</span></button>
+    <div class="faq-a">Supertrend is a trend-following indicator that uses ATR to draw a dynamic support/resistance line. When it flips from red to green, a BUY signal appears. When it flips from green to red, a SELL signal appears. It works on any timeframe but is most reliable on 1h+ charts.</div>
+  </div>
+
+  <div class="section-title">Account</div>
+
+  <div class="faq-item">
+    <button class="faq-q" onclick="toggleFaq(this)">Do I need an account? <span class="arrow">▶</span></button>
+    <div class="faq-a">No — all indicators are free without an account. An account lets you save favorites and vote on indicators.</div>
+  </div>
+  <div class="faq-item">
+    <button class="faq-q" onclick="toggleFaq(this)">How do I request a new indicator? <span class="arrow">▶</span></button>
+    <div class="faq-a">Go to <a href="/request">Community → Request Indicator</a> and submit your idea. Other users can upvote requests — the most popular ones get built first.</div>
+  </div>
+
+  <div class="section-title">Other</div>
+
+  <div class="faq-item">
+    <button class="faq-q" onclick="toggleFaq(this)">Is this financial advice? <span class="arrow">▶</span></button>
+    <div class="faq-a">No. ChartEdge provides tools for analysis only. Nothing on this site should be considered financial advice. Always do your own research before making trading decisions.</div>
+  </div>
+  <div class="faq-item">
+    <button class="faq-q" onclick="toggleFaq(this)">Is ChartEdge free? <span class="arrow">▶</span></button>
+    <div class="faq-a">Yes, completely free. No subscriptions, no paywalls.</div>
+  </div>
+
+</div>
+<footer>ChartEdge — Not financial advice</footer>
+<script>
+function toggleFaq(btn) {
+  const answer = btn.nextElementSibling;
+  const isOpen = answer.classList.contains('open');
+  document.querySelectorAll('.faq-a').forEach(a => a.classList.remove('open'));
+  document.querySelectorAll('.faq-q').forEach(b => b.classList.remove('open'));
+  if (!isOpen) { answer.classList.add('open'); btn.classList.add('open'); }
+}
 """ + _THEME_JS + """
 </script>
 </body>
