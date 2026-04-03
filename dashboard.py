@@ -1147,6 +1147,16 @@ def faq_page():
     return render_template_string(FAQ_HTML, current_user=current_user())
 
 
+@app.route("/privacy")
+def privacy_page():
+    return render_template_string(PRIVACY_HTML, current_user=current_user())
+
+
+@app.route("/terms")
+def terms_page():
+    return render_template_string(TERMS_HTML, current_user=current_user())
+
+
 # ── Pine Script generator endpoint ───────────────────────────────────────────
 
 @app.route("/generate")
@@ -1530,7 +1540,7 @@ FAVORITES_HTML = """<!DOCTYPE html>
   </div>
   {% endif %}
 </div>
-<footer>ChartEdge — Free Pine Script indicators · Not financial advice</footer>
+<footer>ChartEdge — Free Pine Script indicators · Not financial advice · <a href="/privacy" style="color:inherit">Privacy</a> · <a href="/terms" style="color:inherit">Terms</a></footer>
 <script>""" + _THEME_JS + """</script>
 </body>
 </html>"""
@@ -1644,7 +1654,7 @@ REQUEST_HTML = """<!DOCTYPE html>
     {% endif %}
   </div>
 </div>
-<footer>ChartEdge — Free Pine Script indicators · Not financial advice</footer>
+<footer>ChartEdge — Free Pine Script indicators · Not financial advice · <a href="/privacy" style="color:inherit">Privacy</a> · <a href="/terms" style="color:inherit">Terms</a></footer>
 <script>
 async function vote(id) {
   const res  = await fetch('/api/request/' + id + '/vote', {method: 'POST'});
@@ -1895,7 +1905,7 @@ INDICATORS_HTML = """<!DOCTYPE html>
   {% endif %}
 </div>
 
-<footer>ChartEdge — Free Pine Script indicators · Not financial advice</footer>
+<footer>ChartEdge — Free Pine Script indicators · Not financial advice · <a href="/privacy" style="color:inherit">Privacy</a> · <a href="/terms" style="color:inherit">Terms</a></footer>
 
 <script>
 function copyPine() {
@@ -2134,7 +2144,7 @@ HOME_HTML = """<!DOCTYPE html>
   </div>
 </div>
 
-<footer>ChartEdge — Free Pine Script indicators · Not financial advice</footer>
+<footer>ChartEdge — Free Pine Script indicators · Not financial advice · <a href="/privacy" style="color:inherit">Privacy</a> · <a href="/terms" style="color:inherit">Terms</a></footer>
 
 <script>
 """ + _THEME_JS + """
@@ -2569,6 +2579,149 @@ function toggleFaq(btn) {
 }
 """ + _THEME_JS + """
 </script>
+</body>
+</html>"""
+
+
+# ── Legal HTML ───────────────────────────────────────────────────────────────
+
+_LEGAL_CSS = """
+    .container { max-width: 760px; margin: 0 auto; padding: 36px 24px; }
+    h2 { font-size: 1.1rem; margin: 28px 0 10px; color: var(--text); }
+    p, li { color: var(--muted); font-size: 0.88rem; line-height: 1.8; margin-bottom: 10px; }
+    ul { padding-left: 20px; margin-bottom: 10px; }
+    a { color: var(--accent); text-decoration: none; }
+    .updated { color: var(--muted); font-size: 0.78rem; margin-bottom: 28px; }
+"""
+
+PRIVACY_HTML = """<!DOCTYPE html>
+<html data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">""" + _META + """
+  <title>Privacy Policy — ChartEdge</title>
+  <style>
+    :root[data-theme="dark"]  { --bg:#0d1117; --bg2:#161b22; --bg3:#21262d; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; }
+    :root[data-theme="light"] { --bg:#ffffff; --bg2:#f6f8fa; --bg3:#eaeef2; --border:#d0d7de; --text:#1f2328; --muted:#636c76; --accent:#0969da; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: monospace; background: var(--bg); color: var(--text); min-height: 100vh; transition: background 0.2s, color 0.2s; }
+    nav { background: var(--bg2); border-bottom: 1px solid var(--border); padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; }
+    .logo { color: var(--accent); font-size: 1.1rem; font-weight: bold; text-decoration: none; }
+    """ + _NAV_CSS + _LEGAL_CSS + """
+    .hero { text-align: center; padding: 40px 24px 28px; border-bottom: 1px solid var(--border); }
+    .hero h1 { font-size: 1.6rem; margin-bottom: 8px; }
+    .hero h1 span { color: var(--accent); }
+    footer { text-align: center; padding: 32px 24px; color: var(--muted); font-size: 0.8rem; border-top: 1px solid var(--border); margin-top: 40px; }
+  </style>
+</head>
+<body>
+<nav>
+  <a class="logo" href="/">ChartEdge</a>
+  <button class="hamburger" onclick="toggleMobileNav(event)">☰</button>
+  <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
+</nav>
+<div class="hero">
+  <h1>Privacy <span>Policy</span></h1>
+</div>
+<div class="container">
+  <p class="updated">Last updated: April 3, 2026</p>
+
+  <h2>1. What we collect</h2>
+  <p>When you create an account or sign in with Google, we collect:</p>
+  <ul>
+    <li>Your username (or Google display name)</li>
+    <li>Your Google account ID (if using Google sign-in)</li>
+    <li>Your saved favorites and indicator votes</li>
+  </ul>
+  <p>We do <strong>not</strong> collect payment information, precise location, or any data beyond what is necessary to run the service.</p>
+
+  <h2>2. How we use your data</h2>
+  <ul>
+    <li>To save your favorite indicators and ratings across sessions</li>
+    <li>To attribute indicator requests to your username</li>
+    <li>We do not sell, share, or use your data for advertising</li>
+  </ul>
+
+  <h2>3. Google sign-in</h2>
+  <p>If you sign in with Google, we receive your name and Google account ID via OAuth 2.0. We do not receive your password or payment details. You can revoke access at any time at <a href="https://myaccount.google.com/permissions" target="_blank">myaccount.google.com/permissions</a>.</p>
+
+  <h2>4. Cookies &amp; storage</h2>
+  <p>We use a session cookie to keep you logged in and localStorage to remember your light/dark theme preference. No third-party tracking cookies are used.</p>
+
+  <h2>5. Data retention</h2>
+  <p>Your account data is stored for as long as your account exists. You can request deletion by emailing us or using the delete account option if available.</p>
+
+  <h2>6. Contact</h2>
+  <p>Questions? Email: <a href="mailto:ayden.j.folkerts@gmail.com">ayden.j.folkerts@gmail.com</a></p>
+</div>
+<footer>ChartEdge — Not financial advice</footer>
+<script>""" + _THEME_JS + """</script>
+</body>
+</html>"""
+
+
+TERMS_HTML = """<!DOCTYPE html>
+<html data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">""" + _META + """
+  <title>Terms of Service — ChartEdge</title>
+  <style>
+    :root[data-theme="dark"]  { --bg:#0d1117; --bg2:#161b22; --bg3:#21262d; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; }
+    :root[data-theme="light"] { --bg:#ffffff; --bg2:#f6f8fa; --bg3:#eaeef2; --border:#d0d7de; --text:#1f2328; --muted:#636c76; --accent:#0969da; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: monospace; background: var(--bg); color: var(--text); min-height: 100vh; transition: background 0.2s, color 0.2s; }
+    nav { background: var(--bg2); border-bottom: 1px solid var(--border); padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; }
+    .logo { color: var(--accent); font-size: 1.1rem; font-weight: bold; text-decoration: none; }
+    """ + _NAV_CSS + _LEGAL_CSS + """
+    .hero { text-align: center; padding: 40px 24px 28px; border-bottom: 1px solid var(--border); }
+    .hero h1 { font-size: 1.6rem; margin-bottom: 8px; }
+    .hero h1 span { color: var(--accent); }
+    footer { text-align: center; padding: 32px 24px; color: var(--muted); font-size: 0.8rem; border-top: 1px solid var(--border); margin-top: 40px; }
+  </style>
+</head>
+<body>
+<nav>
+  <a class="logo" href="/">ChartEdge</a>
+  <button class="hamburger" onclick="toggleMobileNav(event)">☰</button>
+  <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
+</nav>
+<div class="hero">
+  <h1>Terms of <span>Service</span></h1>
+</div>
+<div class="container">
+  <p class="updated">Last updated: April 3, 2026</p>
+
+  <h2>1. Acceptance</h2>
+  <p>By using ChartEdge you agree to these terms. If you do not agree, please do not use the site.</p>
+
+  <h2>2. Use of the service</h2>
+  <ul>
+    <li>ChartEdge is provided free of charge for personal, non-commercial use</li>
+    <li>You may copy and use any Pine Script code from this site on TradingView</li>
+    <li>You may not scrape, reproduce, or redistribute the site's content or code for commercial purposes without permission</li>
+  </ul>
+
+  <h2>3. Not financial advice</h2>
+  <p>Nothing on ChartEdge constitutes financial, investment, or trading advice. All indicators are tools for analysis only. You are solely responsible for your own trading decisions. Past performance of any indicator does not guarantee future results.</p>
+
+  <h2>4. Accounts</h2>
+  <p>You are responsible for keeping your account credentials secure. We reserve the right to suspend accounts that abuse the service.</p>
+
+  <h2>5. Disclaimer of warranties</h2>
+  <p>ChartEdge is provided "as is" without warranty of any kind. We do not guarantee uptime, accuracy of data, or fitness for any particular purpose.</p>
+
+  <h2>6. Limitation of liability</h2>
+  <p>ChartEdge and its operators are not liable for any trading losses or damages arising from use of this site.</p>
+
+  <h2>7. Changes</h2>
+  <p>We may update these terms at any time. Continued use of the site after changes constitutes acceptance.</p>
+
+  <h2>8. Contact</h2>
+  <p>Questions? Email: <a href="mailto:ayden.j.folkerts@gmail.com">ayden.j.folkerts@gmail.com</a></p>
+</div>
+<footer>ChartEdge — Not financial advice</footer>
+<script>""" + _THEME_JS + """</script>
 </body>
 </html>"""
 
