@@ -1260,30 +1260,33 @@ NEWS_FEEDS = [
 ]
 
 def _fetch_news(max_per_feed: int = 8) -> list[dict]:
-    import feedparser, time
+    import feedparser, re, calendar
     articles = []
     for source, url in NEWS_FEEDS:
         try:
             feed = feedparser.parse(url)
             for entry in feed.entries[:max_per_feed]:
+                ts = 0
                 published = ""
                 if hasattr(entry, "published_parsed") and entry.published_parsed:
                     t = entry.published_parsed
+                    ts = calendar.timegm(t)
                     published = f"{t.tm_mon}/{t.tm_mday} {t.tm_hour:02d}:{t.tm_min:02d}"
-                summary = getattr(entry, "summary", "") or ""
-                # strip HTML tags from summary
-                import re
-                summary = re.sub(r"<[^>]+>", "", summary)[:200]
+                summary = re.sub(r"<[^>]+>", "", getattr(entry, "summary", "") or "")[:200]
                 articles.append({
                     "source":    source,
                     "title":     entry.get("title", ""),
                     "link":      entry.get("link", "#"),
                     "published": published,
                     "summary":   summary,
+                    "_ts":       ts,
                 })
         except Exception as exc:
             log.warning("Feed %s failed: %s", source, exc)
-    # sort by source order (already interleaved nicely)
+    # newest first
+    articles.sort(key=lambda a: a["_ts"], reverse=True)
+    for a in articles:
+        del a["_ts"]
     return articles
 
 
