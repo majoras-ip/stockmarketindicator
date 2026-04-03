@@ -16,6 +16,7 @@ import sqlite3
 import sys
 from functools import wraps
 
+from authlib.integrations.flask_client import OAuth
 from flask import Flask, jsonify, redirect, render_template_string, request, session, url_for
 from flask_cors import CORS
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -69,7 +70,27 @@ def init_db():
             );
         """)
 
+def _migrate_db():
+    """Add columns introduced after initial schema."""
+    try:
+        with get_db() as conn:
+            conn.execute("ALTER TABLE users ADD COLUMN google_id TEXT")
+    except Exception:
+        pass  # column already exists
+
 init_db()
+_migrate_db()
+
+# ── Google OAuth ──────────────────────────────────────────────────────────────
+
+oauth = OAuth(app)
+google_oauth = oauth.register(
+    name="google",
+    client_id=os.environ.get("GOOGLE_CLIENT_ID"),
+    client_secret=os.environ.get("GOOGLE_CLIENT_SECRET"),
+    server_metadata_url="https://accounts.google.com/.well-known/openid-configuration",
+    client_kwargs={"scope": "openid email profile"},
+)
 
 def login_required(f):
     @wraps(f)
@@ -503,6 +524,48 @@ def logout():
     return redirect("/")
 
 
+@app.route("/login/google")
+def google_login():
+    redirect_uri = url_for("google_callback", _external=True)
+    return google_oauth.authorize_redirect(redirect_uri)
+
+
+@app.route("/auth/google/callback")
+def google_callback():
+    try:
+        token    = google_oauth.authorize_access_token()
+        userinfo = token.get("userinfo") or {}
+        google_id = userinfo.get("sub")
+        if not google_id:
+            return redirect("/login?error=google")
+        email = userinfo.get("email", "")
+        name  = userinfo.get("name", email.split("@")[0] if email else "user")
+
+        db  = get_db()
+        row = db.execute("SELECT * FROM users WHERE google_id=?", (google_id,)).fetchone()
+        if not row:
+            # Build a unique username from the Google display name
+            base = name.replace(" ", "_").lower()[:20]
+            username = base
+            i = 1
+            while db.execute("SELECT 1 FROM users WHERE username=?", (username,)).fetchone():
+                username = f"{base}{i}"
+                i += 1
+            with get_db() as conn:
+                conn.execute(
+                    "INSERT INTO users (username, pw_hash, google_id) VALUES (?, '', ?)",
+                    (username, google_id),
+                )
+            row = get_db().execute("SELECT * FROM users WHERE google_id=?", (google_id,)).fetchone()
+
+        session["user_id"]  = row["id"]
+        session["username"] = row["username"]
+        return redirect(request.args.get("next", "/indicators"))
+    except Exception:
+        log.exception("Google OAuth error")
+        return redirect("/login?error=google")
+
+
 # ── Favorites API ─────────────────────────────────────────────────────────────
 
 @app.route("/api/favorite/<key>", methods=["POST"])
@@ -865,6 +928,16 @@ AUTH_HTML = """<!DOCTYPE html>
     input:focus { outline: none; border-color: var(--accent); }
     .btn-submit { width: 100%; background: var(--accent); color: #fff; border: none; padding: 10px; border-radius: 6px; font-family: monospace; font-size: 0.95rem; font-weight: bold; cursor: pointer; margin-top: 8px; }
     .btn-submit:hover { opacity: 0.88; }
+    .btn-google {
+      width: 100%; display: flex; align-items: center; justify-content: center; gap: 10px;
+      background: #fff; color: #3c4043; border: 1px solid #dadce0;
+      padding: 10px; border-radius: 6px; font-family: monospace; font-size: 0.95rem;
+      font-weight: bold; cursor: pointer; text-decoration: none; margin-bottom: 16px;
+    }
+    .btn-google:hover { background: #f8f9fa; border-color: #c6c9cc; }
+    .btn-google svg { flex-shrink: 0; }
+    .divider { display: flex; align-items: center; gap: 10px; margin: 16px 0; color: var(--muted); font-size: 0.8rem; }
+    .divider::before, .divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
     .error { background: #2d1316; border: 1px solid var(--red); border-radius: 6px; padding: 10px 14px; color: var(--red); font-size: 0.85rem; margin-bottom: 16px; }
     .switch { text-align: center; margin-top: 20px; color: var(--muted); font-size: 0.85rem; }
     .switch a { color: var(--accent); text-decoration: none; }
@@ -881,6 +954,14 @@ AUTH_HTML = """<!DOCTYPE html>
   <div class="card">
     <h2>{{ 'Create account' if mode == 'register' else 'Sign in' }}</h2>
     {% if error %}<div class="error">{{ error }}</div>{% endif %}
+
+    <a class="btn-google" href="/login/google">
+      <svg width="18" height="18" viewBox="0 0 18 18"><path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.874 2.684-6.615z"/><path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.258c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z"/><path fill="#FBBC05" d="M3.964 10.707A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.707V4.961H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.039l3.007-2.332z"/><path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.961L3.964 6.293C4.672 4.169 6.656 3.58 9 3.58z"/></svg>
+      {{ 'Sign up with Google' if mode == 'register' else 'Sign in with Google' }}
+    </a>
+
+    <div class="divider">or</div>
+
     <form method="POST">
       <div class="form-group">
         <label>Username</label>
