@@ -11,10 +11,14 @@ from __future__ import annotations
 
 import json
 import os
+import secrets
+import sqlite3
 import sys
+from functools import wraps
 
-from flask import Flask, jsonify, render_template_string, request
+from flask import Flask, jsonify, redirect, render_template_string, request, session, url_for
 from flask_cors import CORS
+from werkzeug.security import check_password_hash, generate_password_hash
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -23,7 +27,60 @@ from utils.logger import get_logger
 
 log = get_logger(__name__)
 app = Flask(__name__)
+app.secret_key = os.environ.get("SECRET_KEY", secrets.token_hex(32))
 CORS(app)
+
+# ── Database ──────────────────────────────────────────────────────────────────
+
+DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "app.db")
+
+def get_db():
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+def init_db():
+    with get_db() as conn:
+        conn.executescript("""
+            CREATE TABLE IF NOT EXISTS users (
+                id       INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT UNIQUE NOT NULL,
+                pw_hash  TEXT NOT NULL,
+                created  TEXT DEFAULT (datetime('now'))
+            );
+            CREATE TABLE IF NOT EXISTS favorites (
+                user_id       INTEGER NOT NULL,
+                indicator_key TEXT NOT NULL,
+                PRIMARY KEY (user_id, indicator_key),
+                FOREIGN KEY (user_id) REFERENCES users(id)
+            );
+            CREATE TABLE IF NOT EXISTS requests (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                author      TEXT NOT NULL,
+                name        TEXT NOT NULL,
+                description TEXT NOT NULL,
+                votes       INTEGER DEFAULT 0,
+                created     TEXT DEFAULT (datetime('now'))
+            );
+            CREATE TABLE IF NOT EXISTS request_votes (
+                user_id    INTEGER NOT NULL,
+                request_id INTEGER NOT NULL,
+                PRIMARY KEY (user_id, request_id)
+            );
+        """)
+
+init_db()
+
+def login_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if "user_id" not in session:
+            return redirect(f"/login?next={request.path}")
+        return f(*args, **kwargs)
+    return decorated
+
+def current_user():
+    return session.get("username")
 
 
 # ── Forecast API ──────────────────────────────────────────────────────────────
@@ -397,6 +454,137 @@ CATEGORIES = {
 }
 
 
+# ── Auth routes ───────────────────────────────────────────────────────────────
+
+@app.route("/register", methods=["GET", "POST"])
+def register():
+    error = None
+    if request.method == "POST":
+        username = request.form.get("username", "").strip()
+        password = request.form.get("password", "")
+        if not username or not password:
+            error = "Username and password are required."
+        elif len(password) < 6:
+            error = "Password must be at least 6 characters."
+        else:
+            try:
+                with get_db() as conn:
+                    conn.execute("INSERT INTO users (username, pw_hash) VALUES (?, ?)",
+                                 (username, generate_password_hash(password)))
+                row = get_db().execute("SELECT id FROM users WHERE username=?", (username,)).fetchone()
+                session["user_id"] = row["id"]
+                session["username"] = username
+                return redirect("/indicators")
+            except sqlite3.IntegrityError:
+                error = "Username already taken."
+    return render_template_string(AUTH_HTML, mode="register", error=error)
+
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    error = None
+    if request.method == "POST":
+        username = request.form.get("username", "").strip()
+        password = request.form.get("password", "")
+        row = get_db().execute("SELECT * FROM users WHERE username=?", (username,)).fetchone()
+        if not row or not check_password_hash(row["pw_hash"], password):
+            error = "Invalid username or password."
+        else:
+            session["user_id"] = row["id"]
+            session["username"] = row["username"]
+            next_url = request.args.get("next", "/indicators")
+            return redirect(next_url)
+    return render_template_string(AUTH_HTML, mode="login", error=error)
+
+
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect("/")
+
+
+# ── Favorites API ─────────────────────────────────────────────────────────────
+
+@app.route("/api/favorite/<key>", methods=["POST"])
+@login_required
+def toggle_favorite(key):
+    user_id = session["user_id"]
+    with get_db() as conn:
+        existing = conn.execute(
+            "SELECT 1 FROM favorites WHERE user_id=? AND indicator_key=?", (user_id, key)
+        ).fetchone()
+        if existing:
+            conn.execute("DELETE FROM favorites WHERE user_id=? AND indicator_key=?", (user_id, key))
+            return jsonify({"favorited": False})
+        else:
+            conn.execute("INSERT INTO favorites (user_id, indicator_key) VALUES (?, ?)", (user_id, key))
+            return jsonify({"favorited": True})
+
+
+@app.route("/favorites")
+@login_required
+def favorites_page():
+    user_id = session["user_id"]
+    rows = get_db().execute(
+        "SELECT indicator_key FROM favorites WHERE user_id=?", (user_id,)
+    ).fetchall()
+    keys = [r["indicator_key"] for r in rows]
+    saved = {k: v for k, v in INDICATORS.items() if k in keys}
+    return render_template_string(FAVORITES_HTML,
+        indicators=saved, current_user=current_user())
+
+
+# ── Request route ─────────────────────────────────────────────────────────────
+
+@app.route("/request", methods=["GET", "POST"])
+def request_page():
+    error = None
+    success = None
+    if request.method == "POST":
+        name = request.form.get("name", "").strip()
+        desc = request.form.get("description", "").strip()
+        author = session.get("username", "Anonymous")
+        if not name or not desc:
+            error = "Please fill in both fields."
+        else:
+            with get_db() as conn:
+                conn.execute("INSERT INTO requests (author, name, description) VALUES (?, ?, ?)",
+                             (author, name, desc))
+            success = "Request submitted! Thanks."
+    reqs = get_db().execute(
+        "SELECT * FROM requests ORDER BY votes DESC, created ASC"
+    ).fetchall()
+    user_votes = set()
+    if "user_id" in session:
+        rows = get_db().execute(
+            "SELECT request_id FROM request_votes WHERE user_id=?", (session["user_id"],)
+        ).fetchall()
+        user_votes = {r["request_id"] for r in rows}
+    return render_template_string(REQUEST_HTML,
+        reqs=reqs, user_votes=user_votes,
+        error=error, success=success, current_user=current_user())
+
+
+@app.route("/api/request/<int:req_id>/vote", methods=["POST"])
+@login_required
+def vote_request(req_id):
+    user_id = session["user_id"]
+    with get_db() as conn:
+        existing = conn.execute(
+            "SELECT 1 FROM request_votes WHERE user_id=? AND request_id=?", (user_id, req_id)
+        ).fetchone()
+        if existing:
+            conn.execute("DELETE FROM request_votes WHERE user_id=? AND request_id=?", (user_id, req_id))
+            conn.execute("UPDATE requests SET votes = votes - 1 WHERE id=?", (req_id,))
+            voted = False
+        else:
+            conn.execute("INSERT INTO request_votes (user_id, request_id) VALUES (?, ?)", (user_id, req_id))
+            conn.execute("UPDATE requests SET votes = votes + 1 WHERE id=?", (req_id,))
+            voted = True
+        row = conn.execute("SELECT votes FROM requests WHERE id=?", (req_id,)).fetchone()
+    return jsonify({"voted": voted, "votes": row["votes"]})
+
+
 @app.route("/indicators")
 def indicators_page():
     kind     = request.args.get("kind", "")
@@ -436,6 +624,15 @@ def indicators_page():
 
     filtered = {k: v for k, v in INDICATORS.items() if visible(k, v)}
 
+    # Favorites
+    is_favorited = False
+    if kind and "user_id" in session:
+        row = get_db().execute(
+            "SELECT 1 FROM favorites WHERE user_id=? AND indicator_key=?",
+            (session["user_id"], kind)
+        ).fetchone()
+        is_favorited = bool(row)
+
     return render_template_string(INDICATORS_HTML,
         kind=kind, search=search, category=category,
         indicators=filtered, all_indicators=INDICATORS,
@@ -443,7 +640,9 @@ def indicators_page():
         pine_code=pine_code, name=name,
         description=description, how_to=how_to,
         band1=band1, band2=band2, band3=band3,
-        atr_avg=atr_avg)
+        atr_avg=atr_avg,
+        is_favorited=is_favorited,
+        current_user=current_user())
 
 
 # ── Pine Script generator endpoint ───────────────────────────────────────────
@@ -541,6 +740,305 @@ def generate():
             ticker=ticker, interval=interval,
             pine_code=None, arrow=None, conf=None,
             error=str(exc))
+
+
+# ── Shared nav macro ─────────────────────────────────────────────────────────
+
+_NAV_LINKS = """
+    <a href="/indicators">Indicators</a>
+    <a href="/generate">Forecast</a>
+    <a href="/news">News</a>
+    <a href="/request">Request</a>
+    {% if current_user %}
+    <a href="/favorites">♥ Favorites</a>
+    <a href="/logout" style="color:var(--muted);">{{ current_user }} (logout)</a>
+    {% else %}
+    <a href="/login">Login</a>
+    <a href="/register">Register</a>
+    {% endif %}
+    <button class="theme-toggle" onclick="toggleTheme()">☀ Light</button>
+"""
+
+_THEME_JS = """
+function toggleTheme() {
+  const html = document.documentElement;
+  const isDark = html.getAttribute('data-theme') === 'dark';
+  html.setAttribute('data-theme', isDark ? 'light' : 'dark');
+  document.querySelector('.theme-toggle').textContent = isDark ? '☾ Dark' : '☀ Light';
+  localStorage.setItem('theme', isDark ? 'light' : 'dark');
+}
+const saved = localStorage.getItem('theme');
+if (saved) {
+  document.documentElement.setAttribute('data-theme', saved);
+  document.querySelector('.theme-toggle').textContent = saved === 'light' ? '☾ Dark' : '☀ Light';
+}
+"""
+
+# ── Auth HTML ─────────────────────────────────────────────────────────────────
+
+AUTH_HTML = """<!DOCTYPE html>
+<html data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ 'Register' if mode == 'register' else 'Login' }} — VolForecast</title>
+  <style>
+    :root[data-theme="dark"]  { --bg:#0d1117; --bg2:#161b22; --bg3:#21262d; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --red:#f85149; }
+    :root[data-theme="light"] { --bg:#ffffff; --bg2:#f6f8fa; --bg3:#eaeef2; --border:#d0d7de; --text:#1f2328; --muted:#636c76; --accent:#0969da; --red:#cf222e; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: monospace; background: var(--bg); color: var(--text); min-height: 100vh; display: flex; flex-direction: column; }
+    nav { background: var(--bg2); border-bottom: 1px solid var(--border); padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; }
+    .logo { color: var(--accent); font-size: 1.1rem; font-weight: bold; text-decoration: none; }
+    .nav-links { display: flex; align-items: center; gap: 20px; }
+    .nav-links a { color: var(--muted); text-decoration: none; font-size: 0.9rem; }
+    .nav-links a:hover { color: var(--text); }
+    .theme-toggle { background: var(--bg3); border: 1px solid var(--border); color: var(--text); padding: 4px 10px; border-radius: 6px; cursor: pointer; font-size: 0.8rem; font-family: monospace; }
+    .center { flex: 1; display: flex; align-items: center; justify-content: center; padding: 40px 24px; }
+    .card { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 32px; width: 100%; max-width: 380px; }
+    h2 { font-size: 1.2rem; margin-bottom: 24px; text-align: center; }
+    .form-group { margin-bottom: 16px; }
+    label { display: block; color: var(--muted); font-size: 0.8rem; margin-bottom: 6px; }
+    input[type=text], input[type=password] {
+      width: 100%; background: var(--bg); color: var(--text);
+      border: 1px solid var(--border); padding: 9px 14px;
+      border-radius: 6px; font-family: monospace; font-size: 0.9rem;
+    }
+    input:focus { outline: none; border-color: var(--accent); }
+    .btn-submit { width: 100%; background: var(--accent); color: #fff; border: none; padding: 10px; border-radius: 6px; font-family: monospace; font-size: 0.95rem; font-weight: bold; cursor: pointer; margin-top: 8px; }
+    .btn-submit:hover { opacity: 0.88; }
+    .error { background: #2d1316; border: 1px solid var(--red); border-radius: 6px; padding: 10px 14px; color: var(--red); font-size: 0.85rem; margin-bottom: 16px; }
+    .switch { text-align: center; margin-top: 20px; color: var(--muted); font-size: 0.85rem; }
+    .switch a { color: var(--accent); text-decoration: none; }
+  </style>
+</head>
+<body>
+<nav>
+  <a class="logo" href="/">VolForecast</a>
+  <div class="nav-links">
+    <a href="/indicators">Indicators</a>
+    <a href="/login">Login</a>
+    <a href="/register">Register</a>
+    <button class="theme-toggle" onclick="toggleTheme()">☀ Light</button>
+  </div>
+</nav>
+<div class="center">
+  <div class="card">
+    <h2>{{ 'Create account' if mode == 'register' else 'Sign in' }}</h2>
+    {% if error %}<div class="error">{{ error }}</div>{% endif %}
+    <form method="POST">
+      <div class="form-group">
+        <label>Username</label>
+        <input type="text" name="username" required autofocus>
+      </div>
+      <div class="form-group">
+        <label>Password{% if mode == 'register' %} (min 6 chars){% endif %}</label>
+        <input type="password" name="password" required>
+      </div>
+      <button class="btn-submit" type="submit">{{ 'Create account' if mode == 'register' else 'Sign in' }}</button>
+    </form>
+    <div class="switch">
+      {% if mode == 'register' %}
+        Already have an account? <a href="/login">Sign in</a>
+      {% else %}
+        No account? <a href="/register">Create one</a>
+      {% endif %}
+    </div>
+  </div>
+</div>
+<script>""" + _THEME_JS + """</script>
+</body>
+</html>"""
+
+
+# ── Favorites HTML ────────────────────────────────────────────────────────────
+
+FAVORITES_HTML = """<!DOCTYPE html>
+<html data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Favorites — VolForecast</title>
+  <style>
+    :root[data-theme="dark"]  { --bg:#0d1117; --bg2:#161b22; --bg3:#21262d; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --red:#f85149; }
+    :root[data-theme="light"] { --bg:#ffffff; --bg2:#f6f8fa; --bg3:#eaeef2; --border:#d0d7de; --text:#1f2328; --muted:#636c76; --accent:#0969da; --red:#cf222e; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: monospace; background: var(--bg); color: var(--text); min-height: 100vh; }
+    nav { background: var(--bg2); border-bottom: 1px solid var(--border); padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; }
+    .logo { color: var(--accent); font-size: 1.1rem; font-weight: bold; text-decoration: none; }
+    .nav-links { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
+    .nav-links a { color: var(--muted); text-decoration: none; font-size: 0.9rem; }
+    .nav-links a:hover { color: var(--text); }
+    .theme-toggle { background: var(--bg3); border: 1px solid var(--border); color: var(--text); padding: 4px 10px; border-radius: 6px; cursor: pointer; font-size: 0.8rem; font-family: monospace; }
+    .hero { text-align: center; padding: 40px 24px 28px; border-bottom: 1px solid var(--border); }
+    .hero h1 { font-size: 1.6rem; margin-bottom: 8px; }
+    .hero h1 span { color: var(--accent); }
+    .container { max-width: 800px; margin: 0 auto; padding: 28px 24px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 12px; }
+    .ind-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; text-decoration: none; display: block; transition: border-color 0.15s; }
+    .ind-card:hover { border-color: var(--accent); }
+    .cat-tag { font-size: 0.68rem; color: var(--muted); text-transform: uppercase; margin-bottom: 4px; letter-spacing: 0.05em; }
+    .ind-name { color: var(--text); font-size: 0.9rem; font-weight: bold; margin-bottom: 4px; }
+    .ind-desc { color: var(--muted); font-size: 0.75rem; line-height: 1.4; }
+    .empty { text-align: center; padding: 60px 24px; color: var(--muted); }
+    .empty a { color: var(--accent); text-decoration: none; }
+    footer { text-align: center; padding: 32px 24px; color: var(--muted); font-size: 0.8rem; border-top: 1px solid var(--border); margin-top: 40px; }
+  </style>
+</head>
+<body>
+<nav>
+  <a class="logo" href="/">VolForecast</a>
+  <div class="nav-links">""" + _NAV_LINKS + """</div>
+</nav>
+<div class="hero">
+  <h1>♥ <span>Favorites</span></h1>
+  <p style="color:var(--muted); font-size:0.9rem;">Your saved indicators</p>
+</div>
+<div class="container">
+  {% if indicators %}
+  <div class="grid">
+    {% for key, (iname, _, idesc, icat, _) in indicators.items() %}
+    <a class="ind-card" href="/indicators?kind={{ key }}">
+      <div class="cat-tag">{{ icat }}</div>
+      <div class="ind-name">{{ iname }}</div>
+      <div class="ind-desc">{{ idesc[:65] }}…</div>
+    </a>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="empty">
+    <p>No favorites yet.</p>
+    <p style="margin-top:10px;">Browse <a href="/indicators">indicators</a> and click ♥ to save them.</p>
+  </div>
+  {% endif %}
+</div>
+<footer>VolForecast — Free Pine Script indicators · Not financial advice</footer>
+<script>""" + _THEME_JS + """</script>
+</body>
+</html>"""
+
+
+# ── Request HTML ──────────────────────────────────────────────────────────────
+
+REQUEST_HTML = """<!DOCTYPE html>
+<html data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Request an Indicator — VolForecast</title>
+  <style>
+    :root[data-theme="dark"]  { --bg:#0d1117; --bg2:#161b22; --bg3:#21262d; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --green:#3fb950; --red:#f85149; }
+    :root[data-theme="light"] { --bg:#ffffff; --bg2:#f6f8fa; --bg3:#eaeef2; --border:#d0d7de; --text:#1f2328; --muted:#636c76; --accent:#0969da; --green:#1a7f37; --red:#cf222e; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: monospace; background: var(--bg); color: var(--text); min-height: 100vh; }
+    nav { background: var(--bg2); border-bottom: 1px solid var(--border); padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; }
+    .logo { color: var(--accent); font-size: 1.1rem; font-weight: bold; text-decoration: none; }
+    .nav-links { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
+    .nav-links a { color: var(--muted); text-decoration: none; font-size: 0.9rem; }
+    .nav-links a:hover { color: var(--text); }
+    .theme-toggle { background: var(--bg3); border: 1px solid var(--border); color: var(--text); padding: 4px 10px; border-radius: 6px; cursor: pointer; font-size: 0.8rem; font-family: monospace; }
+    .hero { text-align: center; padding: 40px 24px 28px; border-bottom: 1px solid var(--border); }
+    .hero h1 { font-size: 1.6rem; margin-bottom: 8px; }
+    .hero h1 span { color: var(--accent); }
+    .hero p { color: var(--muted); font-size: 0.9rem; }
+    .container { max-width: 700px; margin: 0 auto; padding: 28px 24px; }
+    .card { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 24px; margin-bottom: 24px; }
+    .card h2 { font-size: 1rem; margin-bottom: 20px; }
+    .form-group { margin-bottom: 16px; }
+    label { display: block; color: var(--muted); font-size: 0.8rem; margin-bottom: 6px; }
+    input[type=text], textarea {
+      width: 100%; background: var(--bg); color: var(--text);
+      border: 1px solid var(--border); padding: 9px 14px;
+      border-radius: 6px; font-family: monospace; font-size: 0.88rem;
+    }
+    textarea { height: 100px; resize: vertical; }
+    input:focus, textarea:focus { outline: none; border-color: var(--accent); }
+    .btn-submit { background: var(--accent); color: #fff; border: none; padding: 9px 24px; border-radius: 6px; font-family: monospace; font-size: 0.9rem; font-weight: bold; cursor: pointer; }
+    .btn-submit:hover { opacity: 0.88; }
+    .error   { background: #2d1316; border: 1px solid var(--red);   border-radius: 6px; padding: 10px 14px; color: var(--red);   font-size: 0.85rem; margin-bottom: 16px; }
+    .success { background: #0d2a14; border: 1px solid var(--green); border-radius: 6px; padding: 10px 14px; color: var(--green); font-size: 0.85rem; margin-bottom: 16px; }
+    .req-list { display: flex; flex-direction: column; gap: 12px; }
+    .req-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 16px 20px; display: flex; gap: 16px; align-items: flex-start; }
+    .vote-col { display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 44px; }
+    .vote-count { font-size: 1.1rem; font-weight: bold; }
+    .vote-btn { background: var(--bg3); border: 1px solid var(--border); color: var(--muted); width: 32px; height: 32px; border-radius: 6px; cursor: pointer; font-size: 1rem; font-family: monospace; }
+    .vote-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .vote-btn.voted { border-color: var(--accent); color: var(--accent); background: #0d2a4a; }
+    .req-body { flex: 1; }
+    .req-name { font-weight: bold; font-size: 0.95rem; margin-bottom: 4px; }
+    .req-desc { color: var(--muted); font-size: 0.82rem; line-height: 1.5; }
+    .req-meta { color: var(--muted); font-size: 0.73rem; margin-top: 6px; }
+    .empty { color: var(--muted); text-align: center; padding: 30px; font-size: 0.9rem; }
+    footer { text-align: center; padding: 32px 24px; color: var(--muted); font-size: 0.8rem; border-top: 1px solid var(--border); margin-top: 40px; }
+  </style>
+</head>
+<body>
+<nav>
+  <a class="logo" href="/">VolForecast</a>
+  <div class="nav-links">""" + _NAV_LINKS + """</div>
+</nav>
+<div class="hero">
+  <h1>Request an <span>Indicator</span></h1>
+  <p>Don't see what you need? Submit a request and upvote others.</p>
+</div>
+<div class="container">
+  <div class="card">
+    <h2>Submit a request</h2>
+    {% if error   %}<div class="error">{{ error }}</div>{% endif %}
+    {% if success %}<div class="success">{{ success }}</div>{% endif %}
+    <form method="POST">
+      <div class="form-group">
+        <label>Indicator name</label>
+        <input type="text" name="name" placeholder="e.g. Stochastic RSI" required>
+      </div>
+      <div class="form-group">
+        <label>Description — what should it show?</label>
+        <textarea name="description" placeholder="Describe what you want the indicator to do…" required></textarea>
+      </div>
+      <button class="btn-submit" type="submit">Submit request</button>
+    </form>
+  </div>
+
+  <div class="card">
+    <h2>All requests — most voted first</h2>
+    {% if reqs %}
+    <div class="req-list">
+      {% for r in reqs %}
+      <div class="req-card">
+        <div class="vote-col">
+          <div class="vote-count" id="votes-{{ r['id'] }}">{{ r['votes'] }}</div>
+          {% if current_user %}
+          <button class="vote-btn {{ 'voted' if r['id'] in user_votes else '' }}"
+                  id="vbtn-{{ r['id'] }}" onclick="vote({{ r['id'] }})">▲</button>
+          {% else %}
+          <a href="/login" class="vote-btn" title="Login to vote">▲</a>
+          {% endif %}
+        </div>
+        <div class="req-body">
+          <div class="req-name">{{ r['name'] }}</div>
+          <div class="req-desc">{{ r['description'] }}</div>
+          <div class="req-meta">by {{ r['author'] }} · {{ r['created'][:10] }}</div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty">No requests yet — be the first!</div>
+    {% endif %}
+  </div>
+</div>
+<footer>VolForecast — Free Pine Script indicators · Not financial advice</footer>
+<script>
+async function vote(id) {
+  const res  = await fetch('/api/request/' + id + '/vote', {method: 'POST'});
+  const data = await res.json();
+  document.getElementById('votes-' + id).textContent = data.votes;
+  const btn = document.getElementById('vbtn-' + id);
+  btn.classList.toggle('voted', data.voted);
+}
+""" + _THEME_JS + """
+</script>
+</body>
+</html>"""
 
 
 # ── Indicators HTML ──────────────────────────────────────────────────────────
@@ -654,13 +1152,7 @@ INDICATORS_HTML = """<!DOCTYPE html>
 <body>
 <nav>
   <a class="logo" href="/">VolForecast</a>
-  <div class="nav-links">
-    <a href="/indicators">Indicators</a>
-    <a href="/generate">Forecast</a>
-    <a href="/news">News</a>
-    <a href="/dashboard">Live Chart</a>
-    <button class="theme-toggle" onclick="toggleTheme()">☀ Light</button>
-  </div>
+  <div class="nav-links">""" + _NAV_LINKS + """</div>
 </nav>
 
 <div class="hero">
@@ -729,6 +1221,21 @@ INDICATORS_HTML = """<!DOCTYPE html>
   </div>
   {% endif %}
 
+  <!-- Shareable link + favorite -->
+  {% if kind %}
+  <div style="display:flex; gap:10px; margin-bottom:12px; align-items:center;">
+    <button class="btn-copy" onclick="copyLink(this)">🔗 Copy link</button>
+    {% if current_user %}
+    <button class="btn-copy {{ 'copied' if is_favorited else '' }}"
+            id="heart-btn" onclick="toggleFavorite('{{ kind }}')">
+      {{ '♥ Saved' if is_favorited else '♡ Save' }}
+    </button>
+    {% else %}
+    <a href="/login" class="btn-copy" style="text-decoration:none;">♡ Save (login)</a>
+    {% endif %}
+  </div>
+  {% endif %}
+
   <!-- Pine Script output -->
   {% if pine_code %}
   <div class="card {{ 'output' if kind in ['vwap', 'atr'] else '' }}">
@@ -751,34 +1258,37 @@ INDICATORS_HTML = """<!DOCTYPE html>
 <footer>VolForecast — Free Pine Script indicators · Not financial advice</footer>
 
 <script>
-// Copy Pine Script
 function copyPine() {
   document.getElementById('pine-out').select();
   document.execCommand('copy');
-  const btn = document.querySelector('.btn-copy');
-  btn.textContent = 'Copied!';
-  btn.classList.add('copied');
+  const btn = document.querySelector('.pine-label .btn-copy');
+  btn.textContent = 'Copied!'; btn.classList.add('copied');
   setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
 }
-
-// How to use toggle
+function copyLink(btn) {
+  navigator.clipboard.writeText(window.location.href);
+  btn.textContent = '✓ Copied!'; btn.classList.add('copied');
+  setTimeout(() => { btn.textContent = '🔗 Copy link'; btn.classList.remove('copied'); }, 2000);
+}
+async function toggleFavorite(key) {
+  const res  = await fetch('/api/favorite/' + key, {method: 'POST'});
+  const data = await res.json();
+  const btn  = document.getElementById('heart-btn');
+  btn.textContent = data.favorited ? '♥ Saved' : '♡ Save';
+  btn.classList.toggle('copied', data.favorited);
+}
 function toggleHowTo() {
   const body = document.getElementById('howto-body');
   const title = document.querySelector('.how-to-title');
   body.classList.toggle('open');
   title.textContent = body.classList.contains('open') ? '▼ How to use' : '▶ How to use';
 }
-
-// Client-side search filtering
 function filterCards() {
   const q = document.getElementById('search').value.toLowerCase();
   document.querySelectorAll('.ind-card').forEach(card => {
-    const match = card.dataset.name.includes(q) || card.dataset.desc.includes(q);
-    card.style.display = match ? '' : 'none';
+    card.style.display = (card.dataset.name.includes(q) || card.dataset.desc.includes(q)) ? '' : 'none';
   });
 }
-
-// Dark / light mode
 function toggleTheme() {
   const html = document.documentElement;
   const isDark = html.getAttribute('data-theme') === 'dark';
@@ -786,7 +1296,6 @@ function toggleTheme() {
   document.querySelector('.theme-toggle').textContent = isDark ? '☾ Dark' : '☀ Light';
   localStorage.setItem('theme', isDark ? 'light' : 'dark');
 }
-// Restore saved theme
 const saved = localStorage.getItem('theme');
 if (saved) {
   document.documentElement.setAttribute('data-theme', saved);
