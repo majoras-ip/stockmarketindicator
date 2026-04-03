@@ -1438,7 +1438,7 @@ AUTH_HTML = """<!DOCTYPE html>
 </head>
 <body>
 <nav>
-  <a class="logo" href="/">ChartEdge</a>
+  <a class="logo" href="/">Chart<span style="color:#58a6ff">Edge</span></a>
   <div class="nav-links">
 """ + _NAV_LINKS + """
   </div>
@@ -1514,7 +1514,7 @@ FAVORITES_HTML = """<!DOCTYPE html>
 </head>
 <body>
 <nav>
-  <a class="logo" href="/">ChartEdge</a>
+  <a class="logo" href="/">Chart<span style="color:#58a6ff">Edge</span></a>
   <button class="hamburger" onclick="toggleMobileNav(event)">☰</button>
   <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
 </nav>
@@ -1600,7 +1600,7 @@ REQUEST_HTML = """<!DOCTYPE html>
 </head>
 <body>
 <nav>
-  <a class="logo" href="/">ChartEdge</a>
+  <a class="logo" href="/">Chart<span style="color:#58a6ff">Edge</span></a>
   <button class="hamburger" onclick="toggleMobileNav(event)">☰</button>
   <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
 </nav>
@@ -1784,7 +1784,7 @@ INDICATORS_HTML = """<!DOCTYPE html>
 </head>
 <body>
 <nav>
-  <a class="logo" href="/">ChartEdge</a>
+  <a class="logo" href="/">Chart<span style="color:#58a6ff">Edge</span></a>
   <button class="hamburger" onclick="toggleMobileNav(event)">☰</button>
   <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
 </nav>
@@ -2039,7 +2039,7 @@ HOME_HTML = """<!DOCTYPE html>
 </head>
 <body>
 <nav>
-  <a class="logo" href="/">ChartEdge</a>
+  <a class="logo" href="/">Chart<span style="color:#58a6ff">Edge</span></a>
   <div class="nav-links">
 """ + _NAV_LINKS + """
   </div>
@@ -2287,7 +2287,7 @@ GENERATOR_HTML = """<!DOCTYPE html>
 <body>
 
 <nav>
-  <a class="logo" href="/">ChartEdge</a>
+  <a class="logo" href="/">Chart<span style="color:#58a6ff">Edge</span></a>
   <div class="nav-links">
 """ + _NAV_LINKS + """
   </div>
@@ -2421,7 +2421,7 @@ EARNINGS_HTML = """<!DOCTYPE html>
 </head>
 <body>
 <nav>
-  <a class="logo" href="/">ChartEdge</a>
+  <a class="logo" href="/">Chart<span style="color:#58a6ff">Edge</span></a>
   <button class="hamburger" onclick="toggleMobileNav(event)">☰</button>
   <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
 </nav>
@@ -2501,7 +2501,7 @@ FAQ_HTML = """<!DOCTYPE html>
 </head>
 <body>
 <nav>
-  <a class="logo" href="/">ChartEdge</a>
+  <a class="logo" href="/">Chart<span style="color:#58a6ff">Edge</span></a>
   <button class="hamburger" onclick="toggleMobileNav(event)">☰</button>
   <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
 </nav>
@@ -2616,7 +2616,7 @@ PRIVACY_HTML = """<!DOCTYPE html>
 </head>
 <body>
 <nav>
-  <a class="logo" href="/">ChartEdge</a>
+  <a class="logo" href="/">Chart<span style="color:#58a6ff">Edge</span></a>
   <button class="hamburger" onclick="toggleMobileNav(event)">☰</button>
   <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
 </nav>
@@ -2682,7 +2682,7 @@ TERMS_HTML = """<!DOCTYPE html>
 </head>
 <body>
 <nav>
-  <a class="logo" href="/">ChartEdge</a>
+  <a class="logo" href="/">Chart<span style="color:#58a6ff">Edge</span></a>
   <button class="hamburger" onclick="toggleMobileNav(event)">☰</button>
   <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
 </nav>
@@ -2853,7 +2853,7 @@ NEWS_HTML = """<!DOCTYPE html>
 </head>
 <body>
 <nav>
-  <a class="logo" href="/">ChartEdge</a>
+  <a class="logo" href="/">Chart<span style="color:#58a6ff">Edge</span></a>
   <div class="nav-links">
 """ + _NAV_LINKS + """
   </div>
@@ -2988,7 +2988,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 <body>
 
 <nav>
-  <a class="logo" href="/">ChartEdge</a>
+  <a class="logo" href="/">Chart<span style="color:#58a6ff">Edge</span></a>
   <div class="nav-links">
 """ + _NAV_LINKS + """
   </div>
