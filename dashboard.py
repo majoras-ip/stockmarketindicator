@@ -1104,7 +1104,7 @@ AUTH_HTML = """<!DOCTYPE html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{{ 'Register' if mode == 'register' else 'Login' }} — VolForecast</title>
+  <title>{{ 'Register' if mode == 'register' else 'Login' }} — ChartEdge</title>
   <style>
     :root[data-theme="dark"]  { --bg:#0d1117; --bg2:#161b22; --bg3:#21262d; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --red:#f85149; }
     :root[data-theme="light"] { --bg:#ffffff; --bg2:#f6f8fa; --bg3:#eaeef2; --border:#d0d7de; --text:#1f2328; --muted:#636c76; --accent:#0969da; --red:#cf222e; }
@@ -1143,7 +1143,7 @@ AUTH_HTML = """<!DOCTYPE html>
 </head>
 <body>
 <nav>
-  <a class="logo" href="/">VolForecast</a>
+  <a class="logo" href="/">ChartEdge</a>
   <div class="nav-links">
 """ + _NAV_LINKS + """
   </div>
@@ -1192,7 +1192,7 @@ FAVORITES_HTML = """<!DOCTYPE html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Favorites — VolForecast</title>
+  <title>Favorites — ChartEdge</title>
   <style>
     :root[data-theme="dark"]  { --bg:#0d1117; --bg2:#161b22; --bg3:#21262d; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --red:#f85149; }
     :root[data-theme="light"] { --bg:#ffffff; --bg2:#f6f8fa; --bg3:#eaeef2; --border:#d0d7de; --text:#1f2328; --muted:#636c76; --accent:#0969da; --red:#cf222e; }
@@ -1219,7 +1219,7 @@ FAVORITES_HTML = """<!DOCTYPE html>
 </head>
 <body>
 <nav>
-  <a class="logo" href="/">VolForecast</a>
+  <a class="logo" href="/">ChartEdge</a>
   <div class="nav-links">""" + _NAV_LINKS + """</div>
 </nav>
 <div class="hero">
@@ -1244,7 +1244,7 @@ FAVORITES_HTML = """<!DOCTYPE html>
   </div>
   {% endif %}
 </div>
-<footer>VolForecast — Free Pine Script indicators · Not financial advice</footer>
+<footer>ChartEdge — Free Pine Script indicators · Not financial advice</footer>
 <script>""" + _THEME_JS + """</script>
 </body>
 </html>"""
@@ -1257,7 +1257,7 @@ REQUEST_HTML = """<!DOCTYPE html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Request an Indicator — VolForecast</title>
+  <title>Request an Indicator — ChartEdge</title>
   <style>
     :root[data-theme="dark"]  { --bg:#0d1117; --bg2:#161b22; --bg3:#21262d; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --green:#3fb950; --red:#f85149; }
     :root[data-theme="light"] { --bg:#ffffff; --bg2:#f6f8fa; --bg3:#eaeef2; --border:#d0d7de; --text:#1f2328; --muted:#636c76; --accent:#0969da; --green:#1a7f37; --red:#cf222e; }
@@ -1304,7 +1304,7 @@ REQUEST_HTML = """<!DOCTYPE html>
 </head>
 <body>
 <nav>
-  <a class="logo" href="/">VolForecast</a>
+  <a class="logo" href="/">ChartEdge</a>
   <div class="nav-links">""" + _NAV_LINKS + """</div>
 </nav>
 <div class="hero">
@@ -1357,7 +1357,7 @@ REQUEST_HTML = """<!DOCTYPE html>
     {% endif %}
   </div>
 </div>
-<footer>VolForecast — Free Pine Script indicators · Not financial advice</footer>
+<footer>ChartEdge — Free Pine Script indicators · Not financial advice</footer>
 <script>
 async function vote(id) {
   const res  = await fetch('/api/request/' + id + '/vote', {method: 'POST'});
@@ -1476,7 +1476,7 @@ INDICATORS_HTML = """<!DOCTYPE html>
 </head>
 <body>
 <nav>
-  <a class="logo" href="/">VolForecast</a>
+  <a class="logo" href="/">ChartEdge</a>
   <div class="nav-links">""" + _NAV_LINKS + """</div>
 </nav>
 
@@ -1580,7 +1580,7 @@ INDICATORS_HTML = """<!DOCTYPE html>
   {% endif %}
 </div>
 
-<footer>VolForecast — Free Pine Script indicators · Not financial advice</footer>
+<footer>ChartEdge — Free Pine Script indicators · Not financial advice</footer>
 
 <script>
 function copyPine() {
@@ -1627,7 +1627,7 @@ HOME_HTML = """<!DOCTYPE html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>VolForecast — Free TradingView Pine Script Indicators</title>
+  <title>ChartEdge — Free TradingView Pine Script Indicators</title>
   <style>
     :root[data-theme="dark"]  { --bg:#0d1117; --bg2:#161b22; --bg3:#21262d; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --green:#3fb950; --red:#f85149; }
     :root[data-theme="light"] { --bg:#ffffff; --bg2:#f6f8fa; --bg3:#eaeef2; --border:#d0d7de; --text:#1f2328; --muted:#636c76; --accent:#0969da; --green:#1a7f37; --red:#cf222e; }
@@ -1706,7 +1706,7 @@ HOME_HTML = """<!DOCTYPE html>
 </head>
 <body>
 <nav>
-  <a class="logo" href="/">VolForecast</a>
+  <a class="logo" href="/">ChartEdge</a>
   <div class="nav-links">
 """ + _NAV_LINKS + """
   </div>
@@ -1725,7 +1725,7 @@ HOME_HTML = """<!DOCTYPE html>
 
 <!-- Features -->
 <div class="section">
-  <h2>Why <span>VolForecast</span>?</h2>
+  <h2>Why <span>ChartEdge</span>?</h2>
   <div class="features">
     <div class="feature">
       <div class="feature-icon">⚡</div>
@@ -1811,7 +1811,7 @@ HOME_HTML = """<!DOCTYPE html>
   </div>
 </div>
 
-<footer>VolForecast — Free Pine Script indicators · Not financial advice</footer>
+<footer>ChartEdge — Free Pine Script indicators · Not financial advice</footer>
 
 <script>
 """ + _THEME_JS + """
@@ -1954,7 +1954,7 @@ GENERATOR_HTML = """<!DOCTYPE html>
 <body>
 
 <nav>
-  <a class="logo" href="/">VolForecast</a>
+  <a class="logo" href="/">ChartEdge</a>
   <div class="nav-links">
 """ + _NAV_LINKS + """
   </div>
@@ -2028,7 +2028,7 @@ GENERATOR_HTML = """<!DOCTYPE html>
 </div>
 
 <footer>
-  VolForecast — LSTM volatility prediction · Not financial advice
+  ChartEdge — LSTM volatility prediction · Not financial advice
 </footer>
 
 <script>
@@ -2112,7 +2112,7 @@ NEWS_HTML = """<!DOCTYPE html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Market News — VolForecast</title>
+  <title>Market News — ChartEdge</title>
   <style>
     :root[data-theme="dark"]  { --bg:#0d1117; --bg2:#161b22; --bg3:#21262d; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --green:#3fb950; --red:#f85149; }
     :root[data-theme="light"] { --bg:#ffffff; --bg2:#f6f8fa; --bg3:#eaeef2; --border:#d0d7de; --text:#1f2328; --muted:#636c76; --accent:#0969da; --green:#1a7f37; --red:#cf222e; }
@@ -2179,7 +2179,7 @@ NEWS_HTML = """<!DOCTYPE html>
 </head>
 <body>
 <nav>
-  <a class="logo" href="/">VolForecast</a>
+  <a class="logo" href="/">ChartEdge</a>
   <div class="nav-links">
 """ + _NAV_LINKS + """
   </div>
@@ -2218,7 +2218,7 @@ NEWS_HTML = """<!DOCTYPE html>
   <div id="status"></div>
 </div>
 
-<footer>VolForecast — News sourced from public RSS feeds · Not financial advice</footer>
+<footer>ChartEdge — News sourced from public RSS feeds · Not financial advice</footer>
 
 <script>
 let activeSource = 'all';
@@ -2280,7 +2280,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Live Chart — VolForecast</title>
+  <title>Live Chart — ChartEdge</title>
   <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
   <style>
     :root[data-theme="dark"]  { --bg:#0d1117; --bg2:#161b22; --bg3:#21262d; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --green:#3fb950; --red:#f85149; }
@@ -2314,7 +2314,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 <body>
 
 <nav>
-  <a class="logo" href="/">VolForecast</a>
+  <a class="logo" href="/">ChartEdge</a>
   <div class="nav-links">
 """ + _NAV_LINKS + """
   </div>
