@@ -744,18 +744,66 @@ def generate():
 
 # ── Shared nav macro ─────────────────────────────────────────────────────────
 
+_NAV_CSS = """
+  .nav-links { display: flex; align-items: center; gap: 4px; }
+  .nav-links a { color: var(--muted); text-decoration: none; font-size: 0.9rem; padding: 6px 12px; border-radius: 6px; }
+  .nav-links a:hover { color: var(--text); background: var(--bg3); }
+  .dropdown { position: relative; }
+  .dropdown > .drop-btn {
+    background: none; border: 1px solid transparent; color: var(--muted);
+    padding: 6px 12px; border-radius: 6px; font-family: monospace;
+    font-size: 0.9rem; cursor: pointer; display: flex; align-items: center; gap: 4px;
+  }
+  .dropdown > .drop-btn:hover { background: var(--bg3); border-color: var(--border); color: var(--text); }
+  .dropdown:hover > .drop-btn { background: var(--bg3); border-color: var(--border); color: var(--text); }
+  .drop-menu {
+    display: none; position: absolute; top: calc(100% + 6px); right: 0;
+    background: var(--bg2); border: 1px solid var(--border); border-radius: 8px;
+    min-width: 160px; z-index: 100; overflow: hidden;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+  }
+  .dropdown:hover .drop-menu { display: block; }
+  .drop-menu a {
+    display: block; padding: 9px 16px; color: var(--muted);
+    text-decoration: none; font-size: 0.88rem; border-bottom: 1px solid var(--border);
+  }
+  .drop-menu a:last-child { border-bottom: none; }
+  .drop-menu a:hover { background: var(--bg3); color: var(--text); }
+  .theme-toggle { background: var(--bg3); border: 1px solid var(--border); color: var(--text); padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 0.85rem; font-family: monospace; margin-left: 4px; }
+"""
+
 _NAV_LINKS = """
-    <a href="/indicators">Indicators</a>
-    <a href="/generate">Forecast</a>
-    <a href="/news">News</a>
-    <a href="/request">Request</a>
-    {% if current_user %}
-    <a href="/favorites">♥ Favorites</a>
-    <a href="/logout" style="color:var(--muted);">{{ current_user }} (logout)</a>
-    {% else %}
-    <a href="/login">Login</a>
-    <a href="/register">Register</a>
-    {% endif %}
+    <div class="dropdown">
+      <button class="drop-btn">Tools ▾</button>
+      <div class="drop-menu">
+        <a href="/indicators">Indicators</a>
+        <a href="/generate">Forecast</a>
+        <a href="/dashboard">Live Chart</a>
+        <a href="/news">News</a>
+      </div>
+    </div>
+    <div class="dropdown">
+      <button class="drop-btn">Community ▾</button>
+      <div class="drop-menu">
+        <a href="/request">Request Indicator</a>
+        {% if current_user %}<a href="/favorites">♥ My Favorites</a>{% endif %}
+      </div>
+    </div>
+    <div class="dropdown">
+      {% if current_user %}
+      <button class="drop-btn">{{ current_user }} ▾</button>
+      <div class="drop-menu">
+        <a href="/favorites">♥ Favorites</a>
+        <a href="/logout">Logout</a>
+      </div>
+      {% else %}
+      <button class="drop-btn">Account ▾</button>
+      <div class="drop-menu">
+        <a href="/login">Login</a>
+        <a href="/register">Register</a>
+      </div>
+      {% endif %}
+    </div>
     <button class="theme-toggle" onclick="toggleTheme()">☀ Light</button>
 """
 
@@ -789,10 +837,7 @@ AUTH_HTML = """<!DOCTYPE html>
     body { font-family: monospace; background: var(--bg); color: var(--text); min-height: 100vh; display: flex; flex-direction: column; }
     nav { background: var(--bg2); border-bottom: 1px solid var(--border); padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; }
     .logo { color: var(--accent); font-size: 1.1rem; font-weight: bold; text-decoration: none; }
-    .nav-links { display: flex; align-items: center; gap: 20px; }
-    .nav-links a { color: var(--muted); text-decoration: none; font-size: 0.9rem; }
-    .nav-links a:hover { color: var(--text); }
-    .theme-toggle { background: var(--bg3); border: 1px solid var(--border); color: var(--text); padding: 4px 10px; border-radius: 6px; cursor: pointer; font-size: 0.8rem; font-family: monospace; }
+""" + _NAV_CSS + """
     .center { flex: 1; display: flex; align-items: center; justify-content: center; padding: 40px 24px; }
     .card { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 32px; width: 100%; max-width: 380px; }
     h2 { font-size: 1.2rem; margin-bottom: 24px; text-align: center; }
@@ -815,10 +860,7 @@ AUTH_HTML = """<!DOCTYPE html>
 <nav>
   <a class="logo" href="/">VolForecast</a>
   <div class="nav-links">
-    <a href="/indicators">Indicators</a>
-    <a href="/login">Login</a>
-    <a href="/register">Register</a>
-    <button class="theme-toggle" onclick="toggleTheme()">☀ Light</button>
+""" + _NAV_LINKS + """
   </div>
 </nav>
 <div class="center">
@@ -865,9 +907,7 @@ FAVORITES_HTML = """<!DOCTYPE html>
     body { font-family: monospace; background: var(--bg); color: var(--text); min-height: 100vh; }
     nav { background: var(--bg2); border-bottom: 1px solid var(--border); padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; }
     .logo { color: var(--accent); font-size: 1.1rem; font-weight: bold; text-decoration: none; }
-    .nav-links { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
-    .nav-links a { color: var(--muted); text-decoration: none; font-size: 0.9rem; }
-    .nav-links a:hover { color: var(--text); }
+""" + _NAV_CSS + """
     .theme-toggle { background: var(--bg3); border: 1px solid var(--border); color: var(--text); padding: 4px 10px; border-radius: 6px; cursor: pointer; font-size: 0.8rem; font-family: monospace; }
     .hero { text-align: center; padding: 40px 24px 28px; border-bottom: 1px solid var(--border); }
     .hero h1 { font-size: 1.6rem; margin-bottom: 8px; }
@@ -932,9 +972,7 @@ REQUEST_HTML = """<!DOCTYPE html>
     body { font-family: monospace; background: var(--bg); color: var(--text); min-height: 100vh; }
     nav { background: var(--bg2); border-bottom: 1px solid var(--border); padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; }
     .logo { color: var(--accent); font-size: 1.1rem; font-weight: bold; text-decoration: none; }
-    .nav-links { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
-    .nav-links a { color: var(--muted); text-decoration: none; font-size: 0.9rem; }
-    .nav-links a:hover { color: var(--text); }
+""" + _NAV_CSS + """
     .theme-toggle { background: var(--bg3); border: 1px solid var(--border); color: var(--text); padding: 4px 10px; border-radius: 6px; cursor: pointer; font-size: 0.8rem; font-family: monospace; }
     .hero { text-align: center; padding: 40px 24px 28px; border-bottom: 1px solid var(--border); }
     .hero h1 { font-size: 1.6rem; margin-bottom: 8px; }
@@ -1070,13 +1108,7 @@ INDICATORS_HTML = """<!DOCTYPE html>
       padding: 14px 24px; display: flex; align-items: center; justify-content: space-between;
     }
     .logo { color: var(--accent); font-size: 1.1rem; font-weight: bold; text-decoration: none; }
-    .nav-links { display: flex; align-items: center; gap: 20px; }
-    .nav-links a { color: var(--muted); text-decoration: none; font-size: 0.9rem; }
-    .nav-links a:hover { color: var(--text); }
-    .theme-toggle {
-      background: var(--bg3); border: 1px solid var(--border); color: var(--text);
-      padding: 4px 10px; border-radius: 6px; cursor: pointer; font-size: 0.8rem; font-family: monospace;
-    }
+""" + _NAV_CSS + """
 
     .hero { text-align: center; padding: 48px 24px 32px; border-bottom: 1px solid var(--border); }
     .hero h1 { font-size: 1.8rem; color: var(--text); margin-bottom: 10px; }
@@ -1325,10 +1357,7 @@ HOME_HTML = """<!DOCTYPE html>
       padding: 14px 24px; display: flex; align-items: center; justify-content: space-between;
     }
     .logo { color: var(--accent); font-size: 1.1rem; font-weight: bold; text-decoration: none; }
-    .nav-links { display: flex; align-items: center; gap: 20px; }
-    .nav-links a { color: var(--muted); text-decoration: none; font-size: 0.9rem; }
-    .nav-links a:hover { color: var(--text); }
-    .theme-toggle { background: var(--bg3); border: 1px solid var(--border); color: var(--text); padding: 4px 10px; border-radius: 6px; cursor: pointer; font-size: 0.8rem; font-family: monospace; }
+""" + _NAV_CSS + """
 
     /* Hero */
     .hero {
@@ -1397,11 +1426,7 @@ HOME_HTML = """<!DOCTYPE html>
 <nav>
   <a class="logo" href="/">VolForecast</a>
   <div class="nav-links">
-    <a href="/indicators">Indicators</a>
-    <a href="/generate">Forecast</a>
-    <a href="/news">News</a>
-    <a href="/dashboard">Live Chart</a>
-    <button class="theme-toggle" onclick="toggleTheme()">☀ Light</button>
+""" + _NAV_LINKS + """
   </div>
 </nav>
 
@@ -1542,8 +1567,7 @@ GENERATOR_HTML = """<!DOCTYPE html>
       padding: 14px 24px; display: flex; align-items: center; justify-content: space-between;
     }
     .logo { color: #58a6ff; font-size: 1.1rem; font-weight: bold; text-decoration: none; }
-    .nav-links a { color: #8b949e; text-decoration: none; margin-left: 20px; font-size: 0.9rem; }
-    .nav-links a:hover { color: #e6edf3; }
+    """ + _NAV_CSS + """
 
     /* Hero */
     .hero {
@@ -1659,10 +1683,7 @@ GENERATOR_HTML = """<!DOCTYPE html>
 <nav>
   <a class="logo" href="/">VolForecast</a>
   <div class="nav-links">
-    <a href="/indicators">Indicators</a>
-    <a href="/generate">Forecast</a>
-    <a href="/news">News</a>
-    <a href="/dashboard">Live Chart</a>
+""" + _NAV_LINKS + """
   </div>
 </nav>
 
@@ -1828,10 +1849,7 @@ NEWS_HTML = """<!DOCTYPE html>
       padding: 14px 24px; display: flex; align-items: center; justify-content: space-between;
     }
     .logo { color: var(--accent); font-size: 1.1rem; font-weight: bold; text-decoration: none; }
-    .nav-links { display: flex; align-items: center; gap: 20px; }
-    .nav-links a { color: var(--muted); text-decoration: none; font-size: 0.9rem; }
-    .nav-links a:hover { color: var(--text); }
-    .theme-toggle { background: var(--bg3); border: 1px solid var(--border); color: var(--text); padding: 4px 10px; border-radius: 6px; cursor: pointer; font-size: 0.8rem; font-family: monospace; }
+""" + _NAV_CSS + """
 
     .hero { padding: 40px 24px 28px; border-bottom: 1px solid var(--border); text-align: center; }
     .hero h1 { font-size: 1.6rem; margin-bottom: 8px; }
@@ -1889,11 +1907,7 @@ NEWS_HTML = """<!DOCTYPE html>
 <nav>
   <a class="logo" href="/">VolForecast</a>
   <div class="nav-links">
-    <a href="/indicators">Indicators</a>
-    <a href="/generate">Forecast</a>
-    <a href="/news">News</a>
-    <a href="/dashboard">Live Chart</a>
-    <button class="theme-toggle" onclick="toggleTheme()">☀ Light</button>
+""" + _NAV_LINKS + """
   </div>
 </nav>
 
@@ -2181,7 +2195,7 @@ refresh();
 
 @app.route("/dashboard")
 def dashboard():
-    return render_template_string(DASHBOARD_HTML)
+    return render_template_string(DASHBOARD_HTML, current_user=current_user())
 
 
 @app.route("/")
