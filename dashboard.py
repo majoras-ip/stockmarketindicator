@@ -796,6 +796,223 @@ if (saved) {
 </html>"""
 
 
+# ── Home HTML ────────────────────────────────────────────────────────────────
+
+HOME_HTML = """<!DOCTYPE html>
+<html data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>VolForecast — Free TradingView Pine Script Indicators</title>
+  <style>
+    :root[data-theme="dark"]  { --bg:#0d1117; --bg2:#161b22; --bg3:#21262d; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --green:#3fb950; --red:#f85149; }
+    :root[data-theme="light"] { --bg:#ffffff; --bg2:#f6f8fa; --bg3:#eaeef2; --border:#d0d7de; --text:#1f2328; --muted:#636c76; --accent:#0969da; --green:#1a7f37; --red:#cf222e; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: monospace; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+    nav {
+      background: var(--bg2); border-bottom: 1px solid var(--border);
+      padding: 14px 24px; display: flex; align-items: center; justify-content: space-between;
+    }
+    .logo { color: var(--accent); font-size: 1.1rem; font-weight: bold; text-decoration: none; }
+    .nav-links { display: flex; align-items: center; gap: 20px; }
+    .nav-links a { color: var(--muted); text-decoration: none; font-size: 0.9rem; }
+    .nav-links a:hover { color: var(--text); }
+    .theme-toggle { background: var(--bg3); border: 1px solid var(--border); color: var(--text); padding: 4px 10px; border-radius: 6px; cursor: pointer; font-size: 0.8rem; font-family: monospace; }
+
+    /* Hero */
+    .hero {
+      text-align: center; padding: 80px 24px 60px;
+      background: linear-gradient(180deg, var(--bg2) 0%, var(--bg) 100%);
+      border-bottom: 1px solid var(--border);
+    }
+    .hero h1 { font-size: 2.4rem; line-height: 1.25; margin-bottom: 16px; }
+    .hero h1 span { color: var(--accent); }
+    .hero p { color: var(--muted); font-size: 1rem; max-width: 540px; margin: 0 auto 28px; line-height: 1.7; }
+    .hero-btns { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+    .btn-primary {
+      background: var(--accent); color: #fff; border: none;
+      padding: 11px 28px; border-radius: 8px; font-family: monospace;
+      font-size: 0.95rem; font-weight: bold; text-decoration: none; cursor: pointer;
+    }
+    .btn-primary:hover { opacity: 0.88; }
+    .btn-secondary {
+      background: var(--bg2); color: var(--text); border: 1px solid var(--border);
+      padding: 11px 28px; border-radius: 8px; font-family: monospace;
+      font-size: 0.95rem; text-decoration: none;
+    }
+    .btn-secondary:hover { border-color: var(--accent); }
+    .badge { display: inline-block; margin-bottom: 20px; background: var(--bg3); border: 1px solid var(--border); color: var(--muted); padding: 4px 14px; border-radius: 20px; font-size: 0.8rem; }
+
+    /* Features */
+    .section { max-width: 860px; margin: 0 auto; padding: 60px 24px; }
+    .section h2 { font-size: 1.4rem; margin-bottom: 32px; text-align: center; }
+    .section h2 span { color: var(--accent); }
+    .features { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 20px; }
+    .feature {
+      background: var(--bg2); border: 1px solid var(--border); border-radius: 10px;
+      padding: 22px; transition: border-color 0.15s;
+    }
+    .feature:hover { border-color: var(--accent); }
+    .feature-icon { font-size: 1.6rem; margin-bottom: 10px; }
+    .feature h3 { font-size: 0.95rem; margin-bottom: 6px; }
+    .feature p { color: var(--muted); font-size: 0.82rem; line-height: 1.55; }
+
+    /* Indicators preview */
+    .ind-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; margin-top: 28px; }
+    .ind-pill {
+      background: var(--bg2); border: 1px solid var(--border); border-radius: 8px;
+      padding: 12px 16px; text-decoration: none; transition: border-color 0.15s;
+    }
+    .ind-pill:hover { border-color: var(--accent); }
+    .ind-pill .cat { color: var(--muted); font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 3px; }
+    .ind-pill .iname { color: var(--text); font-size: 0.88rem; font-weight: bold; }
+
+    /* Steps */
+    .steps { display: flex; gap: 0; margin-top: 0; flex-wrap: wrap; }
+    .step { flex: 1; min-width: 180px; padding: 20px; border-right: 1px solid var(--border); }
+    .step:last-child { border-right: none; }
+    .step-num { background: var(--accent); color: #fff; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.85rem; font-weight: bold; margin-bottom: 10px; }
+    .step h4 { font-size: 0.88rem; margin-bottom: 4px; }
+    .step p { color: var(--muted); font-size: 0.8rem; line-height: 1.5; }
+    .steps-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+
+    /* Divider */
+    .divider { border: none; border-top: 1px solid var(--border); margin: 0; }
+
+    footer { text-align: center; padding: 32px 24px; color: var(--muted); font-size: 0.8rem; border-top: 1px solid var(--border); }
+  </style>
+</head>
+<body>
+<nav>
+  <a class="logo" href="/">VolForecast</a>
+  <div class="nav-links">
+    <a href="/indicators">Indicators</a>
+    <a href="/generate">Forecast</a>
+    <a href="/dashboard">Live Chart</a>
+    <button class="theme-toggle" onclick="toggleTheme()">☀ Light</button>
+  </div>
+</nav>
+
+<!-- Hero -->
+<div class="hero">
+  <div class="badge">✓ Works on free TradingView accounts</div>
+  <h1>Free <span>Pine Script</span><br>Indicators for TradingView</h1>
+  <p>Professional-grade indicators — volume, VWAP, ATR, MA crossovers, Fear & Greed, and more. Copy and paste into any TradingView chart in seconds.</p>
+  <div class="hero-btns">
+    <a class="btn-primary" href="/indicators">Browse Indicators</a>
+    <a class="btn-secondary" href="/generate">LSTM Forecast</a>
+  </div>
+</div>
+
+<!-- Features -->
+<div class="section">
+  <h2>Why <span>VolForecast</span>?</h2>
+  <div class="features">
+    <div class="feature">
+      <div class="feature-icon">⚡</div>
+      <h3>Instant copy & paste</h3>
+      <p>Click an indicator, copy the code, paste into TradingView's Pine Script editor — on your chart in under 30 seconds.</p>
+    </div>
+    <div class="feature">
+      <div class="feature-icon">🆓</div>
+      <h3>No paid plan needed</h3>
+      <p>All indicators use Pine Script v5 and work on TradingView's free tier. No Pro, no Pro+, no subscription required.</p>
+    </div>
+    <div class="feature">
+      <div class="feature-icon">🎯</div>
+      <h3>Any chart, any ticker</h3>
+      <p>Indicators automatically adapt to whatever symbol and timeframe you're viewing. No configuration needed.</p>
+    </div>
+    <div class="feature">
+      <div class="feature-icon">🤖</div>
+      <h3>LSTM volatility forecast</h3>
+      <p>Powered by a deep learning model trained on real market data. Get a 30-minute volatility forecast for any ticker.</p>
+    </div>
+  </div>
+</div>
+
+<hr class="divider">
+
+<!-- Indicators list -->
+<div class="section">
+  <h2>Available <span>Indicators</span></h2>
+  <div class="ind-list">
+    <a class="ind-pill" href="/indicators?kind=volume">
+      <div class="cat">Volume</div><div class="iname">24h Volume</div>
+    </a>
+    <a class="ind-pill" href="/indicators?kind=vwap">
+      <div class="cat">Volume</div><div class="iname">VWAP + Bands</div>
+    </a>
+    <a class="ind-pill" href="/indicators?kind=vwap_only">
+      <div class="cat">Volume</div><div class="iname">VWAP Only</div>
+    </a>
+    <a class="ind-pill" href="/indicators?kind=atr">
+      <div class="cat">Volatility</div><div class="iname">ATR</div>
+    </a>
+    <a class="ind-pill" href="/indicators?kind=relvol">
+      <div class="cat">Volume</div><div class="iname">Relative Volume</div>
+    </a>
+    <a class="ind-pill" href="/indicators?kind=macross">
+      <div class="cat">Trend</div><div class="iname">MA Cross</div>
+    </a>
+    <a class="ind-pill" href="/indicators?kind=feargreed">
+      <div class="cat">Momentum</div><div class="iname">Fear & Greed</div>
+    </a>
+  </div>
+</div>
+
+<hr class="divider">
+
+<!-- How it works -->
+<div class="section">
+  <h2>How it <span>works</span></h2>
+  <div class="steps-card">
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <h4>Pick an indicator</h4>
+        <p>Browse by category or search by name on the Indicators page.</p>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <h4>Copy the code</h4>
+        <p>Hit the Copy button — the Pine Script code is in your clipboard.</p>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <h4>Open TradingView</h4>
+        <p>Go to any chart → Pine Script Editor at the bottom of the screen.</p>
+      </div>
+      <div class="step">
+        <div class="step-num">4</div>
+        <h4>Paste & add to chart</h4>
+        <p>Paste the code, click Add to chart. The indicator appears instantly.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<footer>VolForecast — Free Pine Script indicators · Not financial advice</footer>
+
+<script>
+function toggleTheme() {
+  const html = document.documentElement;
+  const isDark = html.getAttribute('data-theme') === 'dark';
+  html.setAttribute('data-theme', isDark ? 'light' : 'dark');
+  document.querySelector('.theme-toggle').textContent = isDark ? '☾ Dark' : '☀ Light';
+  localStorage.setItem('theme', isDark ? 'light' : 'dark');
+}
+const saved = localStorage.getItem('theme');
+if (saved) {
+  document.documentElement.setAttribute('data-theme', saved);
+  document.querySelector('.theme-toggle').textContent = saved === 'light' ? '☾ Dark' : '☀ Light';
+}
+</script>
+</body>
+</html>"""
+
+
 # ── Generator HTML ───────────────────────────────────────────────────────────
 
 GENERATOR_HTML = """<!DOCTYPE html>
@@ -1220,8 +1437,7 @@ def dashboard():
 
 @app.route("/")
 def index():
-    from flask import redirect
-    return redirect("/generate")
+    return render_template_string(HOME_HTML)
 
 
 # ── Entry point ───────────────────────────────────────────────────────────────
