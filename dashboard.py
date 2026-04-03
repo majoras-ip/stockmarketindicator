@@ -259,9 +259,7 @@ atr14   = ta.atr(14)
 atr_avg = ta.sma(atr14, 20)
 is_high = atr14 > atr_avg * 1.5
 
-atr_color = is_high ? color.new(color.red, 20) : color.new(color.blue, 40)
-
-plot(atr14,   "ATR(14)",    color=atr_color, linewidth=2)
+plot(atr14,   "ATR(14)",    color=color.new(color.red, 0), linewidth=2)
 plot(atr_avg, "20-bar Avg", color=color.new(color.orange, 0), linewidth=1)
 
 bgcolor(is_high ? color.new(color.red, 90) : na, title="High ATR")
