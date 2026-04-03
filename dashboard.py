@@ -774,7 +774,7 @@ _NAV_CSS = """
 
 _NAV_LINKS = """
     <div class="dropdown">
-      <button class="drop-btn" onclick="toggleDrop(this)">Tools ▾</button>
+      <button class="drop-btn" onclick="toggleDrop(this, event)">Tools ▾</button>
       <div class="drop-menu">
         <a href="/indicators">Indicators</a>
         <a href="/generate">Forecast</a>
@@ -783,7 +783,7 @@ _NAV_LINKS = """
       </div>
     </div>
     <div class="dropdown">
-      <button class="drop-btn" onclick="toggleDrop(this)">Community ▾</button>
+      <button class="drop-btn" onclick="toggleDrop(this, event)">Community ▾</button>
       <div class="drop-menu">
         <a href="/request">Request Indicator</a>
         {% if current_user %}<a href="/favorites">♥ My Favorites</a>{% endif %}
@@ -791,13 +791,13 @@ _NAV_LINKS = """
     </div>
     <div class="dropdown">
       {% if current_user %}
-      <button class="drop-btn" onclick="toggleDrop(this)">{{ current_user }} ▾</button>
+      <button class="drop-btn" onclick="toggleDrop(this, event)">{{ current_user }} ▾</button>
       <div class="drop-menu">
         <a href="/favorites">♥ Favorites</a>
         <a href="/logout">Logout</a>
       </div>
       {% else %}
-      <button class="drop-btn" onclick="toggleDrop(this)">Account ▾</button>
+      <button class="drop-btn" onclick="toggleDrop(this, event)">Account ▾</button>
       <div class="drop-menu">
         <a href="/login">Login</a>
         <a href="/register">Register</a>
@@ -808,19 +808,17 @@ _NAV_LINKS = """
 """
 
 _THEME_JS = """
-function toggleDrop(btn) {
+function toggleDrop(btn, event) {
+  event.stopPropagation();
   const menu = btn.nextElementSibling;
   const isOpen = menu.classList.contains('open');
-  // close all
   document.querySelectorAll('.drop-menu').forEach(m => m.classList.remove('open'));
   document.querySelectorAll('.drop-btn').forEach(b => b.classList.remove('open'));
   if (!isOpen) { menu.classList.add('open'); btn.classList.add('open'); }
 }
-document.addEventListener('click', function(e) {
-  if (!e.target.closest('.dropdown')) {
-    document.querySelectorAll('.drop-menu').forEach(m => m.classList.remove('open'));
-    document.querySelectorAll('.drop-btn').forEach(b => b.classList.remove('open'));
-  }
+document.addEventListener('click', function() {
+  document.querySelectorAll('.drop-menu').forEach(m => m.classList.remove('open'));
+  document.querySelectorAll('.drop-btn').forEach(b => b.classList.remove('open'));
 });
 function toggleTheme() {
   const html = document.documentElement;
