@@ -656,7 +656,8 @@ def generate():
     if "ticker" not in request.args:
         return render_template_string(GENERATOR_HTML,
             ticker="SPY", interval="5m",
-            pine_code=None, arrow=None, conf=None, error=None)
+            pine_code=None, arrow=None, conf=None, error=None,
+            current_user=current_user())
 
     try:
         from data.collector import download
@@ -732,14 +733,14 @@ def generate():
             ticker=ticker, interval=interval,
             pine_code=pine_code,
             arrow=arrow, conf=conf_pct,
-            error=None)
+            error=None, current_user=current_user())
 
     except Exception as exc:
         log.exception("Generate error")
         return render_template_string(GENERATOR_HTML,
             ticker=ticker, interval=interval,
             pine_code=None, arrow=None, conf=None,
-            error=str(exc))
+            error=str(exc), current_user=current_user())
 
 
 # ── Shared nav macro ─────────────────────────────────────────────────────────
@@ -1543,21 +1544,23 @@ HOME_HTML = """<!DOCTYPE html>
 # ── Generator HTML ───────────────────────────────────────────────────────────
 
 GENERATOR_HTML = """<!DOCTYPE html>
-<html>
+<html data-theme="dark">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Volatility Forecast — Free TradingView Pine Script Generator</title>
   <style>
+    :root[data-theme="dark"]  { --bg:#0d1117; --bg2:#161b22; --bg3:#21262d; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --green:#3fb950; --red:#f85149; }
+    :root[data-theme="light"] { --bg:#ffffff; --bg2:#f6f8fa; --bg3:#eaeef2; --border:#d0d7de; --text:#1f2328; --muted:#636c76; --accent:#0969da; --green:#1a7f37; --red:#cf222e; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: monospace; background: #0d1117; color: #e6edf3; min-height: 100vh; }
+    body { font-family: monospace; background: var(--bg); color: var(--text); min-height: 100vh; transition: background 0.2s, color 0.2s; }
 
     /* Nav */
     nav {
-      background: #161b22; border-bottom: 1px solid #30363d;
+      background: var(--bg2); border-bottom: 1px solid var(--border);
       padding: 14px 24px; display: flex; align-items: center; justify-content: space-between;
     }
-    .logo { color: #58a6ff; font-size: 1.1rem; font-weight: bold; text-decoration: none; }
+    .logo { color: var(--accent); font-size: 1.1rem; font-weight: bold; text-decoration: none; }
     """ + _NAV_CSS + """
 
     /* Hero */
