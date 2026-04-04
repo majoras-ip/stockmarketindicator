@@ -2291,8 +2291,8 @@ function toggleBilling() {
   document.getElementById('lbl-monthly').classList.toggle('active', !yearly);
   document.getElementById('lbl-yearly').classList.toggle('active', yearly);
   if (yearly) {
-    document.getElementById('basic-price').innerHTML = '$99.99<span>/yr</span>';
-    document.getElementById('pro-price').innerHTML   = '$159.99<span>/yr</span>';
+    document.getElementById('basic-price').innerHTML = '$89.99<span>/yr</span>';
+    document.getElementById('pro-price').innerHTML   = '$149.99<span>/yr</span>';
     document.getElementById('btn-basic').href = document.getElementById('btn-basic').href.split('?')[0] + '?billing=yearly';
     document.getElementById('btn-pro').href   = document.getElementById('btn-pro').href.split('?')[0]   + '?billing=yearly';
   } else {
