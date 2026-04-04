@@ -1402,6 +1402,7 @@ _META = """
   <meta property="og:title" content="ChartEdge — Free TradingView Indicators">
   <meta property="og:description" content="Free Pine Script indicators for TradingView. No paid plan required.">
   <meta property="og:type" content="website">
+  <meta property="og:url" content="https://chartedge.up.railway.app">
   <meta name="twitter:card" content="summary">
   <meta name="twitter:title" content="ChartEdge — Free TradingView Indicators">
   <meta name="twitter:description" content="Free Pine Script indicators for TradingView. No paid plan required.">""" + _GA_SCRIPT + """
