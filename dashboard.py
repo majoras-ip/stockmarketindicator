@@ -173,6 +173,22 @@ def current_user():
     return session.get("username")
 
 
+# Routes that don't require login
+_PUBLIC_ROUTES = {
+    "index", "login", "register", "google_login", "google_callback",
+    "pricing", "privacy", "terms", "stripe_webhook",
+}
+
+@app.before_request
+def require_login():
+    if request.endpoint in _PUBLIC_ROUTES:
+        return
+    if request.path.startswith("/static"):
+        return
+    if "user_id" not in session:
+        return redirect(f"/login?next={request.path}")
+
+
 def _get_user_plan(user_id):
     if not user_id:
         return "free"
