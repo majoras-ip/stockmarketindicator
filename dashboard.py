@@ -3491,14 +3491,6 @@ def dashboard():
     return render_template_string(DASHBOARD_HTML, current_user=current_user())
 
 
-@app.route("/oauth-check")
-def debug_oauth():
-    redirect_uri = url_for("google_callback", _external=True, _scheme="https")
-    return jsonify({
-        "redirect_uri": redirect_uri,
-        "client_id": os.environ.get("GOOGLE_CLIENT_ID", "NOT SET")[:20] + "..." if os.environ.get("GOOGLE_CLIENT_ID") else "NOT SET",
-    })
-
 @app.route("/")
 def index():
     return render_template_string(HOME_HTML, current_user=current_user())
