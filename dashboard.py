@@ -666,11 +666,12 @@ fill(p50, p200, color=fill_col, title="Trend Fill")
 
 // ── Label on last bar ─────────────────────────────────────────────
 if barstate.islast
-    trend = bull ? "Bullish" : "Bearish"
+    trend      = bull ? "Bullish" : "Bearish"
+    lbl_color  = bull ? color.new(color.green, 30) : color.new(color.red, 30)
     label.new(bar_index, ema50,
-              trend + " — 50/200",
+              trend + " - 50/200",
               style=label.style_label_left, size=size.small,
-              color=color.new(bull ? color.green : color.red, 30),
+              color=lbl_color,
               textcolor=color.white)
 """
 
