@@ -17,6 +17,7 @@ import sys
 from datetime import date
 from functools import wraps
 
+import resend
 import stripe
 
 from authlib.integrations.flask_client import OAuth
@@ -36,11 +37,38 @@ CORS(app)
 
 # ── Stripe ────────────────────────────────────────────────────────────────────
 stripe.api_key = os.environ.get("STRIPE_SECRET_KEY", "")
-STRIPE_BASIC_PRICE  = "price_1TILpSBcm3kIFrAZiBGS9BVp"
-STRIPE_PRO_PRICE    = "price_1TILpcBcm3kIFrAZDpTJvGud"
+STRIPE_BASIC_PRICE         = "price_1TIXWYBcm3kIFrAZRBWgcmuJ"
+STRIPE_PRO_PRICE           = "price_1TIXWRBcm3kIFrAZg8gflpnz"
+STRIPE_BASIC_PRICE_YEARLY  = "price_1TIXYWBcm3kIFrAZ2xsrdS1q"
+STRIPE_PRO_PRICE_YEARLY    = "price_1TIXZ5Bcm3kIFrAZe9m5pxzV"
 STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
-STRIPE_PLAN_LIMITS  = {"free": 3, "basic": 10, "pro": -1}  # -1 = unlimited
-APP_URL = "https://chartedge.up.railway.app"
+STRIPE_PLAN_LIMITS    = {"free": 3, "basic": 10, "pro": -1}  # -1 = unlimited
+APP_URL               = "https://chartedge.up.railway.app"
+
+# ── Resend email ──────────────────────────────────────────────────────────────
+resend.api_key = os.environ.get("RESEND_API_KEY", "")
+
+def send_welcome_email(to_email: str, username: str, referral_code: str) -> None:
+    if not resend.api_key or not to_email:
+        return
+    try:
+        resend.Emails.send({
+            "from": "ChartEdge <onboarding@resend.dev>",
+            "to": to_email,
+            "subject": "Welcome to ChartEdge!",
+            "html": f"""
+            <div style="font-family:-apple-system,sans-serif;max-width:520px;margin:0 auto;padding:32px;background:#0d1117;color:#e6edf3;border-radius:10px;">
+              <h1 style="color:#58a6ff;margin-bottom:8px;">Welcome to ChartEdge!</h1>
+              <p style="color:#8b949e;margin-bottom:24px;">Hi {username}, your account is ready. Start copying free Pine Script indicators to your TradingView charts in seconds.</p>
+              <a href="{APP_URL}/indicators" style="display:inline-block;background:#58a6ff;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:600;margin-bottom:24px;">Browse Indicators →</a>
+              <hr style="border:none;border-top:1px solid #30363d;margin:24px 0;">
+              <p style="color:#8b949e;font-size:.88rem;">Your referral code: <strong style="color:#e6edf3;letter-spacing:2px;">{referral_code}</strong><br>Share it with friends — they get 7 days of Pro free when they sign up.</p>
+              <p style="color:#636c76;font-size:.78rem;margin-top:24px;">© 2026 ChartEdge · Not financial advice</p>
+            </div>
+            """,
+        })
+    except Exception as e:
+        log.warning("Failed to send welcome email: %s", e)
 
 # ── Database ──────────────────────────────────────────────────────────────────
 
@@ -114,7 +142,8 @@ def _migrate_db():
             """)
     except Exception:
         pass
-    for col in ["plan TEXT DEFAULT 'free'", "stripe_customer_id TEXT", "stripe_subscription_id TEXT"]:
+    for col in ["plan TEXT DEFAULT 'free'", "stripe_customer_id TEXT", "stripe_subscription_id TEXT",
+                "email TEXT", "referral_code TEXT", "referred_by TEXT"]:
         try:
             with get_db() as conn:
                 conn.execute(f"ALTER TABLE users ADD COLUMN {col}")
@@ -186,6 +215,8 @@ def require_login():
     if request.path.startswith("/static"):
         return
     if "user_id" not in session:
+        if request.path.startswith("/api/"):
+            return jsonify({"error": "not_logged_in"}), 401
         return redirect(f"/login?next={request.path}")
 
 
@@ -981,25 +1012,44 @@ CATEGORIES = {
 @app.route("/register", methods=["GET", "POST"])
 def register():
     error = None
+    ref = request.args.get("ref", "")
     if request.method == "POST":
-        username = request.form.get("username", "").strip()
-        password = request.form.get("password", "")
+        username   = request.form.get("username", "").strip()
+        password   = request.form.get("password", "")
+        email      = request.form.get("email", "").strip()
+        ref        = request.form.get("ref", "").strip()
         if not username or not password:
             error = "Username and password are required."
         elif len(password) < 6:
             error = "Password must be at least 6 characters."
         else:
             try:
+                ref_code = secrets.token_urlsafe(6).upper()
                 with get_db() as conn:
-                    conn.execute("INSERT INTO users (username, pw_hash) VALUES (?, ?)",
-                                 (username, generate_password_hash(password)))
+                    conn.execute(
+                        "INSERT INTO users (username, pw_hash, email, referral_code, referred_by) VALUES (?, ?, ?, ?, ?)",
+                        (username, generate_password_hash(password), email or None, ref_code, ref or None)
+                    )
                 row = get_db().execute("SELECT id FROM users WHERE username=?", (username,)).fetchone()
-                session["user_id"] = row["id"]
+                user_id = row["id"]
+                session["user_id"] = user_id
                 session["username"] = username
+
+                # If referred by someone, give new user 7 days Pro trial
+                if ref:
+                    referrer = get_db().execute("SELECT id FROM users WHERE referral_code=?", (ref,)).fetchone()
+                    if referrer:
+                        with get_db() as conn:
+                            conn.execute("UPDATE users SET plan='pro' WHERE id=?", (user_id,))
+
+                # Send welcome email
+                if email:
+                    send_welcome_email(email, username, ref_code)
+
                 return redirect("/indicators")
             except sqlite3.IntegrityError:
                 error = "Username already taken."
-    return render_template_string(AUTH_HTML, mode="register", error=error)
+    return render_template_string(AUTH_HTML, mode="register", error=error, ref=ref)
 
 
 @app.route("/login", methods=["GET", "POST"])
@@ -1236,8 +1286,17 @@ def indicators_page():
 @app.route("/subscribe/<plan>")
 @login_required
 def subscribe(plan):
-    price_id = STRIPE_BASIC_PRICE if plan == "basic" else STRIPE_PRO_PRICE
-    user_id  = session["user_id"]
+    billing = request.args.get("billing", "monthly")
+    price_map = {
+        ("basic",  "monthly"): STRIPE_BASIC_PRICE,
+        ("basic",  "yearly"):  STRIPE_BASIC_PRICE_YEARLY,
+        ("pro",    "monthly"): STRIPE_PRO_PRICE,
+        ("pro",    "yearly"):  STRIPE_PRO_PRICE_YEARLY,
+    }
+    price_id = price_map.get((plan, billing))
+    if not price_id:
+        return redirect("/pricing?error=1")
+    user_id = session["user_id"]
     try:
         checkout = stripe.checkout.Session.create(
             payment_method_types=["card"],
@@ -1272,7 +1331,7 @@ def stripe_webhook():
             try:
                 sub   = stripe.Subscription.retrieve(sub_id)
                 price = sub["items"]["data"][0]["price"]["id"]
-                plan  = "pro" if price == STRIPE_PRO_PRICE else "basic"
+                plan  = "pro" if price in (STRIPE_PRO_PRICE, STRIPE_PRO_PRICE_YEARLY) else "basic"
             except Exception:
                 plan = "basic"
             with get_db() as conn:
@@ -1358,7 +1417,26 @@ def admin_codes():
             conn.execute("DELETE FROM promo_codes WHERE code=?", (request.form.get("code"),))
 
     codes = get_db().execute("SELECT * FROM promo_codes ORDER BY created DESC").fetchall()
-    return render_template_string(ADMIN_CODES_HTML, codes=codes, new_code=new_code, new_plan=new_plan, current_user=current_user())
+
+    # Dashboard stats
+    db = get_db()
+    total_users   = db.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+    free_users    = db.execute("SELECT COUNT(*) FROM users WHERE plan='free' OR plan IS NULL").fetchone()[0]
+    basic_users   = db.execute("SELECT COUNT(*) FROM users WHERE plan='basic'").fetchone()[0]
+    pro_users     = db.execute("SELECT COUNT(*) FROM users WHERE plan='pro'").fetchone()[0]
+    new_today     = db.execute("SELECT COUNT(*) FROM users WHERE date(created)=date('now')").fetchone()[0]
+    new_week      = db.execute("SELECT COUNT(*) FROM users WHERE created >= datetime('now', '-7 days')").fetchone()[0]
+    total_copies  = db.execute("SELECT SUM(count) FROM copy_log").fetchone()[0] or 0
+    copies_today  = db.execute("SELECT SUM(count) FROM copy_log WHERE date=date('now')").fetchone()[0] or 0
+    recent_users  = db.execute("SELECT username, plan, email, created FROM users ORDER BY created DESC LIMIT 10").fetchall()
+
+    return render_template_string(ADMIN_CODES_HTML,
+        codes=codes, new_code=new_code, new_plan=new_plan,
+        total_users=total_users, free_users=free_users, basic_users=basic_users, pro_users=pro_users,
+        new_today=new_today, new_week=new_week,
+        total_copies=total_copies, copies_today=copies_today,
+        recent_users=recent_users,
+        current_user=current_user())
 
 
 @app.route("/redeem", methods=["GET", "POST"])
@@ -1381,6 +1459,26 @@ def redeem():
                 conn.execute("UPDATE users SET plan=? WHERE id=?", (plan, user_id))
             message = f"Success! Your account has been upgraded to {plan.upper()}."
     return render_template_string(REDEEM_HTML, message=message, error=error, current_user=current_user())
+
+
+@app.route("/refer")
+@login_required
+def refer():
+    user_id = session["user_id"]
+    row = get_db().execute("SELECT referral_code, plan FROM users WHERE id=?", (user_id,)).fetchone()
+    ref_code   = row["referral_code"] if row else None
+    # Generate one if missing
+    if not ref_code:
+        ref_code = secrets.token_urlsafe(6).upper()
+        with get_db() as conn:
+            conn.execute("UPDATE users SET referral_code=? WHERE id=?", (ref_code, user_id))
+    referral_count = get_db().execute(
+        "SELECT COUNT(*) FROM users WHERE referred_by=?", (ref_code,)
+    ).fetchone()[0]
+    referral_link = f"{APP_URL}/register?ref={ref_code}"
+    return render_template_string(REFER_HTML,
+        ref_code=ref_code, referral_link=referral_link,
+        referral_count=referral_count, current_user=current_user())
 
 
 ADMIN_LOGIN_HTML = """<!DOCTYPE html>
@@ -1407,47 +1505,76 @@ ADMIN_LOGIN_HTML = """<!DOCTYPE html>
 
 ADMIN_CODES_HTML = """<!DOCTYPE html>
 <html data-theme="dark">
-<head><meta charset="UTF-8"><title>Promo Codes · ChartEdge</title>
+<head><meta charset="UTF-8"><title>Studio · ChartEdge</title>
 <style>
-  :root{--bg:#0d1117;--bg2:#161b22;--text:#e6edf3;--muted:#8b949e;--border:#30363d;--accent:#58a6ff;}
+  :root{--bg:#0d1117;--bg2:#161b22;--text:#e6edf3;--muted:#8b949e;--border:#30363d;--accent:#58a6ff;--green:#3fb950;}
   *{box-sizing:border-box;margin:0;padding:0;}
   body{font-family:-apple-system,sans-serif;background:var(--bg);color:var(--text);padding:40px 24px;}
-  h1{margin-bottom:24px;} h1 span{color:var(--accent);}
-  .card{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:24px;margin-bottom:20px;max-width:700px;}
+  h1{margin-bottom:6px;font-size:1.6rem;} h1 span{color:var(--accent);}
+  h2{font-size:1rem;color:var(--muted);font-weight:500;margin:28px 0 14px;}
+  .stats{display:flex;gap:14px;flex-wrap:wrap;max-width:860px;margin-bottom:8px;}
+  .stat{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:18px 22px;flex:1;min-width:120px;}
+  .stat .num{font-size:1.8rem;font-weight:800;color:var(--accent);}
+  .stat .lbl{font-size:.75rem;color:var(--muted);margin-top:2px;}
+  .stat.green .num{color:var(--green);}
+  .card{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:20px;margin-bottom:16px;max-width:860px;}
   .gen-form{display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
   select,button{padding:9px 14px;border-radius:6px;font-size:.9rem;cursor:pointer;}
   select{background:var(--bg);border:1px solid var(--border);color:var(--text);}
   .btn-gen{background:var(--accent);color:#fff;border:none;}
-  .new-code{background:#1f2d1f;border:1px solid #3fb950;border-radius:8px;padding:14px 18px;margin-bottom:20px;max-width:700px;}
-  .new-code strong{font-size:1.3rem;letter-spacing:2px;color:#3fb950;}
-  table{width:100%;max-width:700px;border-collapse:collapse;font-size:.88rem;}
-  th,td{padding:10px 12px;text-align:left;border-bottom:1px solid var(--border);}
-  th{color:var(--muted);font-weight:500;}
-  .badge{padding:2px 8px;border-radius:10px;font-size:.75rem;font-weight:600;}
-  .badge-pro{background:#1f2d1f;color:#3fb950;} .badge-basic{background:#1f3a5f;color:#58a6ff;}
-  .used{opacity:.5;} .btn-del{background:none;border:1px solid #f85149;color:#f85149;padding:4px 10px;border-radius:6px;font-size:.78rem;cursor:pointer;}
+  .new-code{background:#1f2d1f;border:1px solid var(--green);border-radius:8px;padding:14px 18px;margin-bottom:16px;max-width:860px;}
+  .new-code strong{font-size:1.3rem;letter-spacing:2px;color:var(--green);}
+  table{width:100%;max-width:860px;border-collapse:collapse;font-size:.85rem;}
+  th,td{padding:9px 12px;text-align:left;border-bottom:1px solid var(--border);}
+  th{color:var(--muted);font-weight:500;font-size:.78rem;text-transform:uppercase;}
+  .badge{padding:2px 8px;border-radius:10px;font-size:.72rem;font-weight:600;}
+  .badge-pro{background:#1f2d1f;color:var(--green);} .badge-basic{background:#1f3a5f;color:var(--accent);} .badge-free{background:var(--bg);color:var(--muted);border:1px solid var(--border);}
+  .used{opacity:.45;} .btn-del{background:none;border:1px solid #f85149;color:#f85149;padding:3px 9px;border-radius:6px;font-size:.75rem;cursor:pointer;}
+  .section-title{font-size:.95rem;font-weight:600;margin-bottom:12px;color:var(--text);}
 </style></head>
 <body>
-<h1>Promo <span>Codes</span></h1>
+<h1>ChartEdge <span>Studio</span></h1>
+<p style="color:var(--muted);font-size:.85rem;margin-bottom:24px;">Admin dashboard · promo codes · user management</p>
 
-{% if new_code %}
-<div class="new-code">
-  New code generated — share this:<br><br>
-  <strong>{{ new_code }}</strong> &nbsp;·&nbsp; {{ new_plan|upper }}
+<!-- Stats -->
+<h2>Overview</h2>
+<div class="stats">
+  <div class="stat"><div class="num">{{ total_users }}</div><div class="lbl">Total Users</div></div>
+  <div class="stat green"><div class="num">{{ new_today }}</div><div class="lbl">New Today</div></div>
+  <div class="stat green"><div class="num">{{ new_week }}</div><div class="lbl">New This Week</div></div>
+  <div class="stat"><div class="num">{{ free_users }}</div><div class="lbl">Free</div></div>
+  <div class="stat"><div class="num">{{ basic_users }}</div><div class="lbl">Basic</div></div>
+  <div class="stat"><div class="num">{{ pro_users }}</div><div class="lbl">Pro</div></div>
+  <div class="stat"><div class="num">{{ copies_today }}</div><div class="lbl">Copies Today</div></div>
+  <div class="stat"><div class="num">{{ total_copies }}</div><div class="lbl">Total Copies</div></div>
 </div>
-{% endif %}
 
+<!-- Recent users -->
+<h2>Recent Signups</h2>
+<table>
+  <tr><th>Username</th><th>Plan</th><th>Email</th><th>Joined</th></tr>
+  {% for u in recent_users %}
+  <tr>
+    <td>{{ u.username }}</td>
+    <td><span class="badge badge-{{ u.plan or 'free' }}">{{ (u.plan or 'free')|upper }}</span></td>
+    <td style="color:var(--muted)">{{ u.email or '—' }}</td>
+    <td style="color:var(--muted)">{{ u.created[:10] }}</td>
+  </tr>
+  {% endfor %}
+</table>
+
+<!-- Promo codes -->
+<h2>Promo Codes</h2>
+{% if new_code %}
+<div class="new-code">New code — share this:<br><br><strong>{{ new_code }}</strong> &nbsp;·&nbsp; {{ new_plan|upper }}</div>
+{% endif %}
 <div class="card">
   <form method="POST" class="gen-form">
     <input type="hidden" name="action" value="generate">
-    <select name="plan">
-      <option value="pro">Pro</option>
-      <option value="basic">Basic</option>
-    </select>
+    <select name="plan"><option value="pro">Pro</option><option value="basic">Basic</option></select>
     <button type="submit" class="btn-gen">Generate Code</button>
   </form>
 </div>
-
 <table>
   <tr><th>Code</th><th>Plan</th><th>Status</th><th>Created</th><th></th></tr>
   {% for c in codes %}
@@ -1456,15 +1583,12 @@ ADMIN_CODES_HTML = """<!DOCTYPE html>
     <td><span class="badge badge-{{ c.plan }}">{{ c.plan|upper }}</span></td>
     <td>{{ 'Used' if c.used else 'Available' }}</td>
     <td>{{ c.created[:10] }}</td>
-    <td>
-      {% if not c.used %}
+    <td>{% if not c.used %}
       <form method="POST" style="display:inline">
         <input type="hidden" name="action" value="delete">
         <input type="hidden" name="code" value="{{ c.code }}">
         <button type="submit" class="btn-del">Delete</button>
-      </form>
-      {% endif %}
-    </td>
+      </form>{% endif %}</td>
   </tr>
   {% endfor %}
   {% if not codes %}<tr><td colspan="5" style="color:var(--muted)">No codes yet.</td></tr>{% endif %}
@@ -1854,6 +1978,7 @@ _NAV_LINKS = """
         <a href="/favorites">♥ Favorites</a>
         <a href="/billing">Billing</a>
         <a href="/redeem">Redeem Code</a>
+        <a href="/refer">Refer a Friend</a>
         <a href="/logout">Logout</a>
       </div>
       {% else %}
@@ -2072,6 +2197,14 @@ PRICING_HTML = """<!DOCTYPE html>
     .btn-basic{background:var(--bg);border:2px solid var(--accent);color:var(--accent);}
     .btn-pro{background:var(--accent);color:#fff;} .btn-plan:hover{opacity:.88;}
     .error-box{background:#2d1f1f;border:1px solid #f85149;border-radius:8px;padding:12px 16px;margin-bottom:20px;color:#f85149;font-size:.88rem;text-align:center;}
+    .billing-toggle{display:flex;align-items:center;justify-content:center;gap:12px;margin-bottom:36px;}
+    .toggle-track{width:48px;height:26px;background:var(--border);border-radius:13px;cursor:pointer;position:relative;transition:background .2s;}
+    .toggle-track.on{background:var(--accent);}
+    .toggle-thumb{width:20px;height:20px;background:#fff;border-radius:50%;position:absolute;top:3px;left:3px;transition:left .2s;}
+    .toggle-track.on .toggle-thumb{left:25px;}
+    .toggle-label{font-size:.9rem;color:var(--muted);}
+    .toggle-label.active{color:var(--text);font-weight:600;}
+    .save-badge{background:#1f2d1f;color:#3fb950;font-size:.75rem;padding:2px 8px;border-radius:10px;font-weight:600;}
     footer{text-align:center;padding:32px 24px;color:var(--muted);font-size:.8rem;border-top:1px solid var(--border);}
   </style>
 </head>
@@ -2085,6 +2218,15 @@ PRICING_HTML = """<!DOCTYPE html>
   <h1>Simple <span>Pricing</span></h1>
   <p class="subtitle">Start free. Upgrade when you need more.</p>
   {% if error %}<div class="error-box">Something went wrong with checkout. Please try again.</div>{% endif %}
+
+  <div class="billing-toggle">
+    <span class="toggle-label active" id="lbl-monthly">Monthly</span>
+    <div class="toggle-track" id="billing-toggle" onclick="toggleBilling()">
+      <div class="toggle-thumb"></div>
+    </div>
+    <span class="toggle-label" id="lbl-yearly">Yearly <span class="save-badge">Save ~17%</span></span>
+  </div>
+
   <div class="plans">
     <div class="plan">
       <div class="plan-name">Free</div>
@@ -2098,31 +2240,58 @@ PRICING_HTML = """<!DOCTYPE html>
     </div>
     <div class="plan">
       <div class="plan-name">Basic</div>
-      <div class="plan-price">$9.99<span>/mo</span></div>
+      <div class="plan-price" id="basic-price">$9.99<span>/mo</span></div>
       <div class="plan-desc">For active traders who copy often.</div>
       <ul class="plan-features">
         <li>10 copies per day</li><li>All indicators visible</li>
         <li>Watchlist</li><li>Earnings calendar</li><li class="no">LSTM forecast</li>
       </ul>
-      {% if current_user %}<a href="/subscribe/basic" class="btn-plan btn-basic">Get Basic</a>
-      {% else %}<a href="/login?next=/subscribe/basic" class="btn-plan btn-basic">Get Basic</a>{% endif %}
+      {% if current_user %}
+      <a href="/subscribe/basic" class="btn-plan btn-basic" id="btn-basic">Get Basic</a>
+      {% else %}
+      <a href="/login?next=/subscribe/basic" class="btn-plan btn-basic" id="btn-basic">Get Basic</a>
+      {% endif %}
     </div>
     <div class="plan featured">
       <div class="plan-badge">MOST POPULAR</div>
       <div class="plan-name">Pro</div>
-      <div class="plan-price">$15.99<span>/mo</span></div>
+      <div class="plan-price" id="pro-price">$15.99<span>/mo</span></div>
       <div class="plan-desc">Unlimited access for power users.</div>
       <ul class="plan-features">
         <li>Unlimited copies</li><li>All indicators visible</li>
         <li>Watchlist</li><li>Earnings calendar</li><li>LSTM forecast</li>
       </ul>
-      {% if current_user %}<a href="/subscribe/pro" class="btn-plan btn-pro">Get Pro</a>
-      {% else %}<a href="/login?next=/subscribe/pro" class="btn-plan btn-pro">Get Pro</a>{% endif %}
+      {% if current_user %}
+      <a href="/subscribe/pro" class="btn-plan btn-pro" id="btn-pro">Get Pro</a>
+      {% else %}
+      <a href="/login?next=/subscribe/pro" class="btn-plan btn-pro" id="btn-pro">Get Pro</a>
+      {% endif %}
     </div>
   </div>
 </div>
 <footer>© 2026 ChartEdge · <a href="/privacy" style="color:inherit">Privacy</a> · <a href="/terms" style="color:inherit">Terms</a></footer>
-<script>""" + _THEME_JS + """</script>
+<script>
+var yearly = false;
+function toggleBilling() {
+  yearly = !yearly;
+  var track = document.getElementById('billing-toggle');
+  track.classList.toggle('on', yearly);
+  document.getElementById('lbl-monthly').classList.toggle('active', !yearly);
+  document.getElementById('lbl-yearly').classList.toggle('active', yearly);
+  if (yearly) {
+    document.getElementById('basic-price').innerHTML = '$99.99<span>/yr</span>';
+    document.getElementById('pro-price').innerHTML   = '$159.99<span>/yr</span>';
+    document.getElementById('btn-basic').href = document.getElementById('btn-basic').href.split('?')[0] + '?billing=yearly';
+    document.getElementById('btn-pro').href   = document.getElementById('btn-pro').href.split('?')[0]   + '?billing=yearly';
+  } else {
+    document.getElementById('basic-price').innerHTML = '$9.99<span>/mo</span>';
+    document.getElementById('pro-price').innerHTML   = '$15.99<span>/mo</span>';
+    document.getElementById('btn-basic').href = document.getElementById('btn-basic').href.split('?')[0];
+    document.getElementById('btn-pro').href   = document.getElementById('btn-pro').href.split('?')[0];
+  }
+}
+""" + _THEME_JS + """
+</script>
 </body>
 </html>"""
 
@@ -2195,10 +2364,22 @@ AUTH_HTML = """<!DOCTYPE html>
         <label>Username</label>
         <input type="text" name="username" required autofocus>
       </div>
+      {% if mode == 'register' %}
+      <div class="form-group">
+        <label>Email <span style="color:var(--muted);font-size:.75rem;">(optional — for welcome email)</span></label>
+        <input type="text" name="email" placeholder="you@example.com">
+      </div>
+      {% endif %}
       <div class="form-group">
         <label>Password{% if mode == 'register' %} (min 6 chars){% endif %}</label>
         <input type="password" name="password" required>
       </div>
+      {% if mode == 'register' and ref %}
+      <input type="hidden" name="ref" value="{{ ref }}">
+      <div style="background:#1f2d1f;border:1px solid #3fb950;border-radius:6px;padding:8px 12px;font-size:.82rem;color:#3fb950;margin-bottom:12px;">
+        ✓ Referral code applied — you'll get 7 days of Pro free!
+      </div>
+      {% endif %}
       <button class="btn-submit" type="submit">{{ 'Create account' if mode == 'register' else 'Sign in' }}</button>
     </form>
     <div class="switch">
@@ -3695,19 +3876,25 @@ async function addTicker() {
   const input  = document.getElementById('ticker-input');
   const ticker = input.value.trim().toUpperCase();
   if (!ticker) return;
-  const res  = await fetch('/api/watchlist/' + ticker, {method: 'POST'});
-  const data = await res.json();
-  if (data.watching) {
-    input.value = '';
-    document.getElementById('empty-msg') && document.getElementById('empty-msg').remove();
-    const grid = document.getElementById('ticker-grid');
-    const card = document.createElement('div');
-    card.className = 'ticker-card';
-    card.id = 'card-' + ticker;
-    card.innerHTML = '<div class="ticker-left"><span class="ticker-sym">' + ticker + '</span><span class="ticker-price" id="price-' + ticker + '"><span class="spin"></span></span><span class="ticker-chg" id="chg-' + ticker + '"></span></div><button class="btn-remove" onclick="removeTicker(\'' + ticker + '\')">✕ Remove</button>';
-    grid.appendChild(card);
-    loadPrices();
-  }
+  try {
+    const res  = await fetch('/api/watchlist/' + ticker, {method: 'POST'});
+    if (!res.ok) {
+      if (res.status === 401) { window.location.href = '/login'; return; }
+      return;
+    }
+    const data = await res.json();
+    if (data.watching) {
+      input.value = '';
+      document.getElementById('empty-msg') && document.getElementById('empty-msg').remove();
+      const grid = document.getElementById('ticker-grid');
+      const card = document.createElement('div');
+      card.className = 'ticker-card';
+      card.id = 'card-' + ticker;
+      card.innerHTML = '<div class="ticker-left"><span class="ticker-sym">' + ticker + '</span><span class="ticker-price" id="price-' + ticker + '"><span class="spin"></span></span><span class="ticker-chg" id="chg-' + ticker + '"></span></div><button class="btn-remove" onclick="removeTicker(\'' + ticker + '\')">✕ Remove</button>';
+      grid.appendChild(card);
+      loadPrices();
+    }
+  } catch(e) { console.error('addTicker error:', e); }
 }
 
 async function removeTicker(ticker) {
@@ -4145,6 +4332,90 @@ refresh();
 """ + _THEME_JS + """
 </script>
 </div>
+</body>
+</html>"""
+
+
+REFER_HTML = """<!DOCTYPE html>
+<html lang="en">
+<head>""" + _META + """
+<title>Refer a Friend · ChartEdge</title>
+<style>
+.refer-card{max-width:560px;margin:60px auto;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:40px;}
+.refer-card h2{margin:0 0 8px;font-size:1.5rem;}
+.refer-card p{color:var(--muted);margin:0 0 24px;font-size:.95rem;}
+.refer-link-box{display:flex;gap:8px;margin-bottom:28px;}
+.refer-link-box input{flex:1;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:10px 14px;color:var(--text);font-size:.9rem;outline:none;}
+.refer-link-box button{background:var(--accent);color:#fff;border:none;border-radius:6px;padding:10px 20px;cursor:pointer;font-weight:600;font-size:.9rem;white-space:nowrap;}
+.refer-link-box button:hover{opacity:.85;}
+.refer-stats{display:flex;gap:16px;margin-bottom:28px;}
+.refer-stat{flex:1;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:16px;text-align:center;}
+.refer-stat .num{font-size:2rem;font-weight:700;color:var(--accent);}
+.refer-stat .lbl{font-size:.8rem;color:var(--muted);margin-top:4px;}
+.refer-steps{border-top:1px solid var(--border);padding-top:24px;}
+.refer-steps h3{font-size:1rem;margin:0 0 16px;color:var(--muted);}
+.step-row{display:flex;gap:14px;align-items:flex-start;margin-bottom:14px;}
+.step-num{width:28px;height:28px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:.8rem;font-weight:700;flex-shrink:0;}
+.step-text{font-size:.9rem;line-height:1.5;}
+.step-text strong{color:var(--text);}
+.step-text span{color:var(--muted);}
+#copy-msg{font-size:.8rem;color:var(--accent);margin-top:-20px;margin-bottom:16px;height:16px;}
+</style>
+</head>
+<body>
+<div class="nav-bar">
+  <a href="/" class="brand">⚡ ChartEdge</a>
+  <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
+  <button class="hamburger" onclick="document.getElementById('mobile-nav').classList.toggle('open')">☰</button>
+</div>
+<div class="refer-card">
+  <h2>Refer a Friend</h2>
+  <p>Share your link — friends get <strong>7 days of Pro free</strong> when they sign up.</p>
+
+  <div class="refer-stats">
+    <div class="refer-stat">
+      <div class="num">{{ referral_count }}</div>
+      <div class="lbl">Friends Referred</div>
+    </div>
+    <div class="refer-stat">
+      <div class="num" style="font-size:1.1rem;padding-top:10px;">{{ ref_code }}</div>
+      <div class="lbl">Your Code</div>
+    </div>
+  </div>
+
+  <div class="refer-link-box">
+    <input id="ref-link" type="text" value="{{ referral_link }}" readonly>
+    <button onclick="copyLink()">Copy Link</button>
+  </div>
+  <div id="copy-msg"></div>
+
+  <div class="refer-steps">
+    <h3>How it works</h3>
+    <div class="step-row">
+      <div class="step-num">1</div>
+      <div class="step-text"><strong>Share your link</strong><br><span>Send it to a friend or post it anywhere.</span></div>
+    </div>
+    <div class="step-row">
+      <div class="step-num">2</div>
+      <div class="step-text"><strong>They sign up</strong><br><span>Your friend registers using your link and gets 7 days of Pro free.</span></div>
+    </div>
+    <div class="step-row">
+      <div class="step-num">3</div>
+      <div class="step-text"><strong>They start trading smarter</strong><br><span>Full access to all Pro indicators and forecasts during their trial.</span></div>
+    </div>
+  </div>
+</div>
+<script>
+function copyLink() {
+  const inp = document.getElementById('ref-link');
+  inp.select();
+  navigator.clipboard.writeText(inp.value).then(() => {
+    document.getElementById('copy-msg').textContent = 'Link copied to clipboard!';
+    setTimeout(() => document.getElementById('copy-msg').textContent = '', 3000);
+  });
+}
+""" + _THEME_JS + """
+</script>
 </body>
 </html>"""
 
