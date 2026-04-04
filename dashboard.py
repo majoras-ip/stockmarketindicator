@@ -1585,7 +1585,7 @@ ADMIN_CODES_HTML = """<!DOCTYPE html>
     <td>{{ u.username }}</td>
     <td><span class="badge badge-{{ u.plan or 'free' }}">{{ (u.plan or 'free')|upper }}</span></td>
     <td style="color:var(--muted)">{{ u.email or '—' }}</td>
-    <td style="color:var(--muted)">{{ u.created|string[:10] }}</td>
+    <td style="color:var(--muted)">{{ u.created|string|truncate(10, killwords=True, end='') }}</td>
   </tr>
   {% endfor %}
 </table>
@@ -1609,7 +1609,7 @@ ADMIN_CODES_HTML = """<!DOCTYPE html>
     <td><code>{{ c.code }}</code></td>
     <td><span class="badge badge-{{ c.plan }}">{{ c.plan|upper }}</span></td>
     <td>{{ 'Used' if c.used else 'Available' }}</td>
-    <td>{{ c.created|string[:10] }}</td>
+    <td>{{ c.created|string|truncate(10, killwords=True, end='') }}</td>
     <td>{% if not c.used %}
       <form method="POST" style="display:inline">
         <input type="hidden" name="action" value="delete">
