@@ -3183,7 +3183,7 @@ INDICATORS_HTML = """<!DOCTYPE html>
   {% if pine_code %}
   <div class="card {{ 'output' if kind in ['vwap', 'atr'] else '' }}">
     <div class="pine-label">
-      <span>Pine Script v5 — works on any chart, no ticker needed</span>
+      <span>Pine Script v6 — works on any chart, no ticker needed</span>
       {% if user_plan != 'pro' %}
       <span class="copies-badge" id="copies-badge">
         {% if copies_remaining == 0 %}0 copies left{% else %}{{ copies_remaining }} copies left today{% endif %}
@@ -3574,8 +3574,8 @@ HOME_HTML = """<!DOCTYPE html>
     <div class="stat-label">Free trial on Pro & Basic</div>
   </div>
   <div class="stat-item">
-    <div class="stat-num">v5</div>
-    <div class="stat-label">Pine Script v5 / v6</div>
+    <div class="stat-num">v6</div>
+    <div class="stat-label">Pine Script v6</div>
   </div>
 </div>
 
@@ -3591,7 +3591,7 @@ HOME_HTML = """<!DOCTYPE html>
     <div class="feature">
       <div class="feature-icon">🆓</div>
       <h3>No paid plan needed</h3>
-      <p>All indicators use Pine Script v5/v6 and work on TradingView's free tier. No Pro, no Pro+, no upgrade required.</p>
+      <p>All indicators use Pine Script v6 and work on TradingView's free tier. No Pro, no Pro+, no upgrade required.</p>
     </div>
     <div class="feature">
       <div class="feature-icon">🎯</div>
@@ -3819,7 +3819,7 @@ HOME_HTML = """<!DOCTYPE html>
         Do the indicators work on a free TradingView account?
         <span class="faq-chevron">▼</span>
       </div>
-      <div class="faq-a">Yes — all Pine Script indicators on ChartEdge are built with TradingView's free tier in mind. They use Pine Script v5/v6 and do not require any TradingView paid plan to run.</div>
+      <div class="faq-a">Yes — all Pine Script indicators on ChartEdge are built with TradingView's free tier in mind. They use Pine Script v6 and do not require any TradingView paid plan to run.</div>
     </div>
     <div class="faq-item">
       <div class="faq-q" onclick="toggleFaq(this)">
@@ -4050,7 +4050,7 @@ GENERATOR_HTML = """<!DOCTYPE html>
     </div>
 
     <div class="pine-label">
-      <span>Pine Script v5 — paste into TradingView Pine Editor</span>
+      <span>Pine Script v6 — paste into TradingView Pine Editor</span>
       <button class="btn-copy" onclick="copyPine()">Copy</button>
     </div>
     <textarea id="pine-out" readonly>{{ pine_code }}</textarea>
@@ -4247,7 +4247,7 @@ FAQ_HTML = """<!DOCTYPE html>
   </div>
   <div class="faq-item">
     <button class="faq-q" onclick="toggleFaq(this)">Do I need a paid TradingView account? <span class="arrow">▶</span></button>
-    <div class="faq-a">No. All indicators on ChartEdge are written in Pine Script v5 and work on free TradingView accounts.</div>
+    <div class="faq-a">No. All indicators on ChartEdge are written in Pine Script v6 and work on free TradingView accounts.</div>
   </div>
 
   <div class="section-title">Indicators</div>
