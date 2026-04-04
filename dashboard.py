@@ -1439,15 +1439,19 @@ def admin_codes():
     codes = _q("SELECT * FROM promo_codes ORDER BY created DESC")
 
     # Dashboard stats
-    total_users   = _scalar("SELECT COUNT(*) FROM users")
-    free_users    = _scalar("SELECT COUNT(*) FROM users WHERE plan='free' OR plan IS NULL")
-    basic_users   = _scalar("SELECT COUNT(*) FROM users WHERE plan='basic'")
-    pro_users     = _scalar("SELECT COUNT(*) FROM users WHERE plan='pro'")
-    new_today     = _scalar("SELECT COUNT(*) FROM users WHERE created::date = CURRENT_DATE")
-    new_week      = _scalar("SELECT COUNT(*) FROM users WHERE created >= NOW() - INTERVAL '7 days'")
-    total_copies  = _scalar("SELECT COALESCE(SUM(count), 0) FROM copy_log")
-    copies_today  = _scalar("SELECT COALESCE(SUM(count), 0) FROM copy_log WHERE date=CURRENT_DATE::text")
-    recent_users  = _q("SELECT username, plan, email, created FROM users ORDER BY created DESC LIMIT 10")
+    try:
+        total_users   = _scalar("SELECT COUNT(*) FROM users")
+        free_users    = _scalar("SELECT COUNT(*) FROM users WHERE plan='free' OR plan IS NULL")
+        basic_users   = _scalar("SELECT COUNT(*) FROM users WHERE plan='basic'")
+        pro_users     = _scalar("SELECT COUNT(*) FROM users WHERE plan='pro'")
+        new_today     = _scalar("SELECT COUNT(*) FROM users WHERE created::date = CURRENT_DATE")
+        new_week      = _scalar("SELECT COUNT(*) FROM users WHERE created >= NOW() - INTERVAL '7 days'")
+        total_copies  = _scalar("SELECT COALESCE(SUM(count), 0) FROM copy_log")
+        copies_today  = _scalar("SELECT COALESCE(SUM(count), 0) FROM copy_log WHERE date=CURRENT_DATE::text")
+        recent_users  = _q("SELECT username, plan, email, created FROM users ORDER BY created DESC LIMIT 10")
+    except Exception as e:
+        log.error("Studio stats error: %s", e)
+        return f"Stats error: {e}", 500
 
     return render_template_string(ADMIN_CODES_HTML,
         codes=codes, new_code=new_code, new_plan=new_plan,
