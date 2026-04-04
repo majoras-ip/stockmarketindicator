@@ -132,6 +132,20 @@ def _migrate_db():
             """)
     except Exception:
         pass
+    try:
+        with get_db() as conn:
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS promo_codes (
+                    code       TEXT PRIMARY KEY,
+                    plan       TEXT NOT NULL,
+                    used       INTEGER DEFAULT 0,
+                    used_by    INTEGER,
+                    created    TEXT DEFAULT (datetime('now')),
+                    FOREIGN KEY (used_by) REFERENCES users(id)
+                )
+            """)
+    except Exception:
+        pass
 
 init_db()
 _migrate_db()
@@ -1299,6 +1313,206 @@ def pricing():
     return render_template_string(PRICING_HTML, current_user=current_user(), error=error)
 
 
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "changeme")
+
+@app.route("/admin/codes", methods=["GET", "POST"])
+def admin_codes():
+    # Simple password check via query param or session
+    if request.method == "POST" and request.form.get("password"):
+        if request.form["password"] == ADMIN_PASSWORD:
+            session["admin"] = True
+        else:
+            return render_template_string(ADMIN_LOGIN_HTML, error=True)
+
+    if not session.get("admin"):
+        return render_template_string(ADMIN_LOGIN_HTML, error=False)
+
+    # Generate a new code
+    new_code = None
+    new_plan = None
+    if request.method == "POST" and request.form.get("action") == "generate":
+        new_plan = request.form.get("plan", "pro")
+        new_code = secrets.token_urlsafe(8).upper()
+        with get_db() as conn:
+            conn.execute("INSERT INTO promo_codes (code, plan) VALUES (?, ?)", (new_code, new_plan))
+
+    # Delete a code
+    if request.method == "POST" and request.form.get("action") == "delete":
+        with get_db() as conn:
+            conn.execute("DELETE FROM promo_codes WHERE code=?", (request.form.get("code"),))
+
+    codes = get_db().execute("SELECT * FROM promo_codes ORDER BY created DESC").fetchall()
+    return render_template_string(ADMIN_CODES_HTML, codes=codes, new_code=new_code, new_plan=new_plan, current_user=current_user())
+
+
+@app.route("/redeem", methods=["GET", "POST"])
+@login_required
+def redeem():
+    message = None
+    error = None
+    if request.method == "POST":
+        code = request.form.get("code", "").strip().upper()
+        user_id = session["user_id"]
+        row = get_db().execute("SELECT * FROM promo_codes WHERE code=?", (code,)).fetchone()
+        if not row:
+            error = "Invalid code."
+        elif row["used"]:
+            error = "This code has already been used."
+        else:
+            plan = row["plan"]
+            with get_db() as conn:
+                conn.execute("UPDATE promo_codes SET used=1, used_by=? WHERE code=?", (user_id, code))
+                conn.execute("UPDATE users SET plan=? WHERE id=?", (plan, user_id))
+            message = f"Success! Your account has been upgraded to {plan.upper()}."
+    return render_template_string(REDEEM_HTML, message=message, error=error, current_user=current_user())
+
+
+ADMIN_LOGIN_HTML = """<!DOCTYPE html>
+<html data-theme="dark">
+<head><meta charset="UTF-8"><title>Admin · ChartEdge</title>
+<style>
+  :root{--bg:#0d1117;--bg2:#161b22;--text:#e6edf3;--muted:#8b949e;--border:#30363d;--accent:#58a6ff;}
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:-apple-system,sans-serif;background:var(--bg);color:var(--text);display:flex;align-items:center;justify-content:center;min-height:100vh;}
+  .box{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:32px;width:320px;}
+  h2{margin-bottom:20px;} input{width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:6px;margin-bottom:12px;}
+  button{width:100%;padding:10px;background:var(--accent);color:#fff;border:none;border-radius:6px;cursor:pointer;}
+  .err{color:#f85149;font-size:.85rem;margin-bottom:10px;}
+</style></head>
+<body><div class="box">
+  <h2>Admin Login</h2>
+  {% if error %}<div class="err">Wrong password.</div>{% endif %}
+  <form method="POST">
+    <input type="password" name="password" placeholder="Admin password" autofocus>
+    <button type="submit">Login</button>
+  </form>
+</div></body></html>"""
+
+
+ADMIN_CODES_HTML = """<!DOCTYPE html>
+<html data-theme="dark">
+<head><meta charset="UTF-8"><title>Promo Codes · ChartEdge</title>
+<style>
+  :root{--bg:#0d1117;--bg2:#161b22;--text:#e6edf3;--muted:#8b949e;--border:#30363d;--accent:#58a6ff;}
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:-apple-system,sans-serif;background:var(--bg);color:var(--text);padding:40px 24px;}
+  h1{margin-bottom:24px;} h1 span{color:var(--accent);}
+  .card{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:24px;margin-bottom:20px;max-width:700px;}
+  .gen-form{display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
+  select,button{padding:9px 14px;border-radius:6px;font-size:.9rem;cursor:pointer;}
+  select{background:var(--bg);border:1px solid var(--border);color:var(--text);}
+  .btn-gen{background:var(--accent);color:#fff;border:none;}
+  .new-code{background:#1f2d1f;border:1px solid #3fb950;border-radius:8px;padding:14px 18px;margin-bottom:20px;max-width:700px;}
+  .new-code strong{font-size:1.3rem;letter-spacing:2px;color:#3fb950;}
+  table{width:100%;max-width:700px;border-collapse:collapse;font-size:.88rem;}
+  th,td{padding:10px 12px;text-align:left;border-bottom:1px solid var(--border);}
+  th{color:var(--muted);font-weight:500;}
+  .badge{padding:2px 8px;border-radius:10px;font-size:.75rem;font-weight:600;}
+  .badge-pro{background:#1f2d1f;color:#3fb950;} .badge-basic{background:#1f3a5f;color:#58a6ff;}
+  .used{opacity:.5;} .btn-del{background:none;border:1px solid #f85149;color:#f85149;padding:4px 10px;border-radius:6px;font-size:.78rem;cursor:pointer;}
+</style></head>
+<body>
+<h1>Promo <span>Codes</span></h1>
+
+{% if new_code %}
+<div class="new-code">
+  New code generated — share this:<br><br>
+  <strong>{{ new_code }}</strong> &nbsp;·&nbsp; {{ new_plan|upper }}
+</div>
+{% endif %}
+
+<div class="card">
+  <form method="POST" class="gen-form">
+    <input type="hidden" name="action" value="generate">
+    <select name="plan">
+      <option value="pro">Pro</option>
+      <option value="basic">Basic</option>
+    </select>
+    <button type="submit" class="btn-gen">Generate Code</button>
+  </form>
+</div>
+
+<table>
+  <tr><th>Code</th><th>Plan</th><th>Status</th><th>Created</th><th></th></tr>
+  {% for c in codes %}
+  <tr class="{{ 'used' if c.used else '' }}">
+    <td><code>{{ c.code }}</code></td>
+    <td><span class="badge badge-{{ c.plan }}">{{ c.plan|upper }}</span></td>
+    <td>{{ 'Used' if c.used else 'Available' }}</td>
+    <td>{{ c.created[:10] }}</td>
+    <td>
+      {% if not c.used %}
+      <form method="POST" style="display:inline">
+        <input type="hidden" name="action" value="delete">
+        <input type="hidden" name="code" value="{{ c.code }}">
+        <button type="submit" class="btn-del">Delete</button>
+      </form>
+      {% endif %}
+    </td>
+  </tr>
+  {% endfor %}
+  {% if not codes %}<tr><td colspan="5" style="color:var(--muted)">No codes yet.</td></tr>{% endif %}
+</table>
+</body></html>"""
+
+
+REDEEM_HTML = """<!DOCTYPE html>
+<html data-theme="dark">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Redeem Code · ChartEdge</title>
+""" + _META + """
+  <style>
+    :root{--bg:#0d1117;--bg2:#161b22;--text:#e6edf3;--muted:#8b949e;--border:#30363d;--accent:#58a6ff;}
+    [data-theme="light"]{--bg:#fff;--bg2:#f6f8fa;--text:#1f2328;--muted:#636c76;--border:#d0d7de;--accent:#0969da;}
+    *{box-sizing:border-box;margin:0;padding:0;}
+    body{font-family:-apple-system,sans-serif;background:var(--bg);color:var(--text);}
+    nav{display:flex;align-items:center;justify-content:space-between;padding:14px 28px;border-bottom:1px solid var(--border);background:var(--bg2);position:sticky;top:0;z-index:100;flex-wrap:wrap;gap:8px;}
+    .logo{font-size:1.2rem;font-weight:700;text-decoration:none;}
+    .nav-links{display:flex;align-items:center;gap:4px;flex-wrap:wrap;}
+    .drop-btn{background:none;border:none;color:var(--text);font-size:.85rem;cursor:pointer;padding:6px 10px;border-radius:6px;}
+    .drop-btn:hover,.drop-btn.open{background:var(--border);}
+    .dropdown{position:relative;}
+    .drop-menu{display:none;position:absolute;top:calc(100% + 6px);left:0;background:var(--bg2);border:1px solid var(--border);border-radius:8px;min-width:180px;z-index:200;padding:4px 0;box-shadow:0 8px 24px rgba(0,0,0,.4);}
+    .drop-menu.open{display:block;}
+    .drop-menu a{display:block;padding:8px 14px;font-size:.85rem;color:var(--text);text-decoration:none;}
+    .drop-menu a:hover{background:var(--border);}
+    .theme-toggle{background:none;border:1px solid var(--border);color:var(--muted);font-size:.78rem;cursor:pointer;padding:5px 10px;border-radius:6px;}
+    .hamburger{display:none;background:none;border:1px solid var(--border);color:var(--text);font-size:1.1rem;cursor:pointer;padding:4px 10px;border-radius:6px;}
+    @media(max-width:640px){.hamburger{display:block;}.nav-links{display:none;flex-direction:column;align-items:flex-start;width:100%;padding:8px 0;}.nav-links.open{display:flex;}.dropdown{width:100%;}.drop-btn{width:100%;text-align:left;}.drop-menu{position:static;box-shadow:none;border:none;padding-left:12px;}.drop-menu.open{display:block;}}
+    .page{max-width:480px;margin:80px auto;padding:0 24px;}
+    .page h1{font-size:1.8rem;margin-bottom:8px;} .page h1 span{color:var(--accent);}
+    .page p{color:var(--muted);margin-bottom:28px;font-size:.92rem;}
+    .code-input{width:100%;padding:14px;font-size:1.1rem;letter-spacing:3px;text-transform:uppercase;background:var(--bg2);border:1px solid var(--border);color:var(--text);border-radius:8px;margin-bottom:12px;text-align:center;}
+    .code-input:focus{outline:none;border-color:var(--accent);}
+    .btn-redeem{width:100%;padding:12px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-size:1rem;font-weight:600;cursor:pointer;}
+    .success{background:#1f2d1f;border:1px solid #3fb950;border-radius:8px;padding:14px 18px;color:#3fb950;margin-bottom:20px;font-size:.9rem;}
+    .error{background:#2d1f1f;border:1px solid #f85149;border-radius:8px;padding:14px 18px;color:#f85149;margin-bottom:20px;font-size:.9rem;}
+    footer{text-align:center;padding:32px 24px;color:var(--muted);font-size:.8rem;border-top:1px solid var(--border);margin-top:60px;}
+  </style>
+</head>
+<body>
+<nav>
+  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span></a>
+  <button class="hamburger" onclick="toggleMobileNav(event)">☰</button>
+  <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
+</nav>
+<div class="page">
+  <h1>Redeem <span>Code</span></h1>
+  <p>Enter a promo code to upgrade your account instantly.</p>
+  {% if message %}<div class="success">{{ message }}</div>{% endif %}
+  {% if error %}<div class="error">{{ error }}</div>{% endif %}
+  <form method="POST">
+    <input class="code-input" type="text" name="code" placeholder="XXXXXXXX" maxlength="20" autofocus>
+    <button class="btn-redeem" type="submit">Redeem</button>
+  </form>
+</div>
+<footer>© 2026 ChartEdge · <a href="/privacy" style="color:inherit">Privacy</a> · <a href="/terms" style="color:inherit">Terms</a></footer>
+<script>""" + _THEME_JS + """</script>
+</body>
+</html>"""
+
+
 # ── Watchlist ─────────────────────────────────────────────────────────────────
 
 @app.route("/watchlist")
@@ -1678,6 +1892,7 @@ _NAV_LINKS = """
       <div class="drop-menu">
         <a href="/favorites">♥ Favorites</a>
         <a href="/billing">Billing</a>
+        <a href="/redeem">Redeem Code</a>
         <a href="/logout">Logout</a>
       </div>
       {% else %}
