@@ -46,7 +46,7 @@ STRIPE_BASIC_PRICE_YEARLY  = "price_1TIXYWBcm3kIFrAZ2xsrdS1q"
 STRIPE_PRO_PRICE_YEARLY    = "price_1TIXZ5Bcm3kIFrAZe9m5pxzV"
 STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
 STRIPE_PLAN_LIMITS    = {"free": 3, "basic": 10, "pro": -1}  # -1 = unlimited
-APP_URL               = "https://chartedge.up.railway.app"
+APP_URL               = "https://chartedge.trade"
 
 # ── Resend email ──────────────────────────────────────────────────────────────
 resend.api_key = os.environ.get("RESEND_API_KEY", "")
@@ -1123,7 +1123,7 @@ def logout():
 
 @app.route("/login/google")
 def google_login():
-    redirect_uri = "https://chartedge.up.railway.app/auth/google/callback"
+    redirect_uri = "https://chartedge.trade/auth/google/callback"
     return google_oauth.authorize_redirect(redirect_uri)
 
 
@@ -2090,7 +2090,7 @@ _META = """
   <meta property="og:title" content="ChartEdge — Free TradingView Indicators">
   <meta property="og:description" content="Free Pine Script indicators for TradingView. No paid plan required.">
   <meta property="og:type" content="website">
-  <meta property="og:url" content="https://chartedge.up.railway.app">
+  <meta property="og:url" content="https://chartedge.trade">
   <meta name="twitter:card" content="summary">
   <meta name="twitter:title" content="ChartEdge — Free TradingView Indicators">
   <meta name="twitter:description" content="Free Pine Script indicators for TradingView. No paid plan required.">""" + _GA_SCRIPT + """
