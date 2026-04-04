@@ -501,7 +501,7 @@ def api_pine():
 
 def _pine_volume() -> str:
     return """\
-//@version=5
+//@version=6
 indicator("24h Volume", overlay=false, max_bars_back=500)
 
 // Cumulative volume since session open (resets each day)
@@ -525,7 +525,7 @@ bgcolor(is_high ? color.new(color.red, 92) : na, title="Above Avg Volume")
 
 def _pine_vwap(band1: bool = True, band2: bool = True, band3: bool = False) -> str:
     lines = [
-        '//@version=5',
+        '//@version=6',
         'indicator("VWAP + Bands", overlay=true, max_bars_back=500)',
         '',
         'vwap_val = ta.vwap(hlc3)',
@@ -562,7 +562,7 @@ def _pine_vwap(band1: bool = True, band2: bool = True, band3: bool = False) -> s
 def _pine_atr(show_avg: bool = False) -> str:
     avg_line = 'plot(atr_avg, "20-bar Avg", color=color.new(color.orange, 0), linewidth=1)' if show_avg else ''
     return f"""\
-//@version=5
+//@version=6
 indicator("ATR", overlay=false, max_bars_back=500)
 
 atr14   = ta.atr(14)
@@ -578,7 +578,7 @@ hline(0, color=color.new(color.gray, 80))
 
 def _pine_rsi() -> str:
     return """\
-//@version=5
+//@version=6
 indicator("RSI", overlay=false, max_bars_back=500)
 
 // ── Inputs ────────────────────────────────────────────────────────
@@ -623,17 +623,18 @@ plotshape(bear_div, "Bear Div", shape.labeldown, location.abovebar, color.new(co
 
 // ── Label ─────────────────────────────────────────────────────────
 if barstate.islast
-    zone = rsi >= ob ? "Overbought" : rsi <= os ? "Oversold" : "Neutral"
+    zone      = rsi >= ob ? "Overbought" : rsi <= os ? "Oversold" : "Neutral"
+    lbl_color = rsi >= ob ? color.new(color.red, 30) : rsi <= os ? color.new(color.green, 30) : color.new(color.gray, 30)
     label.new(bar_index, rsi, zone + "  " + str.tostring(math.round(rsi, 1)),
               style=label.style_label_left, size=size.small,
-              color=color.new(rsi >= ob ? color.red : rsi <= os ? color.green : color.gray, 30),
+              color=lbl_color,
               textcolor=color.white)
 """
 
 
 def _pine_ema() -> str:
     return """\
-//@version=5
+//@version=6
 indicator("EMA Ribbon", overlay=true, max_bars_back=500)
 
 // ── Inputs ────────────────────────────────────────────────────────
@@ -678,7 +679,7 @@ if barstate.islast
 
 def _pine_relvol() -> str:
     return """\
-//@version=5
+//@version=6
 indicator("Relative Volume", overlay=false, max_bars_back=500)
 
 lookback  = input.int(20,  "Lookback bars",      minval=5)
@@ -699,7 +700,7 @@ bgcolor(is_high ? color.new(color.red, 90) : na, title="High RVOL")
 
 def _pine_ma_cross() -> str:
     return """\
-//@version=5
+//@version=6
 indicator("MA Cross", overlay=true, max_bars_back=500)
 
 fast = input.int(50,  "Fast MA", minval=1)
@@ -724,7 +725,7 @@ bgcolor(ma_fast > ma_slow ? color.new(color.green, 95) : color.new(color.red, 95
 
 def _pine_macd() -> str:
     return """\
-//@version=5
+//@version=6
 indicator("MACD", overlay=false, max_bars_back=500)
 
 // ── Inputs ────────────────────────────────────────────────────────
@@ -759,7 +760,7 @@ plotshape(bearCross, "Bear Cross", shape.labeldown, location.abovebar, color.new
 
 def _pine_supertrend() -> str:
     return """\
-//@version=5
+//@version=6
 indicator("Supertrend", overlay=true, max_bars_back=500)
 
 // ── Inputs ────────────────────────────────────────────────────────
@@ -789,7 +790,7 @@ plotshape(sellSignal, "Sell", shape.labeldown, location.abovebar, color.new(colo
 
 def _pine_ichimoku() -> str:
     return """\
-//@version=5
+//@version=6
 indicator("Ichimoku Cloud", overlay=true, max_bars_back=500)
 
 // ── Inputs ────────────────────────────────────────────────────────
@@ -812,14 +813,15 @@ plot(chikou,  "Chikou",  color=color.new(color.purple, 40), linewidth=1, offset=
 
 sa = plot(senkou_a, "Senkou A", color=color.new(color.green, 0), offset=displacement, linewidth=1)
 sb = plot(senkou_b, "Senkou B", color=color.new(color.red,   0), offset=displacement, linewidth=1)
-fill(sa, sb, color=senkou_a > senkou_b ? color.new(color.green, 80) : color.new(color.red, 80), title="Cloud")
+cloud_color = senkou_a > senkou_b ? color.new(color.green, 80) : color.new(color.red, 80)
+fill(sa, sb, color=cloud_color, title="Cloud")
 """
 
 
 def _pine_obv() -> str:
     return """\
-//@version=5
-indicator("OBV — On-Balance Volume", overlay=false, max_bars_back=500)
+//@version=6
+indicator("OBV - On-Balance Volume", overlay=false, max_bars_back=500)
 
 // ── Inputs ────────────────────────────────────────────────────────
 ma_len   = input.int(20, "Signal MA Length", minval=1)
@@ -831,7 +833,7 @@ obv = ta.obv
 // ── Signal line ───────────────────────────────────────────────────
 sig = ta.ema(obv, ma_len)
 
-// ── Color — bullish if OBV above signal, bearish if below ─────────
+// ── Color: bullish if OBV above signal, bearish if below ──────────
 bull = obv >= sig
 obv_color = bull ? color.new(color.teal, 0) : color.new(color.red, 0)
 
@@ -842,7 +844,8 @@ plot(show_ma ? sig : na,"Signal",color=color.new(color.orange, 0), linewidth=1)
 // ── Fill between OBV and signal ───────────────────────────────────
 p1 = plot(obv, display=display.none)
 p2 = plot(show_ma ? sig : na, display=display.none)
-fill(p1, p2, color=bull ? color.new(color.teal, 85) : color.new(color.red, 85))
+fill_color = bull ? color.new(color.teal, 85) : color.new(color.red, 85)
+fill(p1, p2, color=fill_color)
 
 // ── Divergence: OBV rising but price falling = bullish div ────────
 price_falling = close < close[10]
@@ -858,17 +861,18 @@ plotshape(bear_div, "Bear Div", shape.labeldown, location.abovebar, color.new(co
 
 // ── Label ─────────────────────────────────────────────────────────
 if barstate.islast
-    trend = bull ? "Bullish flow" : "Bearish flow"
+    trend     = bull ? "Bullish flow" : "Bearish flow"
+    lbl_color = bull ? color.new(color.teal, 30) : color.new(color.red, 30)
     label.new(bar_index, obv, trend,
               style=label.style_label_left, size=size.small,
-              color=color.new(bull ? color.teal : color.red, 30),
+              color=lbl_color,
               textcolor=color.white)
 """
 
 
 def _pine_bb_squeeze() -> str:
     return """\
-//@version=5
+//@version=6
 indicator("Bollinger Band Squeeze", overlay=false, max_bars_back=500)
 
 // ── Inputs ────────────────────────────────────────────────────────
@@ -915,18 +919,19 @@ plot(0, "Squeeze", style=plot.style_circles, linewidth=3, color=sqz_color)
 
 // ── Label ─────────────────────────────────────────────────────────
 if barstate.islast
-    state = squeeze ? "⚡ IN SQUEEZE" : no_sqz ? "↗ FIRED" : "Normal"
+    state     = squeeze ? "In Squeeze" : no_sqz ? "Fired" : "Normal"
+    lbl_color = squeeze ? color.new(color.orange, 30) : no_sqz ? color.new(color.blue, 30) : color.new(color.gray, 30)
     label.new(bar_index, val,
               state,
               style=label.style_label_left, size=size.small,
-              color=color.new(squeeze ? color.orange : no_sqz ? color.blue : color.gray, 30),
+              color=lbl_color,
               textcolor=color.white)
 """
 
 
 def _pine_unusual_options() -> str:
     return """\
-//@version=5
+//@version=6
 indicator("Unusual Options Volume", overlay=false, max_bars_back=500)
 
 // ── Inputs ────────────────────────────────────────────────────────
@@ -969,18 +974,19 @@ bgcolor(is_unusual ? color.new(color.red, 88) : na, title="Unusual Spike")
 
 // ── Last bar summary ──────────────────────────────────────────────
 if barstate.islast
-    zone = is_unusual ? "⚡ UNUSUAL" : is_high ? "↑ Elevated" : "Normal"
+    zone      = is_unusual ? "Unusual" : is_high ? "Elevated" : "Normal"
+    lbl_color = is_unusual ? color.new(color.red, 30) : is_high ? color.new(color.orange, 30) : color.new(color.gray, 30)
     label.new(bar_index, ratio,
-              zone + "  " + str.tostring(math.round(ratio, 2)) + "× avg",
+              zone + "  " + str.tostring(math.round(ratio, 2)) + "x avg",
               style=label.style_label_left, size=size.small,
-              color=color.new(is_unusual ? color.red : is_high ? color.orange : color.gray, 30),
+              color=lbl_color,
               textcolor=color.white)
 """
 
 
 def _pine_feargreed() -> str:
     return """\
-//@version=5
+//@version=6
 indicator("Fear & Greed Index", overlay=false, max_bars_back=500)
 
 // ── Components ────────────────────────────────────────────────────
@@ -1044,7 +1050,7 @@ if barstate.islast
 
 def _pine_smallcap_pullback() -> str:
     return """\
-//@version=5
+//@version=6
 indicator("Small Cap Micro Pullback", overlay=true, max_bars_back=500)
 
 // ── Inputs ──────────────────────────────────────────────────────────────────
@@ -1181,7 +1187,7 @@ alertcondition(in_pb_zone and not in_pb_zone[1], "Pullback Started",
 INDICATORS = {
     "volume":    ("24h Volume",      _pine_volume,    "Cumulative volume since market open vs 20-day average daily volume. Red = above average day.",          "volume",     "Add to any chart. Appears as a separate panel below the price. Green bars = normal up-volume, red bars = unusually high volume (1.5× avg). Orange line is the average daily volume benchmark — when the bars are tracking above it, today is an active day."),
     "vwap":      ("VWAP + Bands",    _pine_vwap,      "VWAP with configurable ±1, ±2, ±3 standard deviation bands. Overlaid directly on the price chart.",    "volume",     "Select which bands to show, then copy and paste onto your chart. Price above VWAP = buyers in control. Price near the ±2 red band = overextended, often snaps back. Use on intraday charts (1m–1h) — VWAP resets each day."),
-    "vwap_only": ("VWAP Only",       lambda: "//@version=5\nindicator(\"VWAP\", overlay=true, max_bars_back=500)\n\nplot(ta.vwap(hlc3), \"VWAP\", color=color.new(color.blue, 0), linewidth=2)\n", "Just the VWAP line, no bands. Clean and simple, overlaid on the price chart.", "volume", "Paste onto any intraday chart. A single blue line shows the volume-weighted average price for the session. Price above = bullish bias, price below = bearish bias. Resets at market open each day."),
+    "vwap_only": ("VWAP Only",       lambda: "//@version=6\nindicator(\"VWAP\", overlay=true, max_bars_back=500)\n\nplot(ta.vwap(hlc3), \"VWAP\", color=color.new(color.blue, 0), linewidth=2)\n", "Just the VWAP line, no bands. Clean and simple, overlaid on the price chart.", "volume", "Paste onto any intraday chart. A single blue line shows the volume-weighted average price for the session. Price above = bullish bias, price below = bearish bias. Resets at market open each day."),
     "atr":       ("ATR",             _pine_atr,       "Average True Range (14). Shows how much the asset moves per bar. Red = elevated volatility.",           "volatility", "Add to any chart as a separate panel. The red line shows raw volatility per bar. Toggle the orange average line to see whether current volatility is above or below normal. High ATR = bigger stops needed. Low ATR = tight, choppy market."),
     "rsi":       ("RSI",               _pine_rsi,       "Relative Strength Index with overbought/oversold zones, signal MA, and automatic bullish/bearish divergence labels.", "momentum", "Add as a separate panel. Above 70 = overbought (red zone), below 30 = oversold (green zone). The orange signal line is a 9-bar EMA of RSI — crossovers can signal entries. D+ labels mark bullish divergence (price falling but RSI rising), D- marks bearish divergence. Best used with a trend indicator to filter signals."),
     "ema":       ("EMA Ribbon",       _pine_ema,       "8, 21, 50, 100, and 200 EMAs overlaid on the price chart. Green/red fill between the 50 and 200 shows trend direction.", "trend", "Paste onto your price chart. Toggle which EMAs you want in TradingView settings. Green fill between the 50 and 200 EMA = bullish trend, red = bearish. The 8/21 EMAs react fast and are good for short-term entries. The 50/200 are slower and better for trend confirmation. A label on the last bar shows the current trend."),
