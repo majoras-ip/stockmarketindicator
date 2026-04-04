@@ -5255,34 +5255,43 @@ FLOW_HTML = """<!DOCTYPE html>
            onkeydown="if(event.key==='Enter') loadFlow()">
     <button onclick="loadFlow()">Search</button>
   </div>
-  <div id="flow-content" class="loading">Enter a ticker above to load options flow.</div>
+  <div id="flow-content" class="loading">Enter a ticker above and press Search.</div>
 </div>
 <footer>© 2026 ChartEdge · Options data via yfinance · Not financial advice</footer>
 <script>
 var currentTicker = '';
 
+function showError(msg) {
+  const el = document.getElementById('error-msg');
+  el.textContent = '⚠ ' + msg;
+  el.style.display = 'block';
+  document.getElementById('flow-content').innerHTML = '';
+}
+
 async function loadFlow(exp) {
   const input  = document.getElementById('ticker-input');
-  const ticker = input.value.trim().toUpperCase() || 'SPY';
+  const ticker = (input.value || '').trim().toUpperCase();
+  if (!ticker) { showError('Please enter a ticker symbol.'); return; }
   input.value  = ticker;
   currentTicker = ticker;
-  const url = '/api/flow?ticker=' + ticker + (exp ? '&exp=' + exp : '');
-  document.getElementById('flow-content').innerHTML = '<div class="loading">Loading options data for ' + ticker + '…</div>';
+  const url = '/api/flow?ticker=' + encodeURIComponent(ticker) + (exp ? '&exp=' + encodeURIComponent(exp) : '');
+  document.getElementById('flow-content').innerHTML = '<div class="loading">⏳ Loading options data for ' + ticker + '…</div>';
   document.getElementById('error-msg').style.display = 'none';
   try {
-    const res  = await fetch(url);
-    const data = await res.json();
-    if (data.error) {
-      document.getElementById('error-msg').textContent = data.error;
-      document.getElementById('error-msg').style.display = 'block';
-      document.getElementById('flow-content').innerHTML = '';
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 20000);
+    const res  = await fetch(url, { signal: ctrl.signal });
+    clearTimeout(timer);
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      showError(body.error || 'Server error ' + res.status);
       return;
     }
+    const data = await res.json();
+    if (data.error) { showError(data.error); return; }
     renderFlow(data);
   } catch(e) {
-    document.getElementById('error-msg').textContent = 'Failed to load data.';
-    document.getElementById('error-msg').style.display = 'block';
-    document.getElementById('flow-content').innerHTML = '';
+    showError(e.name === 'AbortError' ? 'Request timed out — try again.' : 'Failed to load: ' + e.message);
   }
 }
 
@@ -5347,17 +5356,10 @@ function renderFlow(d) {
 function loadFlowExp(el, exp) {
   document.querySelectorAll('.exp-tab').forEach(t => t.classList.remove('active'));
   el.classList.add('active');
-  const input = document.getElementById('ticker-input');
-  const ticker = input.value.trim().toUpperCase() || 'SPY';
-  fetch('/api/flow?ticker=' + ticker + '&exp=' + exp)
-    .then(r => r.json()).then(renderFlow).catch(() => {});
+  loadFlow(exp);
 }
 
-function fmt(n) { return n >= 1000 ? (n/1000).toFixed(1) + 'K' : n; }
-
-// Load SPY on page open
-document.getElementById('ticker-input').value = 'SPY';
-loadFlow();
+function fmt(n) { return n >= 1000 ? (n/1000).toFixed(1) + 'K' : String(n); }
 """ + _THEME_JS + """
 </script>
 </body>
