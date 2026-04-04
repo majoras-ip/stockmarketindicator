@@ -1908,17 +1908,6 @@ INDICATORS_HTML = """<!DOCTYPE html>
     .how-to-body { color: var(--muted); font-size: 0.85rem; line-height: 1.6; display: none; }
     .how-to-body.open { display: block; }
 
-    .card-rating { display: flex; gap: 8px; margin-top: 8px; }
-    .rating-up   { color: var(--green); font-size: 0.75rem; }
-    .rating-down { color: var(--red);   font-size: 0.75rem; }
-    .btn-rate {
-      background: var(--bg3); color: var(--muted); border: 1px solid var(--border);
-      padding: 5px 12px; border-radius: 6px; font-family: monospace;
-      font-size: 0.85rem; cursor: pointer;
-    }
-    .btn-rate:hover { border-color: var(--accent); color: var(--text); }
-    .rate-active-up   { border-color: var(--green) !important; color: var(--green) !important; }
-    .rate-active-down { border-color: var(--red)   !important; color: var(--red)   !important; }
     footer { text-align: center; padding: 32px 24px; color: var(--muted); font-size: 0.8rem; border-top: 1px solid var(--border); margin-top: 40px; }
   </style>
 </head>
@@ -1954,10 +1943,6 @@ INDICATORS_HTML = """<!DOCTYPE html>
       <div class="cat-tag">{{ icat }}</div>
       <div class="ind-name">{{ iname }}</div>
       <div class="ind-desc">{{ idesc[:65] }}…</div>
-      <div class="card-rating">
-        <span class="rating-up">▲ {{ ratings[key].ups }}</span>
-        <span class="rating-down">▼ {{ ratings[key].downs }}</span>
-      </div>
     </a>
     {% endfor %}
     {% if not indicators %}
@@ -2008,20 +1993,8 @@ INDICATORS_HTML = """<!DOCTYPE html>
             id="heart-btn" onclick="toggleFavorite('{{ kind }}')">
       {{ '♥ Saved' if is_favorited else '♡ Save' }}
     </button>
-    {% set r = ratings.get(kind, {}) %}
-    <button class="btn-rate {{ 'rate-active-up' if r.get('user_vote') == 1 else '' }}"
-            id="rate-up" onclick="rateIndicator('{{ kind }}', 'up')">
-      ▲ <span id="ups-count">{{ r.get('ups', 0) }}</span>
-    </button>
-    <button class="btn-rate {{ 'rate-active-down' if r.get('user_vote') == -1 else '' }}"
-            id="rate-down" onclick="rateIndicator('{{ kind }}', 'down')">
-      ▼ <span id="downs-count">{{ r.get('downs', 0) }}</span>
-    </button>
     {% else %}
     <a href="/login" class="btn-copy" style="text-decoration:none;">♡ Save (login)</a>
-    {% set r = ratings.get(kind, {}) %}
-    <span class="btn-rate">▲ {{ r.get('ups', 0) }}</span>
-    <span class="btn-rate">▼ {{ r.get('downs', 0) }}</span>
     {% endif %}
   </div>
   {% endif %}
@@ -2066,14 +2039,6 @@ async function toggleFavorite(key) {
   const btn  = document.getElementById('heart-btn');
   btn.textContent = data.favorited ? '♥ Saved' : '♡ Save';
   btn.classList.toggle('copied', data.favorited);
-}
-async function rateIndicator(key, vote) {
-  const res  = await fetch('/api/rate/' + key + '/' + vote, {method: 'POST'});
-  const data = await res.json();
-  document.getElementById('ups-count').textContent   = data.ups;
-  document.getElementById('downs-count').textContent = data.downs;
-  document.getElementById('rate-up').className   = 'btn-rate' + (data.user_vote === 1  ? ' rate-active-up'   : '');
-  document.getElementById('rate-down').className = 'btn-rate' + (data.user_vote === -1 ? ' rate-active-down' : '');
 }
 function toggleHowTo() {
   const body = document.getElementById('howto-body');
