@@ -5310,30 +5310,33 @@ function setError(msg)    { setContent('<div style="background:#2d1f1f;border:1p
 
 function loadFlow(exp) {
   var ticker = (document.getElementById('ticker-input').value || '').trim().toUpperCase();
-  if (!ticker) { setError('Enter a ticker symbol first (e.g. SPY).'); return; }
+  if (!ticker) { setError('Enter a ticker first (e.g. SPY).'); return; }
   document.getElementById('ticker-input').value = ticker;
   var url = '/api/flow?ticker=' + encodeURIComponent(ticker) + (exp ? '&exp=' + encodeURIComponent(exp) : '');
-  setContent('<div style="text-align:center;padding:48px;color:var(--muted);">Loading ' + ticker + ' options data…</div>');
+  setContent('<div style="text-align:center;padding:48px;color:var(--muted);">Loading ' + ticker + '...</div>');
 
-  var finished = false;
-  function done(fn) { if (!finished) { finished = true; fn(); } }
-
-  // Hard client-side timeout — fires regardless of server/network state
   var killTimer = setTimeout(function() {
-    done(function() { setError('Request timed out. Yahoo Finance may be slow or unavailable — try again.'); });
-  }, 12000);
+    var c = document.getElementById('flow-content');
+    if (c && c.innerHTML.indexOf('Loading') !== -1) {
+      setError('Timed out — Yahoo Finance is not responding on this server. Try again.');
+    }
+  }, 13000);
 
   fetch(url)
-    .then(function(r) { return r.json(); })
-    .then(function(data) {
+    .then(function(r) { return r.text(); })
+    .then(function(text) {
       clearTimeout(killTimer);
-      done(function() {
-        if (data.error) { setError(data.error); } else { renderFlow(data); }
-      });
+      try {
+        var data = JSON.parse(text);
+        if (data.error) { setError(data.error); return; }
+        renderFlow(data);
+      } catch(e) {
+        setError('Error: ' + e.message + ' — server said: ' + text.slice(0, 120));
+      }
     })
     .catch(function(err) {
       clearTimeout(killTimer);
-      done(function() { setError('Request failed: ' + err.message); });
+      setError('Fetch failed: ' + err.message);
     });
 }
 
