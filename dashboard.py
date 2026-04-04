@@ -4349,97 +4349,135 @@ refresh();
 
 
 REFER_HTML = """<!DOCTYPE html>
-<html lang="en">
-<head>""" + _META + """
-<title>Refer a Friend · ChartEdge</title>
-<style>
-.refer-card{max-width:560px;margin:60px auto;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:40px;}
-.refer-card h2{margin:0 0 8px;font-size:1.5rem;}
-.refer-card p{color:var(--muted);margin:0 0 24px;font-size:.95rem;}
-.refer-link-box{display:flex;gap:8px;margin-bottom:28px;}
-.refer-link-box input{flex:1;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:10px 14px;color:var(--text);font-size:.9rem;outline:none;}
-.refer-link-box button{background:var(--accent);color:#fff;border:none;border-radius:6px;padding:10px 20px;cursor:pointer;font-weight:600;font-size:.9rem;white-space:nowrap;}
-.refer-link-box button:hover{opacity:.85;}
-.refer-stats{display:flex;gap:16px;margin-bottom:28px;}
-.refer-stat{flex:1;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:16px;text-align:center;}
-.refer-stat .num{font-size:2rem;font-weight:700;color:var(--accent);}
-.refer-stat .lbl{font-size:.8rem;color:var(--muted);margin-top:4px;}
-.refer-steps{border-top:1px solid var(--border);padding-top:24px;}
-.refer-steps h3{font-size:1rem;margin:0 0 16px;color:var(--muted);}
-.step-row{display:flex;gap:14px;align-items:flex-start;margin-bottom:14px;}
-.step-num{width:28px;height:28px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:.8rem;font-weight:700;flex-shrink:0;}
-.step-text{font-size:.9rem;line-height:1.5;}
-.step-text strong{color:var(--text);}
-.step-text span{color:var(--muted);}
-#copy-msg{font-size:.8rem;color:var(--accent);margin-top:-20px;margin-bottom:16px;height:16px;}
-</style>
+<html data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">""" + _META + """
+  <title>Refer a Friend · ChartEdge</title>
+  <style>
+    :root[data-theme="dark"]  { --bg:#0d1117; --bg2:#161b22; --bg3:#21262d; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --green:#3fb950; --red:#f85149; }
+    :root[data-theme="light"] { --bg:#ffffff; --bg2:#f6f8fa; --bg3:#eaeef2; --border:#d0d7de; --text:#1f2328; --muted:#636c76; --accent:#0969da; --green:#1a7f37; --red:#cf222e; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: monospace; background: var(--bg); color: var(--text); min-height: 100vh; }
+    nav { background: var(--bg2); border-bottom: 1px solid var(--border); padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; }
+    .logo { color: var(--accent); font-size: 1.1rem; font-weight: bold; text-decoration: none; }
+    """ + _NAV_CSS + """
+    .hero { text-align: center; padding: 40px 24px 28px; border-bottom: 1px solid var(--border); }
+    .hero h1 { font-size: 1.6rem; margin-bottom: 8px; }
+    .hero h1 span { color: var(--accent); }
+    .hero p { color: var(--muted); font-size: .9rem; }
+    .container { max-width: 600px; margin: 0 auto; padding: 32px 24px; }
+    .stats-row { display: flex; gap: 16px; margin-bottom: 28px; }
+    .stat-box { flex: 1; background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 18px; text-align: center; }
+    .stat-box .num { font-size: 2rem; font-weight: 700; color: var(--accent); }
+    .stat-box .lbl { font-size: .8rem; color: var(--muted); margin-top: 4px; }
+    .section { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 22px; margin-bottom: 20px; }
+    .section h3 { font-size: .95rem; margin-bottom: 16px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+    .link-row { display: flex; gap: 8px; }
+    .link-row input { flex: 1; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px; color: var(--text); font-size: .85rem; outline: none; min-width: 0; }
+    .link-row button { background: var(--accent); color: #fff; border: none; border-radius: 6px; padding: 10px 18px; cursor: pointer; font-weight: 600; font-size: .85rem; white-space: nowrap; }
+    .link-row button:hover { opacity: .85; }
+    .copy-msg { font-size: .8rem; color: var(--green); margin-top: 8px; height: 16px; }
+    .reward-row { margin-bottom: 14px; }
+    .reward-row:last-child { margin-bottom: 0; }
+    .reward-label { display: flex; justify-content: space-between; font-size: .85rem; margin-bottom: 6px; }
+    .reward-label .badge { background: var(--bg3); border-radius: 4px; padding: 1px 7px; font-size: .75rem; color: var(--muted); }
+    .progress-track { background: var(--bg3); border-radius: 4px; height: 8px; }
+    .progress-fill { height: 8px; border-radius: 4px; transition: width .4s; }
+    .step-row { display: flex; gap: 14px; align-items: flex-start; margin-bottom: 14px; }
+    .step-row:last-child { margin-bottom: 0; }
+    .step-num { width: 28px; height: 28px; border-radius: 50%; background: var(--accent); color: #fff; display: flex; align-items: center; justify-content: center; font-size: .8rem; font-weight: 700; flex-shrink: 0; }
+    .step-text { font-size: .9rem; line-height: 1.5; padding-top: 4px; }
+    .step-text .sub { color: var(--muted); font-size: .85rem; }
+    footer { text-align: center; padding: 32px 24px; color: var(--muted); font-size: .8rem; border-top: 1px solid var(--border); margin-top: 20px; }
+  </style>
 </head>
 <body>
-<div class="nav-bar">
-  <a href="/" class="brand">⚡ ChartEdge</a>
+<nav>
+  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span></a>
+  <button class="hamburger" onclick="toggleMobileNav(event)">☰</button>
   <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
-  <button class="hamburger" onclick="document.getElementById('mobile-nav').classList.toggle('open')">☰</button>
+</nav>
+<div class="hero">
+  <h1>Refer a <span>Friend</span></h1>
+  <p>Share your link and earn free upgrades</p>
 </div>
-<div class="refer-card">
-  <h2>Refer a Friend</h2>
-  <p>Share your link — friends get <strong>7 days of Pro free</strong> when they sign up.</p>
+<div class="container">
 
-  <div class="refer-stats">
-    <div class="refer-stat">
+  <div class="stats-row">
+    <div class="stat-box">
       <div class="num">{{ referral_count }}</div>
       <div class="lbl">Friends Referred</div>
     </div>
-    <div class="refer-stat">
-      <div class="num" style="font-size:1.1rem;padding-top:10px;">{{ ref_code }}</div>
+    <div class="stat-box">
+      <div class="num" style="font-size:1.1rem;letter-spacing:2px;padding-top:8px;">{{ ref_code }}</div>
       <div class="lbl">Your Code</div>
     </div>
   </div>
 
-  <div style="margin-bottom:28px;">
-    <div style="display:flex;justify-content:space-between;font-size:.82rem;color:var(--muted);margin-bottom:6px;">
-      <span>Basic reward (2 referrals)</span>
-      <span>{{ [referral_count, 2]|min }}/2</span>
+  <div class="section">
+    <h3>Your Referral Link</h3>
+    <div class="link-row">
+      <input id="ref-link" type="text" value="{{ referral_link }}" readonly>
+      <button onclick="copyLink()">Copy</button>
     </div>
-    <div style="background:var(--border);border-radius:4px;height:8px;margin-bottom:14px;">
-      <div style="background:var(--accent);height:8px;border-radius:4px;width:{{ [referral_count * 50, 100]|min }}%;transition:width .4s;"></div>
+    <div class="copy-msg" id="copy-msg"></div>
+  </div>
+
+  <div class="section">
+    <h3>Rewards Progress</h3>
+    <div class="reward-row">
+      <div class="reward-label">
+        <span>Basic free &nbsp;<span class="badge">2 referrals</span></span>
+        <span>{{ [referral_count, 2]|min }}/2</span>
+      </div>
+      <div class="progress-track">
+        <div class="progress-fill" style="background:var(--accent);width:{{ [referral_count * 50, 100]|min }}%;"></div>
+      </div>
     </div>
-    <div style="display:flex;justify-content:space-between;font-size:.82rem;color:var(--muted);margin-bottom:6px;">
-      <span>Pro reward (4 referrals)</span>
-      <span>{{ [referral_count, 4]|min }}/4</span>
-    </div>
-    <div style="background:var(--border);border-radius:4px;height:8px;">
-      <div style="background:#3fb950;height:8px;border-radius:4px;width:{{ [referral_count * 25, 100]|min }}%;transition:width .4s;"></div>
+    <div class="reward-row">
+      <div class="reward-label">
+        <span>Pro free &nbsp;<span class="badge">4 referrals</span></span>
+        <span>{{ [referral_count, 4]|min }}/4</span>
+      </div>
+      <div class="progress-track">
+        <div class="progress-fill" style="background:var(--green);width:{{ [referral_count * 25, 100]|min }}%;"></div>
+      </div>
     </div>
   </div>
 
-  <div class="refer-link-box">
-    <input id="ref-link" type="text" value="{{ referral_link }}" readonly>
-    <button onclick="copyLink()">Copy Link</button>
-  </div>
-  <div id="copy-msg"></div>
-
-  <div class="refer-steps">
+  <div class="section">
     <h3>How it works</h3>
     <div class="step-row">
       <div class="step-num">1</div>
-      <div class="step-text"><strong>Share your link</strong><br><span>Send it to a friend or post it anywhere.</span></div>
+      <div class="step-text">
+        <strong>Share your link</strong>
+        <div class="sub">Send it to a friend or post it anywhere.</div>
+      </div>
     </div>
     <div class="step-row">
       <div class="step-num">2</div>
-      <div class="step-text"><strong>They sign up</strong><br><span>Your friend registers using your link and gets 7 days of Pro free.</span></div>
+      <div class="step-text">
+        <strong>They sign up</strong>
+        <div class="sub">Your friend gets 7 days of Pro free when they register.</div>
+      </div>
     </div>
     <div class="step-row">
       <div class="step-num">3</div>
-      <div class="step-text"><strong>You get rewarded</strong><br><span>2 referrals → <strong>Basic free</strong> &nbsp;·&nbsp; 4 referrals → <strong>Pro free</strong></span></div>
+      <div class="step-text">
+        <strong>You get rewarded</strong>
+        <div class="sub">2 referrals → Basic free &nbsp;·&nbsp; 4 referrals → Pro free</div>
+      </div>
     </div>
   </div>
+
 </div>
+<footer>© 2026 ChartEdge · Not financial advice</footer>
 <script>
 function copyLink() {
   const inp = document.getElementById('ref-link');
-  inp.select();
   navigator.clipboard.writeText(inp.value).then(() => {
-    document.getElementById('copy-msg').textContent = 'Link copied to clipboard!';
+    document.getElementById('copy-msg').textContent = '✓ Copied to clipboard';
     setTimeout(() => document.getElementById('copy-msg').textContent = '', 3000);
   });
 }
