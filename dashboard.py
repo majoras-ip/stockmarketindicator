@@ -40,7 +40,7 @@ STRIPE_BASIC_PRICE  = "price_1TILpSBcm3kIFrAZiBGS9BVp"
 STRIPE_PRO_PRICE    = "price_1TILpcBcm3kIFrAZDpTJvGud"
 STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
 STRIPE_PLAN_LIMITS  = {"free": 3, "basic": 10, "pro": -1}  # -1 = unlimited
-APP_URL = "https://web-production-1251c.up.railway.app"
+APP_URL = "https://chartedge.up.railway.app"
 
 # ── Database ──────────────────────────────────────────────────────────────────
 
@@ -1012,7 +1012,7 @@ def logout():
 
 @app.route("/login/google")
 def google_login():
-    redirect_uri = "https://web-production-1251c.up.railway.app/auth/google/callback"
+    redirect_uri = "https://chartedge.up.railway.app/auth/google/callback"
     return google_oauth.authorize_redirect(redirect_uri)
 
 
