@@ -5249,50 +5249,37 @@ FLOW_HTML = """<!DOCTYPE html>
   <p>Calls vs puts volume, open interest, and top contracts</p>
 </div>
 <div class="container">
-  <div class="error-msg" id="error-msg"></div>
   <div class="search-row">
-    <input id="ticker-input" placeholder="Enter ticker… (e.g. SPY, AAPL)" maxlength="10"
-           onkeydown="if(event.key==='Enter') loadFlow()">
-    <button onclick="loadFlow()">Search</button>
+    <input id="ticker-input" placeholder="Ticker (e.g. SPY, AAPL)" maxlength="10"
+           onkeydown="if(event.key==='Enter'){event.preventDefault();loadFlow();}">
+    <button type="button" onclick="loadFlow()">Search</button>
   </div>
-  <div id="flow-content" class="loading">Enter a ticker above and press Search.</div>
+  <div id="flow-content" style="min-height:60px;"></div>
 </div>
 <footer>© 2026 ChartEdge · Options data via yfinance · Not financial advice</footer>
 <script>
-var currentTicker = '';
+function setContent(html) { document.getElementById('flow-content').innerHTML = html; }
+function setError(msg)    { setContent('<div style="background:#2d1f1f;border:1px solid #f85149;border-radius:8px;padding:16px 20px;color:#f85149;margin-top:8px;">&#9888; ' + msg + '</div>'); }
 
-function showError(msg) {
-  const el = document.getElementById('error-msg');
-  el.textContent = '⚠ ' + msg;
-  el.style.display = 'block';
-  document.getElementById('flow-content').innerHTML = '';
-}
-
-async function loadFlow(exp) {
-  const input  = document.getElementById('ticker-input');
-  const ticker = (input.value || '').trim().toUpperCase();
-  if (!ticker) { showError('Please enter a ticker symbol.'); return; }
-  input.value  = ticker;
-  currentTicker = ticker;
-  const url = '/api/flow?ticker=' + encodeURIComponent(ticker) + (exp ? '&exp=' + encodeURIComponent(exp) : '');
-  document.getElementById('flow-content').innerHTML = '<div class="loading">⏳ Loading options data for ' + ticker + '…</div>';
-  document.getElementById('error-msg').style.display = 'none';
-  try {
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 20000);
-    const res  = await fetch(url, { signal: ctrl.signal });
-    clearTimeout(timer);
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      showError(body.error || 'Server error ' + res.status);
-      return;
-    }
-    const data = await res.json();
-    if (data.error) { showError(data.error); return; }
-    renderFlow(data);
-  } catch(e) {
-    showError(e.name === 'AbortError' ? 'Request timed out — try again.' : 'Failed to load: ' + e.message);
-  }
+function loadFlow(exp) {
+  var ticker = (document.getElementById('ticker-input').value || '').trim().toUpperCase();
+  if (!ticker) { setError('Enter a ticker symbol first (e.g. SPY).'); return; }
+  document.getElementById('ticker-input').value = ticker;
+  var url = '/api/flow?ticker=' + encodeURIComponent(ticker) + (exp ? '&exp=' + encodeURIComponent(exp) : '');
+  setContent('<div style="text-align:center;padding:48px;color:var(--muted);">Loading ' + ticker + ' options data…</div>');
+  var xhr = new XMLHttpRequest();
+  xhr.open('GET', url);
+  xhr.timeout = 25000;
+  xhr.onload = function() {
+    try {
+      var data = JSON.parse(xhr.responseText);
+      if (data.error) { setError(data.error); return; }
+      renderFlow(data);
+    } catch(e) { setError('Bad response from server (status ' + xhr.status + ')'); }
+  };
+  xhr.onerror   = function() { setError('Network error — check your connection.'); };
+  xhr.ontimeout = function() { setError('Request timed out. Options data can be slow — try again.'); };
+  xhr.send();
 }
 
 function renderFlow(d) {
