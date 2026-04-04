@@ -36,3 +36,4 @@ alpaca-py>=0.20.0
 feedparser>=6.0.0
 authlib>=1.3.0
 requests>=2.31.0
+stripe>=7.0.0

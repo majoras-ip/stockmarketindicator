@@ -14,7 +14,10 @@ import os
 import secrets
 import sqlite3
 import sys
+from datetime import date
 from functools import wraps
+
+import stripe
 
 from authlib.integrations.flask_client import OAuth
 from flask import Flask, jsonify, redirect, render_template_string, request, session, url_for
@@ -30,6 +33,14 @@ log = get_logger(__name__)
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", secrets.token_hex(32))
 CORS(app)
+
+# ── Stripe ────────────────────────────────────────────────────────────────────
+stripe.api_key = os.environ.get("STRIPE_SECRET_KEY", "")
+STRIPE_BASIC_PRICE  = "price_1TILpSBcm3kIFrAZiBGS9BVp"
+STRIPE_PRO_PRICE    = "price_1TILpcBcm3kIFrAZDpTJvGud"
+STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
+STRIPE_PLAN_LIMITS  = {"free": 3, "basic": 10, "pro": -1}  # -1 = unlimited
+APP_URL = "https://web-production-1251c.up.railway.app"
 
 # ── Database ──────────────────────────────────────────────────────────────────
 
@@ -103,6 +114,24 @@ def _migrate_db():
             """)
     except Exception:
         pass
+    for col in ["plan TEXT DEFAULT 'free'", "stripe_customer_id TEXT", "stripe_subscription_id TEXT"]:
+        try:
+            with get_db() as conn:
+                conn.execute(f"ALTER TABLE users ADD COLUMN {col}")
+        except Exception:
+            pass
+    try:
+        with get_db() as conn:
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS copy_log (
+                    user_id INTEGER NOT NULL,
+                    date    TEXT NOT NULL,
+                    count   INTEGER DEFAULT 0,
+                    PRIMARY KEY (user_id, date)
+                )
+            """)
+    except Exception:
+        pass
 
 init_db()
 _migrate_db()
@@ -128,6 +157,59 @@ def login_required(f):
 
 def current_user():
     return session.get("username")
+
+
+def _get_user_plan(user_id):
+    if not user_id:
+        return "free"
+    row = get_db().execute("SELECT plan FROM users WHERE id=?", (user_id,)).fetchone()
+    return row["plan"] if row else "free"
+
+
+def _copies_used_today(user_id):
+    today = date.today().isoformat()
+    row = get_db().execute(
+        "SELECT count FROM copy_log WHERE user_id=? AND date=?", (user_id, today)
+    ).fetchone()
+    return row["count"] if row else 0
+
+
+def _increment_copy(user_id):
+    today = date.today().isoformat()
+    with get_db() as conn:
+        conn.execute("""
+            INSERT INTO copy_log (user_id, date, count) VALUES (?, ?, 1)
+            ON CONFLICT (user_id, date) DO UPDATE SET count = count + 1
+        """, (user_id, today))
+
+
+@app.route("/api/copy", methods=["POST"])
+def api_copy():
+    user_id = session.get("user_id")
+    today = date.today().isoformat()
+
+    if not user_id:
+        # Anonymous: session-based tracking
+        if session.get("copy_date") != today:
+            session["copy_date"] = today
+            session["copy_count"] = 0
+        used = session.get("copy_count", 0)
+        if used >= 3:
+            return jsonify({"ok": False, "reason": "limit", "plan": "free"})
+        session["copy_count"] = used + 1
+        return jsonify({"ok": True, "remaining": 3 - used - 1, "plan": "free"})
+
+    plan = _get_user_plan(user_id)
+    if plan == "pro":
+        return jsonify({"ok": True, "remaining": -1, "plan": "pro"})
+
+    limit = STRIPE_PLAN_LIMITS.get(plan, 3)
+    used  = _copies_used_today(user_id)
+    if used >= limit:
+        return jsonify({"ok": False, "reason": "limit", "plan": plan})
+
+    _increment_copy(user_id)
+    return jsonify({"ok": True, "remaining": limit - used - 1, "plan": plan})
 
 
 # ── Forecast API ──────────────────────────────────────────────────────────────
@@ -1090,6 +1172,20 @@ def indicators_page():
     user_id = session.get("user_id")
     ratings = _get_ratings(list(filtered.keys()), user_id)
 
+    # Copy limits
+    user_plan = _get_user_plan(user_id)
+    if user_plan == "pro":
+        copies_remaining = -1
+    elif user_id:
+        limit = STRIPE_PLAN_LIMITS.get(user_plan, 3)
+        copies_remaining = max(0, limit - _copies_used_today(user_id))
+    else:
+        today = date.today().isoformat()
+        if session.get("copy_date") != today:
+            session["copy_date"] = today
+            session["copy_count"] = 0
+        copies_remaining = max(0, 3 - session.get("copy_count", 0))
+
     return render_template_string(INDICATORS_HTML,
         kind=kind, search=search, category=category,
         indicators=filtered, all_indicators=INDICATORS,
@@ -1100,7 +1196,295 @@ def indicators_page():
         atr_avg=atr_avg,
         is_favorited=is_favorited,
         ratings=ratings,
+        user_plan=user_plan,
+        copies_remaining=copies_remaining,
         current_user=current_user())
+
+
+# ── Stripe / Pricing ──────────────────────────────────────────────────────────
+
+@app.route("/subscribe/<plan>")
+@login_required
+def subscribe(plan):
+    price_id = STRIPE_BASIC_PRICE if plan == "basic" else STRIPE_PRO_PRICE
+    user_id  = session["user_id"]
+    try:
+        checkout = stripe.checkout.Session.create(
+            payment_method_types=["card"],
+            mode="subscription",
+            line_items=[{"price": price_id, "quantity": 1}],
+            success_url=APP_URL + "/billing?success=1",
+            cancel_url=APP_URL + "/pricing",
+            client_reference_id=str(user_id),
+        )
+        return redirect(checkout.url)
+    except Exception as e:
+        log.error("Stripe checkout error: %s", e)
+        return redirect("/pricing?error=1")
+
+
+@app.route("/stripe/webhook", methods=["POST"])
+def stripe_webhook():
+    payload = request.get_data()
+    sig     = request.headers.get("Stripe-Signature", "")
+    try:
+        event = stripe.Webhook.construct_event(payload, sig, STRIPE_WEBHOOK_SECRET)
+    except Exception:
+        return "Invalid signature", 400
+
+    if event["type"] == "checkout.session.completed":
+        cs = event["data"]["object"]
+        user_id   = cs.get("client_reference_id")
+        customer  = cs.get("customer")
+        sub_id    = cs.get("subscription")
+        if user_id:
+            # Determine plan from subscription
+            try:
+                sub   = stripe.Subscription.retrieve(sub_id)
+                price = sub["items"]["data"][0]["price"]["id"]
+                plan  = "pro" if price == STRIPE_PRO_PRICE else "basic"
+            except Exception:
+                plan = "basic"
+            with get_db() as conn:
+                conn.execute(
+                    "UPDATE users SET plan=?, stripe_customer_id=?, stripe_subscription_id=? WHERE id=?",
+                    (plan, customer, sub_id, int(user_id))
+                )
+
+    elif event["type"] == "customer.subscription.deleted":
+        customer = event["data"]["object"].get("customer")
+        if customer:
+            with get_db() as conn:
+                conn.execute(
+                    "UPDATE users SET plan='free', stripe_subscription_id=NULL WHERE stripe_customer_id=?",
+                    (customer,)
+                )
+
+    return "ok", 200
+
+
+@app.route("/billing")
+@login_required
+def billing():
+    user_id = session["user_id"]
+    db  = get_db()
+    row = db.execute("SELECT plan, stripe_customer_id FROM users WHERE id=?", (user_id,)).fetchone()
+    plan        = row["plan"] if row else "free"
+    customer_id = row["stripe_customer_id"] if row else None
+    portal_url  = None
+    if customer_id:
+        try:
+            portal = stripe.billing_portal.Session.create(
+                customer=customer_id,
+                return_url=APP_URL + "/billing",
+            )
+            portal_url = portal.url
+        except Exception:
+            pass
+    success = request.args.get("success") == "1"
+    return render_template_string(BILLING_HTML,
+        plan=plan, portal_url=portal_url, success=success,
+        current_user=current_user())
+
+
+BILLING_HTML = """<!DOCTYPE html>
+<html data-theme="dark">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Billing · ChartEdge</title>
+""" + _META + """
+  <style>
+    :root{--bg:#0d1117;--bg2:#161b22;--text:#e6edf3;--muted:#8b949e;--border:#30363d;--accent:#58a6ff;}
+    [data-theme="light"]{--bg:#fff;--bg2:#f6f8fa;--text:#1f2328;--muted:#636c76;--border:#d0d7de;--accent:#0969da;}
+    *{box-sizing:border-box;margin:0;padding:0;}
+    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);}
+    nav{display:flex;align-items:center;justify-content:space-between;padding:14px 28px;border-bottom:1px solid var(--border);background:var(--bg2);position:sticky;top:0;z-index:100;flex-wrap:wrap;gap:8px;}
+    .logo{font-size:1.2rem;font-weight:700;text-decoration:none;}
+    .nav-links{display:flex;align-items:center;gap:4px;flex-wrap:wrap;}
+    .drop-btn{background:none;border:none;color:var(--text);font-size:.85rem;cursor:pointer;padding:6px 10px;border-radius:6px;}
+    .drop-btn:hover,.drop-btn.open{background:var(--border);}
+    .dropdown{position:relative;}
+    .drop-menu{display:none;position:absolute;top:calc(100% + 6px);left:0;background:var(--bg2);border:1px solid var(--border);border-radius:8px;min-width:180px;z-index:200;padding:4px 0;box-shadow:0 8px 24px rgba(0,0,0,.4);}
+    .drop-menu.open{display:block;}
+    .drop-menu a{display:block;padding:8px 14px;font-size:.85rem;color:var(--text);text-decoration:none;}
+    .drop-menu a:hover{background:var(--border);}
+    .theme-toggle{background:none;border:1px solid var(--border);color:var(--muted);font-size:.78rem;cursor:pointer;padding:5px 10px;border-radius:6px;}
+    .hamburger{display:none;background:none;border:1px solid var(--border);color:var(--text);font-size:1.1rem;cursor:pointer;padding:4px 10px;border-radius:6px;}
+    @media(max-width:640px){.hamburger{display:block;}.nav-links{display:none;flex-direction:column;align-items:flex-start;width:100%;padding:8px 0;}.nav-links.open{display:flex;}.dropdown{width:100%;}.drop-btn{width:100%;text-align:left;}.drop-menu{position:static;box-shadow:none;border:none;padding-left:12px;}.drop-menu.open{display:block;}}
+    .page{max-width:600px;margin:0 auto;padding:48px 24px 80px;}
+    .page h1{font-size:1.8rem;margin-bottom:24px;}
+    .page h1 span{color:var(--accent);}
+    .card{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:24px;margin-bottom:16px;}
+    .plan-badge{display:inline-block;padding:4px 12px;border-radius:20px;font-size:.8rem;font-weight:600;margin-bottom:16px;}
+    .badge-free{background:var(--bg);border:1px solid var(--border);color:var(--muted);}
+    .badge-basic{background:#1f3a5f;color:#58a6ff;}
+    .badge-pro{background:#1f2d1f;color:#3fb950;}
+    .btn{display:inline-block;padding:10px 20px;border-radius:8px;font-size:.9rem;text-decoration:none;cursor:pointer;border:none;}
+    .btn-primary{background:var(--accent);color:#fff;}
+    .btn-secondary{background:var(--bg);border:1px solid var(--border);color:var(--text);}
+    .success-box{background:#1f2d1f;border:1px solid #3fb950;border-radius:8px;padding:14px 18px;margin-bottom:20px;color:#3fb950;font-size:.9rem;}
+    footer{text-align:center;padding:32px 24px;color:var(--muted);font-size:.8rem;border-top:1px solid var(--border);}
+  </style>
+</head>
+<body>
+<nav>
+  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span></a>
+  <button class="hamburger" onclick="toggleMobileNav(event)">☰</button>
+  <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
+</nav>
+<div class="page">
+  <h1>Your <span>Billing</span></h1>
+  {% if success %}
+  <div class="success-box">✓ Payment successful! Your plan has been upgraded.</div>
+  {% endif %}
+  <div class="card">
+    <div class="plan-badge badge-{{ plan }}">{{ plan|upper }}</div>
+    <h3 style="margin-bottom:8px;">Current plan</h3>
+    <p style="color:var(--muted);font-size:.9rem;margin-bottom:20px;">
+      {% if plan == 'free' %}3 copies/day · Free forever
+      {% elif plan == 'basic' %}10 copies/day · $9.99/month
+      {% else %}Unlimited copies · $15.99/month
+      {% endif %}
+    </p>
+    {% if portal_url %}
+    <a href="{{ portal_url }}" class="btn btn-secondary">Manage / Cancel Subscription →</a>
+    {% elif plan == 'free' %}
+    <a href="/pricing" class="btn btn-primary">Upgrade Plan</a>
+    {% endif %}
+  </div>
+  <a href="/indicators" style="color:var(--muted);font-size:.85rem;">← Back to indicators</a>
+</div>
+<footer>© 2026 ChartEdge · <a href="/privacy" style="color:inherit">Privacy</a> · <a href="/terms" style="color:inherit">Terms</a></footer>
+<script>""" + _THEME_JS + """</script>
+</body>
+</html>"""
+
+
+PRICING_HTML = """<!DOCTYPE html>
+<html data-theme="dark">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Pricing · ChartEdge</title>
+""" + _META + """
+  <style>
+    :root{--bg:#0d1117;--bg2:#161b22;--text:#e6edf3;--muted:#8b949e;--border:#30363d;--accent:#58a6ff;}
+    [data-theme="light"]{--bg:#fff;--bg2:#f6f8fa;--text:#1f2328;--muted:#636c76;--border:#d0d7de;--accent:#0969da;}
+    *{box-sizing:border-box;margin:0;padding:0;}
+    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);}
+    nav{display:flex;align-items:center;justify-content:space-between;padding:14px 28px;border-bottom:1px solid var(--border);background:var(--bg2);position:sticky;top:0;z-index:100;flex-wrap:wrap;gap:8px;}
+    .logo{font-size:1.2rem;font-weight:700;text-decoration:none;}
+    .nav-links{display:flex;align-items:center;gap:4px;flex-wrap:wrap;}
+    .drop-btn{background:none;border:none;color:var(--text);font-size:.85rem;cursor:pointer;padding:6px 10px;border-radius:6px;}
+    .drop-btn:hover,.drop-btn.open{background:var(--border);}
+    .dropdown{position:relative;}
+    .drop-menu{display:none;position:absolute;top:calc(100% + 6px);left:0;background:var(--bg2);border:1px solid var(--border);border-radius:8px;min-width:180px;z-index:200;padding:4px 0;box-shadow:0 8px 24px rgba(0,0,0,.4);}
+    .drop-menu.open{display:block;}
+    .drop-menu a{display:block;padding:8px 14px;font-size:.85rem;color:var(--text);text-decoration:none;}
+    .drop-menu a:hover{background:var(--border);}
+    .theme-toggle{background:none;border:1px solid var(--border);color:var(--muted);font-size:.78rem;cursor:pointer;padding:5px 10px;border-radius:6px;}
+    .hamburger{display:none;background:none;border:1px solid var(--border);color:var(--text);font-size:1.1rem;cursor:pointer;padding:4px 10px;border-radius:6px;}
+    @media(max-width:640px){.hamburger{display:block;}.nav-links{display:none;flex-direction:column;align-items:flex-start;width:100%;padding:8px 0;}.nav-links.open{display:flex;}.dropdown{width:100%;}.drop-btn{width:100%;text-align:left;}.drop-menu{position:static;box-shadow:none;border:none;padding-left:12px;}.drop-menu.open{display:block;}}
+    .page{max-width:860px;margin:0 auto;padding:48px 24px 80px;}
+    .page h1{font-size:2rem;text-align:center;margin-bottom:8px;}
+    .page h1 span{color:var(--accent);}
+    .subtitle{text-align:center;color:var(--muted);margin-bottom:40px;}
+    .plans{display:flex;gap:20px;justify-content:center;flex-wrap:wrap;}
+    .plan{flex:1;min-width:220px;max-width:260px;background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:28px 24px;position:relative;}
+    .plan.featured{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent);}
+    .plan-badge{position:absolute;top:-12px;left:50%;transform:translateX(-50%);background:var(--accent);color:#fff;font-size:.72rem;font-weight:700;padding:3px 12px;border-radius:20px;white-space:nowrap;}
+    .plan-name{font-size:1rem;font-weight:700;margin-bottom:4px;}
+    .plan-price{font-size:2rem;font-weight:800;margin:12px 0 4px;}
+    .plan-price span{font-size:1rem;font-weight:400;color:var(--muted);}
+    .plan-desc{color:var(--muted);font-size:.83rem;margin-bottom:20px;}
+    .plan-features{list-style:none;margin-bottom:24px;}
+    .plan-features li{font-size:.85rem;padding:6px 0;border-bottom:1px solid var(--border);color:var(--muted);}
+    .plan-features li:last-child{border:none;}
+    .plan-features li::before{content:"✓ ";color:#3fb950;}
+    .plan-features li.no::before{content:"✗ ";color:var(--muted);}
+    .plan-features li.no{opacity:.6;}
+    .btn-plan{display:block;text-align:center;padding:11px;border-radius:8px;font-size:.9rem;font-weight:600;text-decoration:none;}
+    .btn-free{background:var(--bg);border:1px solid var(--border);color:var(--text);}
+    .btn-basic{background:var(--bg);border:2px solid var(--accent);color:var(--accent);}
+    .btn-pro{background:var(--accent);color:#fff;}
+    .btn-plan:hover{opacity:.88;}
+    .error-box{background:#2d1f1f;border:1px solid #f85149;border-radius:8px;padding:12px 16px;margin-bottom:20px;color:#f85149;font-size:.88rem;text-align:center;}
+    footer{text-align:center;padding:32px 24px;color:var(--muted);font-size:.8rem;border-top:1px solid var(--border);}
+  </style>
+</head>
+<body>
+<nav>
+  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span></a>
+  <button class="hamburger" onclick="toggleMobileNav(event)">☰</button>
+  <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
+</nav>
+<div class="page">
+  <h1>Simple <span>Pricing</span></h1>
+  <p class="subtitle">Start free. Upgrade when you need more.</p>
+  {% if error %}<div class="error-box">Something went wrong with checkout. Please try again.</div>{% endif %}
+  <div class="plans">
+    <!-- Free -->
+    <div class="plan">
+      <div class="plan-name">Free</div>
+      <div class="plan-price">$0<span>/mo</span></div>
+      <div class="plan-desc">Get started with no commitment.</div>
+      <ul class="plan-features">
+        <li>3 copies per day</li>
+        <li>All indicators visible</li>
+        <li>Watchlist</li>
+        <li>Earnings calendar</li>
+        <li class="no">LSTM forecast</li>
+      </ul>
+      <a href="/indicators" class="btn-plan btn-free">Start Free</a>
+    </div>
+    <!-- Basic -->
+    <div class="plan">
+      <div class="plan-name">Basic</div>
+      <div class="plan-price">$9.99<span>/mo</span></div>
+      <div class="plan-desc">For active traders who copy often.</div>
+      <ul class="plan-features">
+        <li>10 copies per day</li>
+        <li>All indicators visible</li>
+        <li>Watchlist</li>
+        <li>Earnings calendar</li>
+        <li class="no">LSTM forecast</li>
+      </ul>
+      {% if current_user %}
+      <a href="/subscribe/basic" class="btn-plan btn-basic">Get Basic</a>
+      {% else %}
+      <a href="/login?next=/subscribe/basic" class="btn-plan btn-basic">Get Basic</a>
+      {% endif %}
+    </div>
+    <!-- Pro -->
+    <div class="plan featured">
+      <div class="plan-badge">MOST POPULAR</div>
+      <div class="plan-name">Pro</div>
+      <div class="plan-price">$15.99<span>/mo</span></div>
+      <div class="plan-desc">Unlimited access for power users.</div>
+      <ul class="plan-features">
+        <li>Unlimited copies</li>
+        <li>All indicators visible</li>
+        <li>Watchlist</li>
+        <li>Earnings calendar</li>
+        <li>LSTM forecast</li>
+      </ul>
+      {% if current_user %}
+      <a href="/subscribe/pro" class="btn-plan btn-pro">Get Pro</a>
+      {% else %}
+      <a href="/login?next=/subscribe/pro" class="btn-plan btn-pro">Get Pro</a>
+      {% endif %}
+    </div>
+  </div>
+</div>
+<footer>© 2026 ChartEdge · <a href="/privacy" style="color:inherit">Privacy</a> · <a href="/terms" style="color:inherit">Terms</a></footer>
+<script>""" + _THEME_JS + """</script>
+</body>
+</html>"""
+
+
+@app.route("/pricing")
+def pricing():
+    error = request.args.get("error") == "1"
+    return render_template_string(PRICING_HTML, current_user=current_user(), error=error)
 
 
 # ── Watchlist ─────────────────────────────────────────────────────────────────
@@ -1481,6 +1865,7 @@ _NAV_LINKS = """
       <button class="drop-btn" onclick="toggleDrop(this, event)">{{ current_user }} ▾</button>
       <div class="drop-menu">
         <a href="/favorites">♥ Favorites</a>
+        <a href="/billing">Billing</a>
         <a href="/logout">Logout</a>
       </div>
       {% else %}
@@ -1491,6 +1876,7 @@ _NAV_LINKS = """
       </div>
       {% endif %}
     </div>
+    <a href="/pricing" style="font-size:.85rem;color:var(--accent);padding:6px 10px;text-decoration:none;font-weight:600;">Pricing</a>
     <button class="theme-toggle" onclick="toggleTheme()">☀ Light</button>
 """
 
@@ -1891,6 +2277,21 @@ INDICATORS_HTML = """<!DOCTYPE html>
     }
     .btn-copy:hover { background: var(--border); }
     .btn-copy.copied { border-color: var(--green); color: var(--green); }
+    .copies-badge { font-size: 0.75rem; color: var(--muted); padding: 3px 8px; background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; }
+    .pine-wrap { position: relative; }
+    .pine-blur textarea { filter: blur(4px); pointer-events: none; user-select: none; }
+    .pine-overlay { position: absolute; inset: 0; background: rgba(13,17,23,0.82); border-radius: 6px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; }
+    .overlay-icon { font-size: 1.6rem; }
+    .overlay-msg { color: var(--text); font-size: 0.9rem; }
+    .overlay-upgrade { color: var(--accent); font-size: 0.8rem; text-decoration: none; }
+    .overlay-upgrade:hover { text-decoration: underline; }
+    .modal-bg { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.75); z-index: 1000; align-items: center; justify-content: center; }
+    .modal-box { background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; padding: 32px 28px; max-width: 440px; width: 90%; text-align: center; }
+    .modal-box h2 { margin-bottom: 8px; }
+    .plan-cta { display: inline-block; padding: 14px 20px; border-radius: 10px; text-decoration: none; font-size: 0.9rem; font-weight: 600; line-height: 1.5; }
+    .basic-cta { background: var(--bg); border: 2px solid var(--border); color: var(--text); }
+    .pro-cta { background: var(--accent); border: 2px solid var(--accent); color: #fff; }
+    .plan-cta small { font-weight: 400; font-size: 0.78rem; opacity: 0.8; }
 
     textarea {
       width: 100%; height: 280px; background: var(--bg); color: #c9d1d9;
@@ -2004,9 +2405,24 @@ INDICATORS_HTML = """<!DOCTYPE html>
   <div class="card {{ 'output' if kind in ['vwap', 'atr'] else '' }}">
     <div class="pine-label">
       <span>Pine Script v5 — works on any chart, no ticker needed</span>
-      <button class="btn-copy" onclick="copyPine()">Copy</button>
+      {% if user_plan != 'pro' %}
+      <span class="copies-badge" id="copies-badge">
+        {% if copies_remaining == 0 %}0 copies left{% else %}{{ copies_remaining }} copies left today{% endif %}
+      </span>
+      {% endif %}
+      <button class="btn-copy" id="copy-btn" onclick="copyPine()">Copy</button>
     </div>
-    <textarea id="pine-out" readonly>{{ pine_code }}</textarea>
+    <div class="pine-wrap{% if user_plan == 'free' %} pine-blur{% endif %}" id="pine-wrap">
+      <textarea id="pine-out" readonly>{{ pine_code }}</textarea>
+      {% if user_plan == 'free' %}
+      <div class="pine-overlay" id="pine-overlay">
+        <div class="overlay-icon">🔒</div>
+        <div class="overlay-msg"><strong id="overlay-count">{{ copies_remaining }}</strong> free copies left today</div>
+        <button class="btn-copy" onclick="copyPine()">Reveal & Copy</button>
+        <a href="/pricing" class="overlay-upgrade">Upgrade for more →</a>
+      </div>
+      {% endif %}
+    </div>
 
     {% if how_to %}
     <div class="how-to">
@@ -2018,15 +2434,53 @@ INDICATORS_HTML = """<!DOCTYPE html>
   {% endif %}
 </div>
 
+<!-- Upgrade modal -->
+<div class="modal-bg" id="upgrade-modal" onclick="if(event.target===this)this.style.display='none'">
+  <div class="modal-box">
+    <h2 style="margin-bottom:8px">Daily limit reached</h2>
+    <p style="color:var(--muted);margin-bottom:24px">Upgrade to copy more indicators every day.</p>
+    <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;">
+      <a href="/pricing" class="plan-cta basic-cta">Basic — $9.99/mo<br><small>10 copies/day</small></a>
+      <a href="/pricing" class="plan-cta pro-cta">Pro — $15.99/mo<br><small>Unlimited copies</small></a>
+    </div>
+    <button onclick="document.getElementById('upgrade-modal').style.display='none'"
+            style="margin-top:16px;background:none;border:none;color:var(--muted);cursor:pointer;font-size:0.85rem;">
+      Maybe later
+    </button>
+  </div>
+</div>
+
 <footer>© 2026 ChartEdge · Free Pine Script indicators · Not financial advice · <a href="/privacy" style="color:inherit">Privacy</a> · <a href="/terms" style="color:inherit">Terms</a></footer>
 
 <script>
-function copyPine() {
-  document.getElementById('pine-out').select();
+async function copyPine() {
+  const res  = await fetch('/api/copy', {method: 'POST'});
+  const data = await res.json();
+  if (!data.ok) {
+    document.getElementById('upgrade-modal').style.display = 'flex';
+    return;
+  }
+  // Remove blur/overlay for free users
+  const wrap = document.getElementById('pine-wrap');
+  const overlay = document.getElementById('pine-overlay');
+  if (wrap) wrap.classList.remove('pine-blur');
+  if (overlay) overlay.style.display = 'none';
+  // Copy text
+  const ta = document.getElementById('pine-out');
+  ta.select();
   document.execCommand('copy');
-  const btn = document.querySelector('.pine-label .btn-copy');
+  const btn = document.getElementById('copy-btn');
   btn.textContent = 'Copied!'; btn.classList.add('copied');
   setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
+  // Update badge
+  const badge = document.getElementById('copies-badge');
+  const oc = document.getElementById('overlay-count');
+  if (data.remaining >= 0) {
+    if (badge) badge.textContent = data.remaining + ' copies left today';
+    if (oc) oc.textContent = data.remaining;
+  } else {
+    if (badge) badge.textContent = '∞';
+  }
 }
 function copyLink(btn) {
   navigator.clipboard.writeText(window.location.href);
