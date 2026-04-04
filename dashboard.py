@@ -2017,7 +2017,7 @@ def flow_api():
         executor = ThreadPoolExecutor(max_workers=1)
         future = executor.submit(_fetch)
         try:
-            result = future.result(timeout=18)
+            result = future.result(timeout=10)
         except FuturesTimeout:
             executor.shutdown(wait=False)
             return jsonify({"error": "Yahoo Finance timed out — try again in a moment."}), 504
@@ -2121,7 +2121,7 @@ def gamma_api():
         executor = ThreadPoolExecutor(max_workers=1)
         future = executor.submit(_fetch)
         try:
-            result = future.result(timeout=18)
+            result = future.result(timeout=10)
         except FuturesTimeout:
             executor.shutdown(wait=False)
             return jsonify({"error": "Yahoo Finance timed out — try again in a moment."}), 504
@@ -5314,19 +5314,27 @@ function loadFlow(exp) {
   document.getElementById('ticker-input').value = ticker;
   var url = '/api/flow?ticker=' + encodeURIComponent(ticker) + (exp ? '&exp=' + encodeURIComponent(exp) : '');
   setContent('<div style="text-align:center;padding:48px;color:var(--muted);">Loading ' + ticker + ' options data…</div>');
-  var xhr = new XMLHttpRequest();
-  xhr.open('GET', url);
-  xhr.timeout = 25000;
-  xhr.onload = function() {
-    try {
-      var data = JSON.parse(xhr.responseText);
-      if (data.error) { setError(data.error); return; }
-      renderFlow(data);
-    } catch(e) { setError('Bad response from server (status ' + xhr.status + ')'); }
-  };
-  xhr.onerror   = function() { setError('Network error — check your connection.'); };
-  xhr.ontimeout = function() { setError('Request timed out. Options data can be slow — try again.'); };
-  xhr.send();
+
+  var finished = false;
+  function done(fn) { if (!finished) { finished = true; fn(); } }
+
+  // Hard client-side timeout — fires regardless of server/network state
+  var killTimer = setTimeout(function() {
+    done(function() { setError('Request timed out. Yahoo Finance may be slow or unavailable — try again.'); });
+  }, 12000);
+
+  fetch(url)
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      clearTimeout(killTimer);
+      done(function() {
+        if (data.error) { setError(data.error); } else { renderFlow(data); }
+      });
+    })
+    .catch(function(err) {
+      clearTimeout(killTimer);
+      done(function() { setError('Request failed: ' + err.message); });
+    });
 }
 
 function renderFlow(d) {
