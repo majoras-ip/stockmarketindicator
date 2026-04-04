@@ -1485,9 +1485,8 @@ def redeem():
             error = "This code has already been used."
         else:
             plan = row["plan"]
-            with _tx() as cur:
-                cur.execute("UPDATE promo_codes SET used=1, used_by=%s WHERE code=%s", (user_id, code))
-                cur.execute("UPDATE users SET plan=%s WHERE id=%s", (plan, user_id))
+            _run("UPDATE users SET plan=%s WHERE id=%s", (plan, user_id))
+            _run("UPDATE promo_codes SET used=1, used_by=%s WHERE code=%s", (user_id, code))
             message = f"Success! Your account has been upgraded to {plan.upper()}."
     return render_template_string(REDEEM_HTML, message=message, error=error, current_user=current_user())
 
