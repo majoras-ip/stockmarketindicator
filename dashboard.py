@@ -3510,6 +3510,50 @@ HOME_HTML = """<!DOCTYPE html>
 
 <hr class="divider">
 
+<!-- AI section -->
+<div style="background:linear-gradient(135deg,#0d1f33 0%,#0d1117 60%,#0d2210 100%);border-top:1px solid var(--border);border-bottom:1px solid var(--border);padding:64px 24px;">
+  <div style="max-width:860px;margin:0 auto;">
+    <div style="display:flex;align-items:center;gap:10px;justify-content:center;margin-bottom:12px;">
+      <span style="background:#0d3349;border:1px solid #1f6feb;color:#58a6ff;font-size:.72rem;font-weight:700;padding:3px 12px;border-radius:20px;letter-spacing:.06em;">AI-POWERED</span>
+    </div>
+    <h2 style="font-size:1.6rem;text-align:center;margin-bottom:12px;">Not just indicators. <span style="color:#58a6ff;">Machine learning</span> built in.</h2>
+    <p style="text-align:center;color:var(--muted);font-size:.93rem;max-width:600px;margin:0 auto 48px;line-height:1.7;">The forecast engine running behind ChartEdge was trained on years of real market data using an LSTM neural network — the same architecture used in institutional quant research.</p>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:20px;">
+      <div style="background:rgba(255,255,255,.03);border:1px solid #21262d;border-radius:10px;padding:24px;">
+        <div style="font-size:1.5rem;margin-bottom:10px;">🧠</div>
+        <h3 style="font-size:.95rem;margin-bottom:6px;">LSTM Neural Network</h3>
+        <p style="color:var(--muted);font-size:.82rem;line-height:1.55;">Long Short-Term Memory networks are purpose-built for time-series data. The model learns temporal patterns in price, volume, and volatility that simple rules-based indicators miss entirely.</p>
+      </div>
+      <div style="background:rgba(255,255,255,.03);border:1px solid #21262d;border-radius:10px;padding:24px;">
+        <div style="font-size:1.5rem;margin-bottom:10px;">📉</div>
+        <h3 style="font-size:.95rem;margin-bottom:6px;">Trained on Real Market Data</h3>
+        <p style="color:var(--muted);font-size:.82rem;line-height:1.55;">Trained across hundreds of tickers and multiple years of 5-minute intraday bars — including bull runs, crashes, and choppy consolidation. The model has seen it all.</p>
+      </div>
+      <div style="background:rgba(255,255,255,.03);border:1px solid #21262d;border-radius:10px;padding:24px;">
+        <div style="font-size:1.5rem;margin-bottom:10px;">🔁</div>
+        <h3 style="font-size:.95rem;margin-bottom:6px;">Walk-Forward Backtested</h3>
+        <p style="color:var(--muted);font-size:.82rem;line-height:1.55;">Validated using walk-forward backtesting — training only on past data, never peeking at the future. No curve-fitting. No cherry-picked results. Just honest out-of-sample performance.</p>
+      </div>
+      <div style="background:rgba(255,255,255,.03);border:1px solid #21262d;border-radius:10px;padding:24px;">
+        <div style="font-size:1.5rem;margin-bottom:10px;">📊</div>
+        <h3 style="font-size:.95rem;margin-bottom:6px;">42 Engineered Features</h3>
+        <p style="color:var(--muted);font-size:.82rem;line-height:1.55;">The model ingests 42 hand-crafted features per bar — spanning momentum, volume profile, volatility regime, ATR, VWAP deviation, and rolling return distributions.</p>
+      </div>
+      <div style="background:rgba(255,255,255,.03);border:1px solid #21262d;border-radius:10px;padding:24px;">
+        <div style="font-size:1.5rem;margin-bottom:10px;">🎯</div>
+        <h3 style="font-size:.95rem;margin-bottom:6px;">Confidence Bands</h3>
+        <p style="color:var(--muted);font-size:.82rem;line-height:1.55;">Every forecast comes with uncertainty bounds computed via Monte Carlo dropout — so you see not just where volatility is heading, but how confident the model is in that prediction.</p>
+      </div>
+      <div style="background:rgba(255,255,255,.03);border:1px solid #21262d;border-radius:10px;padding:24px;">
+        <div style="font-size:1.5rem;margin-bottom:10px;">⚡</div>
+        <h3 style="font-size:.95rem;margin-bottom:6px;">Live Inference</h3>
+        <p style="color:var(--muted);font-size:.82rem;line-height:1.55;">Forecasts are generated on demand using fresh market data pulled in real time. The output is a Pine Script indicator you paste directly into TradingView — no coding required.</p>
+      </div>
+    </div>
+    <p style="text-align:center;color:var(--muted);font-size:.78rem;margin-top:32px;">Not financial advice. Past model performance does not guarantee future results.</p>
+  </div>
+</div>
+
 <!-- Pro features -->
 <div class="section">
   <h2>More with <span>Basic & Pro</span></h2>
