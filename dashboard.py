@@ -4083,12 +4083,16 @@ async function addTicker() {
       input.value = '';
       document.getElementById('empty-msg') && document.getElementById('empty-msg').remove();
       const grid = document.getElementById('ticker-grid');
-      const card = document.createElement('div');
-      card.className = 'ticker-card';
-      card.id = 'card-' + ticker;
-      card.innerHTML = '<div class="ticker-left"><span class="ticker-sym">' + ticker + '</span><span class="ticker-price" id="price-' + ticker + '"><span class="spin"></span></span><span class="ticker-chg" id="chg-' + ticker + '"></span></div><button class="btn-remove" onclick="removeTicker(\'' + ticker + '\')">✕ Remove</button>';
-      grid.appendChild(card);
-      loadPrices();
+      if (!document.getElementById('card-' + ticker)) {
+        const card = document.createElement('div');
+        card.className = 'ticker-card';
+        card.id = 'card-' + ticker;
+        card.innerHTML = '<div class="ticker-left"><span class="ticker-sym">' + ticker + '</span><span class="ticker-price" id="price-' + ticker + '"><span class="spin"></span></span><span class="ticker-chg" id="chg-' + ticker + '"></span></div><button class="btn-remove" onclick="removeTicker(\'' + ticker + '\')">✕ Remove</button>';
+        grid.appendChild(card);
+        loadPrices();
+      }
+    } else {
+      input.select();
     }
   } catch(e) { console.error('addTicker error:', e); }
 }
@@ -4602,7 +4606,8 @@ GAMMA_HTML = """<!DOCTYPE html>
 </div>
 <footer>© 2026 ChartEdge · GEX computed via Black-Scholes · Not financial advice</footer>
 <script>
-async function loadGamma(exp) {
+async function loadGamma(exp, el) {
+  if (el) { document.querySelectorAll('.exp-tab').forEach(t => t.classList.remove('active')); el.classList.add('active'); }
   const input  = document.getElementById('ticker-input');
   const ticker = input.value.trim().toUpperCase() || 'SPY';
   input.value  = ticker;
@@ -4628,7 +4633,7 @@ async function loadGamma(exp) {
 
 function renderGamma(d) {
   const tabs = d.expirations.map(e =>
-    '<span class="exp-tab' + (e === d.expiry ? ' active' : '') + '" onclick="loadGamma(\'' + e + '\')">' + e + '</span>'
+    '<span class="exp-tab' + (e === d.expiry ? ' active' : '') + '" onclick="loadGamma(\'' + e + '\', this)">' + e + '</span>'
   ).join('');
 
   const flipText = d.flip_strike ? '$' + d.flip_strike : 'N/A';
@@ -4797,7 +4802,7 @@ function renderFlow(d) {
 
   // Expiry tabs
   const tabs = d.expirations.map(e =>
-    '<span class="exp-tab' + (e === d.expiry ? ' active' : '') + '" onclick="loadFlowExp(\'' + e + '\')">' + e + '</span>'
+    '<span class="exp-tab' + (e === d.expiry ? ' active' : '') + '" onclick="loadFlowExp(this,\'' + e + '\')">' + e + '</span>'
   ).join('');
 
   // Summary cards
@@ -4850,9 +4855,9 @@ function renderFlow(d) {
     '<div class="expiry-tabs">' + tabs + '</div>' + summary + bar + table;
 }
 
-function loadFlowExp(exp) {
+function loadFlowExp(el, exp) {
   document.querySelectorAll('.exp-tab').forEach(t => t.classList.remove('active'));
-  event.target.classList.add('active');
+  el.classList.add('active');
   const input = document.getElementById('ticker-input');
   const ticker = input.value.trim().toUpperCase() || 'SPY';
   fetch('/api/flow?ticker=' + ticker + '&exp=' + exp)
