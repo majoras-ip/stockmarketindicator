@@ -3491,7 +3491,7 @@ def dashboard():
     return render_template_string(DASHBOARD_HTML, current_user=current_user())
 
 
-@app.route("/debug/oauth")
+@app.route("/oauth-check")
 def debug_oauth():
     redirect_uri = url_for("google_callback", _external=True, _scheme="https")
     return jsonify({
