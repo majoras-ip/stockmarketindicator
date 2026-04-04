@@ -1871,7 +1871,7 @@ def flow_api():
 @login_required
 def gamma_page():
     plan = _get_user_plan(session.get("user_id"))
-    if plan != "pro":
+    if plan == "free":
         return redirect("/pricing?upgrade=gamma")
     return render_template_string(GAMMA_HTML, current_user=current_user())
 
@@ -1880,7 +1880,7 @@ def gamma_page():
 @login_required
 def gamma_api():
     plan = _get_user_plan(session.get("user_id"))
-    if plan != "pro":
+    if plan == "free":
         return jsonify({"error": "upgrade_required"}), 403
     import yfinance as yf
     import numpy as np
@@ -2439,7 +2439,7 @@ PRICING_HTML = """<!DOCTYPE html>
       <div class="plan-desc">For active traders who copy often.</div>
       <ul class="plan-features">
         <li>10 copies per day</li><li>All indicators visible</li>
-        <li>Watchlist</li><li>Earnings calendar</li><li class="no">Gamma exposure</li><li class="no">LSTM forecast</li><li class="no">Options flow</li>
+        <li>Watchlist</li><li>Earnings calendar</li><li>Gamma exposure</li><li class="no">LSTM forecast</li><li class="no">Options flow</li>
       </ul>
       {% if current_user %}
       <a href="/subscribe/basic" class="btn-plan btn-basic" id="btn-basic">Get Basic</a>
