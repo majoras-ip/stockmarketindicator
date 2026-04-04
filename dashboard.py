@@ -1788,6 +1788,83 @@ def earnings_api():
         return jsonify({"error": str(e)}), 500
 
 
+# ── Options Flow ──────────────────────────────────────────────────────────────
+
+@app.route("/flow")
+@login_required
+def flow_page():
+    plan = _get_user_plan(session.get("user_id"))
+    if plan != "pro":
+        return redirect("/pricing?upgrade=flow")
+    return render_template_string(FLOW_HTML, current_user=current_user())
+
+
+@app.route("/api/flow")
+@login_required
+def flow_api():
+    plan = _get_user_plan(session.get("user_id"))
+    if plan != "pro":
+        return jsonify({"error": "upgrade_required"}), 403
+    import yfinance as yf
+    ticker = request.args.get("ticker", "SPY").upper()[:10]
+    try:
+        t = yf.Ticker(ticker)
+        expirations = t.options
+        if not expirations:
+            return jsonify({"error": "No options data found for " + ticker}), 404
+
+        requested_exp = request.args.get("exp", "")
+        exp = requested_exp if requested_exp in expirations else expirations[0]
+        chain = t.option_chain(exp)
+        calls = chain.calls
+        puts  = chain.puts
+
+        def top_contracts(df, kind, n=10):
+            df = df.copy()
+            df = df[df["volume"].notna() & (df["volume"] > 0)]
+            df = df.sort_values("volume", ascending=False).head(n)
+            return [
+                {
+                    "type":           kind,
+                    "strike":         round(float(r["strike"]), 2),
+                    "expiry":         exp,
+                    "volume":         int(r["volume"]),
+                    "openInterest":   int(r.get("openInterest", 0) or 0),
+                    "iv":             round(float(r.get("impliedVolatility", 0) or 0) * 100, 1),
+                    "lastPrice":      round(float(r.get("lastPrice", 0) or 0), 2),
+                    "inTheMoney":     bool(r.get("inTheMoney", False)),
+                }
+                for _, r in df.iterrows()
+            ]
+
+        call_vol = int(calls["volume"].fillna(0).sum())
+        put_vol  = int(puts["volume"].fillna(0).sum())
+        call_oi  = int(calls["openInterest"].fillna(0).sum())
+        put_oi   = int(puts["openInterest"].fillna(0).sum())
+        total_vol = call_vol + put_vol or 1
+
+        top = sorted(
+            top_contracts(calls, "call") + top_contracts(puts, "put"),
+            key=lambda x: x["volume"], reverse=True
+        )[:15]
+
+        return jsonify({
+            "ticker":      ticker,
+            "expiry":      exp,
+            "expirations": list(expirations[:8]),
+            "call_volume": call_vol,
+            "put_volume":  put_vol,
+            "call_oi":     call_oi,
+            "put_oi":      put_oi,
+            "put_call_ratio": round(put_vol / (call_vol or 1), 2),
+            "call_pct":    round(call_vol / total_vol * 100, 1),
+            "put_pct":     round(put_vol  / total_vol * 100, 1),
+            "top_contracts": top,
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 # ── FAQ ───────────────────────────────────────────────────────────────────────
 
 @app.route("/faq")
@@ -1979,6 +2056,7 @@ _NAV_LINKS = """
         <a href="/generate">Forecast</a>
         <a href="/dashboard">Live Chart</a>
         <a href="/earnings">Earnings Calendar</a>
+        <a href="/flow">Options Flow</a>
         <a href="/news">News</a>
       </div>
     </div>
@@ -2279,7 +2357,7 @@ PRICING_HTML = """<!DOCTYPE html>
       <div class="plan-desc">Unlimited access for power users.</div>
       <ul class="plan-features">
         <li>Unlimited copies</li><li>All indicators visible</li>
-        <li>Watchlist</li><li>Earnings calendar</li><li>LSTM forecast</li>
+        <li>Watchlist</li><li>Earnings calendar</li><li>LSTM forecast</li><li>Options flow</li>
       </ul>
       {% if current_user %}
       <a href="/subscribe/pro" class="btn-plan btn-pro" id="btn-pro">Get Pro</a>
@@ -4352,6 +4430,190 @@ refresh();
 """ + _THEME_JS + """
 </script>
 </div>
+</body>
+</html>"""
+
+
+FLOW_HTML = """<!DOCTYPE html>
+<html data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">""" + _META + """
+  <title>Options Flow · ChartEdge</title>
+  <style>
+    :root[data-theme="dark"]  { --bg:#0d1117; --bg2:#161b22; --bg3:#21262d; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --green:#3fb950; --red:#f85149; }
+    :root[data-theme="light"] { --bg:#ffffff; --bg2:#f6f8fa; --bg3:#eaeef2; --border:#d0d7de; --text:#1f2328; --muted:#636c76; --accent:#0969da; --green:#1a7f37; --red:#cf222e; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: monospace; background: var(--bg); color: var(--text); min-height: 100vh; }
+    nav { background: var(--bg2); border-bottom: 1px solid var(--border); padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; }
+    .logo { color: var(--accent); font-size: 1.1rem; font-weight: bold; text-decoration: none; }
+    """ + _NAV_CSS + """
+    .hero { text-align: center; padding: 40px 24px 28px; border-bottom: 1px solid var(--border); }
+    .hero h1 { font-size: 1.6rem; margin-bottom: 8px; }
+    .hero h1 span { color: var(--accent); }
+    .hero p { color: var(--muted); font-size: .9rem; }
+    .container { max-width: 900px; margin: 0 auto; padding: 28px 24px; }
+    .search-row { display: flex; gap: 10px; margin-bottom: 28px; }
+    .search-row input { flex: 1; background: var(--bg2); border: 1px solid var(--border); border-radius: 6px; padding: 10px 14px; color: var(--text); font-size: .95rem; font-family: monospace; text-transform: uppercase; outline: none; }
+    .search-row input:focus { border-color: var(--accent); }
+    .search-row button { background: var(--accent); color: #fff; border: none; border-radius: 6px; padding: 10px 22px; cursor: pointer; font-weight: 600; font-size: .9rem; }
+    .search-row button:hover { opacity: .88; }
+    .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 24px; }
+    .summary-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 16px; text-align: center; }
+    .summary-card .val { font-size: 1.4rem; font-weight: 700; }
+    .summary-card .lbl { font-size: .75rem; color: var(--muted); margin-top: 4px; }
+    .call-val { color: var(--green); }
+    .put-val  { color: var(--red); }
+    .neutral  { color: var(--accent); }
+    .bar-section { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 18px; margin-bottom: 24px; }
+    .bar-section h3 { font-size: .85rem; color: var(--muted); margin-bottom: 12px; text-transform: uppercase; letter-spacing: .05em; }
+    .flow-bar { display: flex; height: 28px; border-radius: 6px; overflow: hidden; margin-bottom: 8px; }
+    .flow-bar .call-seg { background: var(--green); display: flex; align-items: center; justify-content: center; font-size: .75rem; color: #000; font-weight: 700; transition: width .5s; }
+    .flow-bar .put-seg  { background: var(--red);   display: flex; align-items: center; justify-content: center; font-size: .75rem; color: #fff; font-weight: 700; transition: width .5s; }
+    .bar-legend { display: flex; gap: 20px; font-size: .8rem; color: var(--muted); }
+    .bar-legend span { display: flex; align-items: center; gap: 6px; }
+    .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+    .table-section { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; margin-bottom: 24px; }
+    .table-section h3 { font-size: .85rem; color: var(--muted); padding: 14px 18px; border-bottom: 1px solid var(--border); text-transform: uppercase; letter-spacing: .05em; }
+    table { width: 100%; border-collapse: collapse; font-size: .82rem; }
+    th { padding: 10px 14px; text-align: left; color: var(--muted); font-weight: 600; border-bottom: 1px solid var(--border); }
+    td { padding: 10px 14px; border-bottom: 1px solid var(--border); }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: var(--bg3); }
+    .badge-call { background: #1f2d1f; color: var(--green); padding: 2px 8px; border-radius: 4px; font-size: .75rem; font-weight: 700; }
+    .badge-put  { background: #2d1f1f; color: var(--red);   padding: 2px 8px; border-radius: 4px; font-size: .75rem; font-weight: 700; }
+    .itm { color: var(--green); font-size: .7rem; }
+    .otm { color: var(--muted); font-size: .7rem; }
+    .expiry-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 20px; }
+    .exp-tab { background: var(--bg2); border: 1px solid var(--border); border-radius: 6px; padding: 5px 12px; font-size: .8rem; cursor: pointer; color: var(--muted); }
+    .exp-tab.active { border-color: var(--accent); color: var(--accent); }
+    .loading { text-align: center; padding: 60px; color: var(--muted); }
+    .error-msg { background: #2d1f1f; border: 1px solid var(--red); border-radius: 8px; padding: 14px 18px; color: var(--red); margin-bottom: 20px; display: none; }
+    footer { text-align: center; padding: 32px 24px; color: var(--muted); font-size: .8rem; border-top: 1px solid var(--border); margin-top: 20px; }
+  </style>
+</head>
+<body>
+<nav>
+  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span></a>
+  <button class="hamburger" onclick="toggleMobileNav(event)">☰</button>
+  <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
+</nav>
+<div class="hero">
+  <h1>Options <span>Flow</span></h1>
+  <p>Calls vs puts volume, open interest, and top contracts</p>
+</div>
+<div class="container">
+  <div class="error-msg" id="error-msg"></div>
+  <div class="search-row">
+    <input id="ticker-input" placeholder="Enter ticker… (e.g. SPY, AAPL)" maxlength="10"
+           onkeydown="if(event.key==='Enter') loadFlow()">
+    <button onclick="loadFlow()">Search</button>
+  </div>
+  <div id="flow-content" class="loading">Enter a ticker above to load options flow.</div>
+</div>
+<footer>© 2026 ChartEdge · Options data via yfinance · Not financial advice</footer>
+<script>
+var currentTicker = '';
+
+async function loadFlow(exp) {
+  const input  = document.getElementById('ticker-input');
+  const ticker = input.value.trim().toUpperCase() || 'SPY';
+  input.value  = ticker;
+  currentTicker = ticker;
+  const url = '/api/flow?ticker=' + ticker + (exp ? '&exp=' + exp : '');
+  document.getElementById('flow-content').innerHTML = '<div class="loading">Loading options data for ' + ticker + '…</div>';
+  document.getElementById('error-msg').style.display = 'none';
+  try {
+    const res  = await fetch(url);
+    const data = await res.json();
+    if (data.error) {
+      document.getElementById('error-msg').textContent = data.error;
+      document.getElementById('error-msg').style.display = 'block';
+      document.getElementById('flow-content').innerHTML = '';
+      return;
+    }
+    renderFlow(data);
+  } catch(e) {
+    document.getElementById('error-msg').textContent = 'Failed to load data.';
+    document.getElementById('error-msg').style.display = 'block';
+    document.getElementById('flow-content').innerHTML = '';
+  }
+}
+
+function renderFlow(d) {
+  const pcrColor = d.put_call_ratio > 1.2 ? 'put-val' : d.put_call_ratio < 0.8 ? 'call-val' : 'neutral';
+
+  // Expiry tabs
+  const tabs = d.expirations.map(e =>
+    '<span class="exp-tab' + (e === d.expiry ? ' active' : '') + '" onclick="loadFlowExp(\'' + e + '\')">' + e + '</span>'
+  ).join('');
+
+  // Summary cards
+  const summary = `
+    <div class="summary-grid">
+      <div class="summary-card"><div class="val call-val">${fmt(d.call_volume)}</div><div class="lbl">Call Volume</div></div>
+      <div class="summary-card"><div class="val put-val">${fmt(d.put_volume)}</div><div class="lbl">Put Volume</div></div>
+      <div class="summary-card"><div class="val call-val">${fmt(d.call_oi)}</div><div class="lbl">Call OI</div></div>
+      <div class="summary-card"><div class="val put-val">${fmt(d.put_oi)}</div><div class="lbl">Put OI</div></div>
+      <div class="summary-card"><div class="val ${pcrColor}">${d.put_call_ratio}</div><div class="lbl">Put/Call Ratio</div></div>
+    </div>`;
+
+  // Volume bar
+  const bar = `
+    <div class="bar-section">
+      <h3>Volume Sentiment</h3>
+      <div class="flow-bar">
+        <div class="call-seg" style="width:${d.call_pct}%">${d.call_pct > 10 ? d.call_pct + '%' : ''}</div>
+        <div class="put-seg"  style="width:${d.put_pct}%">${d.put_pct > 10 ? d.put_pct + '%' : ''}</div>
+      </div>
+      <div class="bar-legend">
+        <span><span class="dot" style="background:var(--green)"></span>Calls ${d.call_pct}%</span>
+        <span><span class="dot" style="background:var(--red)"></span>Puts ${d.put_pct}%</span>
+      </div>
+    </div>`;
+
+  // Top contracts table
+  const rows = d.top_contracts.map(c => `
+    <tr>
+      <td><span class="badge-${c.type}">${c.type.toUpperCase()}</span></td>
+      <td>$${c.strike}</td>
+      <td>${c.expiry}</td>
+      <td>${fmt(c.volume)}</td>
+      <td>${fmt(c.openInterest)}</td>
+      <td>${c.iv}%</td>
+      <td>$${c.lastPrice}</td>
+      <td><span class="${c.inTheMoney ? 'itm' : 'otm'}">${c.inTheMoney ? 'ITM' : 'OTM'}</span></td>
+    </tr>`).join('');
+
+  const table = `
+    <div class="table-section">
+      <h3>Top Contracts by Volume — ${d.ticker} · ${d.expiry}</h3>
+      <table>
+        <thead><tr><th>Type</th><th>Strike</th><th>Expiry</th><th>Volume</th><th>OI</th><th>IV</th><th>Last</th><th></th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+
+  document.getElementById('flow-content').innerHTML =
+    '<div class="expiry-tabs">' + tabs + '</div>' + summary + bar + table;
+}
+
+function loadFlowExp(exp) {
+  document.querySelectorAll('.exp-tab').forEach(t => t.classList.remove('active'));
+  event.target.classList.add('active');
+  const input = document.getElementById('ticker-input');
+  const ticker = input.value.trim().toUpperCase() || 'SPY';
+  fetch('/api/flow?ticker=' + ticker + '&exp=' + exp)
+    .then(r => r.json()).then(renderFlow).catch(() => {});
+}
+
+function fmt(n) { return n >= 1000 ? (n/1000).toFixed(1) + 'K' : n; }
+
+// Load SPY on page open
+document.getElementById('ticker-input').value = 'SPY';
+loadFlow();
+""" + _THEME_JS + """
+</script>
 </body>
 </html>"""
 
