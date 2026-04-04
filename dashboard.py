@@ -916,7 +916,7 @@ def logout():
 
 @app.route("/login/google")
 def google_login():
-    redirect_uri = url_for("google_callback", _external=True, _scheme="https")
+    redirect_uri = "https://web-production-1251c.up.railway.app/auth/google/callback"
     return google_oauth.authorize_redirect(redirect_uri)
 
 
