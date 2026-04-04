@@ -37,10 +37,6 @@ app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", secrets.token_hex(32))
 CORS(app)
 
-@app.errorhandler(500)
-def handle_500(e):
-    import traceback
-    return f"<pre>500 Error:\n{traceback.format_exc()}</pre>", 500
 
 # ── Stripe ────────────────────────────────────────────────────────────────────
 stripe.api_key = os.environ.get("STRIPE_SECRET_KEY", "")
