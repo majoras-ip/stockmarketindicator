@@ -2003,22 +2003,30 @@ def flow_api():
         session_yf = _requests.Session()
         session_yf.headers.update({"User-Agent": "Mozilla/5.0"})
 
+        req_exp = request.args.get("exp", "")
+
         def _fetch():
             t = yf.Ticker(ticker, session=session_yf)
             exps = t.options
             if not exps:
                 return None, None, None
-            req_exp = request.args.get("exp", "")
             exp = req_exp if req_exp in exps else exps[0]
             chain = t.option_chain(exp)
             return exps, exp, chain
 
-        with ThreadPoolExecutor(max_workers=1) as pool:
-            try:
-                expirations, exp, chain = pool.submit(_fetch).result(timeout=18)
-            except FuturesTimeout:
-                return jsonify({"error": "Yahoo Finance timed out — try again in a moment."}), 504
+        executor = ThreadPoolExecutor(max_workers=1)
+        future = executor.submit(_fetch)
+        try:
+            result = future.result(timeout=18)
+        except FuturesTimeout:
+            executor.shutdown(wait=False)
+            return jsonify({"error": "Yahoo Finance timed out — try again in a moment."}), 504
+        except Exception as exc:
+            executor.shutdown(wait=False)
+            return jsonify({"error": str(exc)}), 500
+        executor.shutdown(wait=False)
 
+        expirations, exp, chain = result
         if expirations is None:
             return jsonify({"error": "No options data found for " + ticker}), 404
 
@@ -2098,23 +2106,31 @@ def gamma_api():
         session_yf = _requests.Session()
         session_yf.headers.update({"User-Agent": "Mozilla/5.0"})
 
+        req_exp = request.args.get("exp", "")
+
         def _fetch():
             t = yf.Ticker(ticker, session=session_yf)
             spot_ = round(float(t.fast_info.last_price), 2)
             exps  = t.options
             if not exps:
                 return None, None, None, None
-            req_exp = request.args.get("exp", "")
             exp_ = req_exp if req_exp in exps else exps[0]
             chain_ = t.option_chain(exp_)
             return spot_, exps, exp_, chain_
 
-        with ThreadPoolExecutor(max_workers=1) as pool:
-            try:
-                spot, expirations, exp, chain = pool.submit(_fetch).result(timeout=18)
-            except FuturesTimeout:
-                return jsonify({"error": "Yahoo Finance timed out — try again in a moment."}), 504
+        executor = ThreadPoolExecutor(max_workers=1)
+        future = executor.submit(_fetch)
+        try:
+            result = future.result(timeout=18)
+        except FuturesTimeout:
+            executor.shutdown(wait=False)
+            return jsonify({"error": "Yahoo Finance timed out — try again in a moment."}), 504
+        except Exception as exc:
+            executor.shutdown(wait=False)
+            return jsonify({"error": str(exc)}), 500
+        executor.shutdown(wait=False)
 
+        spot, expirations, exp, chain = result
         if expirations is None:
             return jsonify({"error": "No options data for " + ticker}), 404
 
