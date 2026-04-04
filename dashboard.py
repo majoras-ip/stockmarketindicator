@@ -1865,6 +1865,102 @@ def flow_api():
         return jsonify({"error": str(e)}), 500
 
 
+# ── Gamma ─────────────────────────────────────────────────────────────────────
+
+@app.route("/gamma")
+@login_required
+def gamma_page():
+    plan = _get_user_plan(session.get("user_id"))
+    if plan == "free":
+        return redirect("/pricing?upgrade=gamma")
+    return render_template_string(GAMMA_HTML, current_user=current_user())
+
+
+@app.route("/api/gamma")
+@login_required
+def gamma_api():
+    plan = _get_user_plan(session.get("user_id"))
+    if plan == "free":
+        return jsonify({"error": "upgrade_required"}), 403
+    import yfinance as yf
+    import numpy as np
+    from scipy.stats import norm
+    ticker = request.args.get("ticker", "SPY").upper()[:10]
+    try:
+        t = yf.Ticker(ticker)
+        spot = round(float(t.fast_info.last_price), 2)
+        expirations = t.options
+        if not expirations:
+            return jsonify({"error": "No options data for " + ticker}), 404
+
+        requested_exp = request.args.get("exp", "")
+        exp = requested_exp if requested_exp in expirations else expirations[0]
+        chain = t.option_chain(exp)
+
+        from datetime import date
+        today = date.today()
+        exp_date = date.fromisoformat(exp)
+        T = max((exp_date - today).days / 365, 1/365)
+        r = 0.05  # risk-free rate
+
+        def black_scholes_gamma(S, K, T, r, sigma):
+            if sigma <= 0 or T <= 0:
+                return 0.0
+            d1 = (np.log(S / K) + (r + 0.5 * sigma ** 2) * T) / (sigma * np.sqrt(T))
+            return norm.pdf(d1) / (S * sigma * np.sqrt(T))
+
+        gex_by_strike = {}
+        for _, row in chain.calls.iterrows():
+            K  = float(row["strike"])
+            iv = float(row.get("impliedVolatility") or 0)
+            oi = float(row.get("openInterest") or 0)
+            if iv > 0 and oi > 0:
+                g = black_scholes_gamma(spot, K, T, r, iv)
+                gex_by_strike[K] = gex_by_strike.get(K, 0) + g * oi * 100  # calls add gamma
+
+        for _, row in chain.puts.iterrows():
+            K  = float(row["strike"])
+            iv = float(row.get("impliedVolatility") or 0)
+            oi = float(row.get("openInterest") or 0)
+            if iv > 0 and oi > 0:
+                g = black_scholes_gamma(spot, K, T, r, iv)
+                gex_by_strike[K] = gex_by_strike.get(K, 0) - g * oi * 100  # puts subtract gamma
+
+        if not gex_by_strike:
+            return jsonify({"error": "Not enough data to compute GEX"}), 404
+
+        strikes = sorted(gex_by_strike.keys())
+        gex     = [round(gex_by_strike[k], 4) for k in strikes]
+
+        # Gamma flip: strike closest to where GEX crosses zero
+        flip_strike = None
+        for i in range(len(strikes) - 1):
+            if gex[i] * gex[i + 1] < 0:
+                flip_strike = round((strikes[i] + strikes[i + 1]) / 2, 2)
+                break
+
+        # Largest positive and negative GEX strikes
+        max_call_gex = max(gex_by_strike, key=lambda k: gex_by_strike[k])
+        max_put_gex  = min(gex_by_strike, key=lambda k: gex_by_strike[k])
+        total_gex    = round(sum(gex), 4)
+
+        return jsonify({
+            "ticker":       ticker,
+            "spot":         spot,
+            "expiry":       exp,
+            "expirations":  list(expirations[:8]),
+            "strikes":      strikes,
+            "gex":          gex,
+            "flip_strike":  flip_strike,
+            "max_call_gex": max_call_gex,
+            "max_put_gex":  max_put_gex,
+            "total_gex":    total_gex,
+            "positive_gamma": total_gex >= 0,
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 # ── FAQ ───────────────────────────────────────────────────────────────────────
 
 @app.route("/faq")
@@ -2057,6 +2153,7 @@ _NAV_LINKS = """
         <a href="/dashboard">Live Chart</a>
         <a href="/earnings">Earnings Calendar</a>
         <a href="/flow">Options Flow</a>
+        <a href="/gamma">Gamma Exposure</a>
         <a href="/news">News</a>
       </div>
     </div>
@@ -2342,7 +2439,7 @@ PRICING_HTML = """<!DOCTYPE html>
       <div class="plan-desc">For active traders who copy often.</div>
       <ul class="plan-features">
         <li>10 copies per day</li><li>All indicators visible</li>
-        <li>Watchlist</li><li>Earnings calendar</li><li class="no">LSTM forecast</li>
+        <li>Watchlist</li><li>Earnings calendar</li><li>Gamma exposure</li><li class="no">LSTM forecast</li><li class="no">Options flow</li>
       </ul>
       {% if current_user %}
       <a href="/subscribe/basic" class="btn-plan btn-basic" id="btn-basic">Get Basic</a>
@@ -4430,6 +4527,160 @@ refresh();
 """ + _THEME_JS + """
 </script>
 </div>
+</body>
+</html>"""
+
+
+GAMMA_HTML = """<!DOCTYPE html>
+<html data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">""" + _META + """
+  <title>Gamma Exposure · ChartEdge</title>
+  <style>
+    :root[data-theme="dark"]  { --bg:#0d1117; --bg2:#161b22; --bg3:#21262d; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --green:#3fb950; --red:#f85149; }
+    :root[data-theme="light"] { --bg:#ffffff; --bg2:#f6f8fa; --bg3:#eaeef2; --border:#d0d7de; --text:#1f2328; --muted:#636c76; --accent:#0969da; --green:#1a7f37; --red:#cf222e; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: monospace; background: var(--bg); color: var(--text); min-height: 100vh; }
+    nav { background: var(--bg2); border-bottom: 1px solid var(--border); padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; }
+    .logo { color: var(--accent); font-size: 1.1rem; font-weight: bold; text-decoration: none; }
+    """ + _NAV_CSS + """
+    .hero { text-align: center; padding: 40px 24px 28px; border-bottom: 1px solid var(--border); }
+    .hero h1 { font-size: 1.6rem; margin-bottom: 8px; }
+    .hero h1 span { color: var(--accent); }
+    .hero p { color: var(--muted); font-size: .9rem; }
+    .container { max-width: 900px; margin: 0 auto; padding: 28px 24px; }
+    .search-row { display: flex; gap: 10px; margin-bottom: 24px; }
+    .search-row input { flex: 1; background: var(--bg2); border: 1px solid var(--border); border-radius: 6px; padding: 10px 14px; color: var(--text); font-size: .95rem; font-family: monospace; text-transform: uppercase; outline: none; }
+    .search-row input:focus { border-color: var(--accent); }
+    .search-row button { background: var(--accent); color: #fff; border: none; border-radius: 6px; padding: 10px 22px; cursor: pointer; font-weight: 600; font-size: .9rem; }
+    .search-row button:hover { opacity: .88; }
+    .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 24px; }
+    .summary-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 16px; text-align: center; }
+    .summary-card .val { font-size: 1.3rem; font-weight: 700; }
+    .summary-card .lbl { font-size: .75rem; color: var(--muted); margin-top: 4px; }
+    .pos { color: var(--green); } .neg { color: var(--red); } .neutral { color: var(--accent); }
+    .regime-box { border-radius: 8px; padding: 14px 18px; margin-bottom: 24px; font-size: .9rem; }
+    .regime-pos { background: #1f2d1f; border: 1px solid var(--green); color: var(--green); }
+    .regime-neg { background: #2d1f1f; border: 1px solid var(--red);   color: var(--red); }
+    .chart-section { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 18px; margin-bottom: 24px; }
+    .chart-section h3 { font-size: .85rem; color: var(--muted); margin-bottom: 16px; text-transform: uppercase; letter-spacing: .05em; }
+    .gex-chart { display: flex; align-items: flex-end; gap: 2px; height: 180px; overflow-x: auto; padding-bottom: 4px; }
+    .bar-wrap { display: flex; flex-direction: column; align-items: center; flex-shrink: 0; }
+    .bar-pos { background: var(--green); width: 14px; border-radius: 2px 2px 0 0; }
+    .bar-neg { background: var(--red);   width: 14px; border-radius: 0 0 2px 2px; }
+    .bar-label { font-size: .6rem; color: var(--muted); margin-top: 4px; transform: rotate(-45deg); transform-origin: top left; white-space: nowrap; }
+    .spot-line { border-left: 2px dashed var(--accent); height: 180px; flex-shrink: 0; margin: 0 4px; position: relative; }
+    .spot-line::after { content: 'SPOT'; position: absolute; top: 0; left: 4px; font-size: .65rem; color: var(--accent); }
+    .expiry-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 20px; }
+    .exp-tab { background: var(--bg2); border: 1px solid var(--border); border-radius: 6px; padding: 5px 12px; font-size: .8rem; cursor: pointer; color: var(--muted); }
+    .exp-tab.active { border-color: var(--accent); color: var(--accent); }
+    .loading { text-align: center; padding: 60px; color: var(--muted); }
+    .error-msg { background: #2d1f1f; border: 1px solid var(--red); border-radius: 8px; padding: 14px 18px; color: var(--red); margin-bottom: 20px; display: none; }
+    footer { text-align: center; padding: 32px 24px; color: var(--muted); font-size: .8rem; border-top: 1px solid var(--border); margin-top: 20px; }
+  </style>
+</head>
+<body>
+<nav>
+  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span></a>
+  <button class="hamburger" onclick="toggleMobileNav(event)">☰</button>
+  <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
+</nav>
+<div class="hero">
+  <h1>Gamma <span>Exposure</span></h1>
+  <p>Dealer GEX by strike — gamma flip level and hedging zones</p>
+</div>
+<div class="container">
+  <div class="error-msg" id="error-msg"></div>
+  <div class="search-row">
+    <input id="ticker-input" placeholder="Enter ticker… (e.g. SPY, QQQ)" maxlength="10"
+           onkeydown="if(event.key==='Enter') loadGamma()">
+    <button onclick="loadGamma()">Search</button>
+  </div>
+  <div id="gamma-content" class="loading">Enter a ticker above to load gamma exposure.</div>
+</div>
+<footer>© 2026 ChartEdge · GEX computed via Black-Scholes · Not financial advice</footer>
+<script>
+async function loadGamma(exp) {
+  const input  = document.getElementById('ticker-input');
+  const ticker = input.value.trim().toUpperCase() || 'SPY';
+  input.value  = ticker;
+  const url = '/api/gamma?ticker=' + ticker + (exp ? '&exp=' + exp : '');
+  document.getElementById('gamma-content').innerHTML = '<div class="loading">Computing gamma exposure for ' + ticker + '…</div>';
+  document.getElementById('error-msg').style.display = 'none';
+  try {
+    const res  = await fetch(url);
+    const data = await res.json();
+    if (data.error) {
+      document.getElementById('error-msg').textContent = data.error;
+      document.getElementById('error-msg').style.display = 'block';
+      document.getElementById('gamma-content').innerHTML = '';
+      return;
+    }
+    renderGamma(data);
+  } catch(e) {
+    document.getElementById('error-msg').textContent = 'Failed to load data.';
+    document.getElementById('error-msg').style.display = 'block';
+    document.getElementById('gamma-content').innerHTML = '';
+  }
+}
+
+function renderGamma(d) {
+  const tabs = d.expirations.map(e =>
+    '<span class="exp-tab' + (e === d.expiry ? ' active' : '') + '" onclick="loadGamma(\'' + e + '\')">' + e + '</span>'
+  ).join('');
+
+  const flipText = d.flip_strike ? '$' + d.flip_strike : 'N/A';
+  const regimeClass = d.positive_gamma ? 'regime-pos' : 'regime-neg';
+  const regimeText  = d.positive_gamma
+    ? '▲ Positive Gamma — Dealers buy dips / sell rips. Expect mean-reversion and lower volatility.'
+    : '▼ Negative Gamma — Dealers sell dips / buy rips. Expect trend acceleration and higher volatility.';
+
+  const summary = `
+    <div class="summary-grid">
+      <div class="summary-card"><div class="val neutral">$${d.spot}</div><div class="lbl">Spot Price</div></div>
+      <div class="summary-card"><div class="val ${d.positive_gamma ? 'pos' : 'neg'}">${d.positive_gamma ? 'Positive' : 'Negative'}</div><div class="lbl">Gamma Regime</div></div>
+      <div class="summary-card"><div class="val neutral">${flipText}</div><div class="lbl">Gamma Flip</div></div>
+      <div class="summary-card"><div class="val pos">$${d.max_call_gex}</div><div class="lbl">Max Call GEX</div></div>
+      <div class="summary-card"><div class="val neg">$${d.max_put_gex}</div><div class="lbl">Max Put GEX</div></div>
+    </div>`;
+
+  const regime = '<div class="regime-box ' + regimeClass + '">' + regimeText + '</div>';
+
+  // Build bar chart
+  const maxAbs = Math.max(...d.gex.map(Math.abs), 0.0001);
+  const chartHeight = 160;
+  const bars = d.strikes.map((strike, i) => {
+    const val = d.gex[i];
+    const h   = Math.round(Math.abs(val) / maxAbs * chartHeight);
+    const isSpot = Math.abs(strike - d.spot) < (d.strikes[1] - d.strikes[0]) * 0.6;
+    const spotMark = isSpot ? '<div class="spot-line" style="height:' + chartHeight + 'px"></div>' : '';
+    if (val >= 0) {
+      return spotMark + '<div class="bar-wrap"><div class="bar-pos" style="height:' + h + 'px" title="$' + strike + ': +' + val + '"></div><div class="bar-label">' + strike + '</div></div>';
+    } else {
+      return spotMark + '<div class="bar-wrap" style="justify-content:flex-start;flex-direction:column-reverse"><div class="bar-neg" style="height:' + h + 'px" title="$' + strike + ': ' + val + '"></div><div class="bar-label">' + strike + '</div></div>';
+    }
+  }).join('');
+
+  const chart = `
+    <div class="chart-section">
+      <h3>GEX by Strike · ${d.ticker} · ${d.expiry}</h3>
+      <div class="gex-chart" style="align-items:center;">${bars}</div>
+      <div style="font-size:.75rem;color:var(--muted);margin-top:12px;">
+        <span style="color:var(--green)">■</span> Positive GEX (call-heavy) &nbsp;
+        <span style="color:var(--red)">■</span> Negative GEX (put-heavy) &nbsp;
+        <span style="color:var(--accent)">|</span> Spot price
+      </div>
+    </div>`;
+
+  document.getElementById('gamma-content').innerHTML =
+    '<div class="expiry-tabs">' + tabs + '</div>' + summary + regime + chart;
+}
+
+document.getElementById('ticker-input').value = 'SPY';
+loadGamma();
+""" + _THEME_JS + """
+</script>
 </body>
 </html>"""
 
