@@ -12,10 +12,12 @@ from __future__ import annotations
 import json
 import os
 import secrets
-import sqlite3
 import sys
 from datetime import date
 from functools import wraps
+
+import psycopg2
+import psycopg2.extras
 
 import resend
 import stripe
@@ -72,112 +74,153 @@ def send_welcome_email(to_email: str, username: str, referral_code: str) -> None
 
 # ── Database ──────────────────────────────────────────────────────────────────
 
-DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "app.db")
+DATABASE_URL = os.environ.get("DATABASE_URL", "")
 
 def get_db():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
+    conn = psycopg2.connect(DATABASE_URL, cursor_factory=psycopg2.extras.RealDictCursor)
+    conn.autocommit = False
     return conn
 
+def _q(sql, params=()):
+    """Execute and return all rows."""
+    sql = sql.replace("?", "%s")
+    conn = get_db()
+    try:
+        cur = conn.cursor()
+        cur.execute(sql, params)
+        result = cur.fetchall()
+        conn.commit()
+        return result
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+def _one(sql, params=()):
+    """Execute and return one row."""
+    rows = _q(sql, params)
+    return rows[0] if rows else None
+
+def _scalar(sql, params=()):
+    """Execute and return first value of first row (for COUNT etc)."""
+    row = _one(sql, params)
+    return list(row.values())[0] if row else 0
+
+def _run(sql, params=()):
+    """Execute a write statement."""
+    sql = sql.replace("?", "%s")
+    conn = get_db()
+    try:
+        cur = conn.cursor()
+        cur.execute(sql, params)
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+from contextlib import contextmanager
+
+@contextmanager
+def _tx():
+    """Context manager for multi-statement transactions."""
+    conn = get_db()
+    try:
+        cur = conn.cursor()
+        yield cur
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
 def init_db():
-    with get_db() as conn:
-        conn.executescript("""
+    conn = get_db()
+    try:
+        cur = conn.cursor()
+        cur.execute("""
             CREATE TABLE IF NOT EXISTS users (
-                id       INTEGER PRIMARY KEY AUTOINCREMENT,
+                id       SERIAL PRIMARY KEY,
                 username TEXT UNIQUE NOT NULL,
                 pw_hash  TEXT NOT NULL,
-                created  TEXT DEFAULT (datetime('now'))
-            );
+                created  TIMESTAMP DEFAULT NOW(),
+                google_id TEXT,
+                plan     TEXT DEFAULT 'free',
+                stripe_customer_id TEXT,
+                stripe_subscription_id TEXT,
+                email    TEXT,
+                referral_code TEXT,
+                referred_by TEXT
+            )
+        """)
+        cur.execute("""
             CREATE TABLE IF NOT EXISTS favorites (
                 user_id       INTEGER NOT NULL,
                 indicator_key TEXT NOT NULL,
-                PRIMARY KEY (user_id, indicator_key),
-                FOREIGN KEY (user_id) REFERENCES users(id)
-            );
+                PRIMARY KEY (user_id, indicator_key)
+            )
+        """)
+        cur.execute("""
             CREATE TABLE IF NOT EXISTS requests (
-                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                id          SERIAL PRIMARY KEY,
                 author      TEXT NOT NULL,
                 name        TEXT NOT NULL,
                 description TEXT NOT NULL,
                 votes       INTEGER DEFAULT 0,
-                created     TEXT DEFAULT (datetime('now'))
-            );
+                created     TIMESTAMP DEFAULT NOW()
+            )
+        """)
+        cur.execute("""
             CREATE TABLE IF NOT EXISTS request_votes (
                 user_id    INTEGER NOT NULL,
                 request_id INTEGER NOT NULL,
                 PRIMARY KEY (user_id, request_id)
-            );
+            )
         """)
-
-def _migrate_db():
-    """Add columns introduced after initial schema."""
-    try:
-        with get_db() as conn:
-            conn.execute("ALTER TABLE users ADD COLUMN google_id TEXT")
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS watchlist (
+                user_id INTEGER NOT NULL,
+                ticker  TEXT NOT NULL,
+                added   TIMESTAMP DEFAULT NOW(),
+                PRIMARY KEY (user_id, ticker)
+            )
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS indicator_ratings (
+                user_id       INTEGER NOT NULL,
+                indicator_key TEXT NOT NULL,
+                vote          INTEGER NOT NULL,
+                PRIMARY KEY (user_id, indicator_key)
+            )
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS copy_log (
+                user_id INTEGER NOT NULL,
+                date    TEXT NOT NULL,
+                count   INTEGER DEFAULT 0,
+                PRIMARY KEY (user_id, date)
+            )
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS promo_codes (
+                code    TEXT PRIMARY KEY,
+                plan    TEXT NOT NULL,
+                used    INTEGER DEFAULT 0,
+                used_by INTEGER,
+                created TIMESTAMP DEFAULT NOW()
+            )
+        """)
+        conn.commit()
     except Exception:
-        pass
-    try:
-        with get_db() as conn:
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS watchlist (
-                    user_id INTEGER NOT NULL,
-                    ticker  TEXT NOT NULL,
-                    added   TEXT DEFAULT (datetime('now')),
-                    PRIMARY KEY (user_id, ticker),
-                    FOREIGN KEY (user_id) REFERENCES users(id)
-                )
-            """)
-    except Exception:
-        pass
-    try:
-        with get_db() as conn:
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS indicator_ratings (
-                    user_id       INTEGER NOT NULL,
-                    indicator_key TEXT NOT NULL,
-                    vote          INTEGER NOT NULL,
-                    PRIMARY KEY (user_id, indicator_key),
-                    FOREIGN KEY (user_id) REFERENCES users(id)
-                )
-            """)
-    except Exception:
-        pass
-    for col in ["plan TEXT DEFAULT 'free'", "stripe_customer_id TEXT", "stripe_subscription_id TEXT",
-                "email TEXT", "referral_code TEXT", "referred_by TEXT"]:
-        try:
-            with get_db() as conn:
-                conn.execute(f"ALTER TABLE users ADD COLUMN {col}")
-        except Exception:
-            pass
-    try:
-        with get_db() as conn:
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS copy_log (
-                    user_id INTEGER NOT NULL,
-                    date    TEXT NOT NULL,
-                    count   INTEGER DEFAULT 0,
-                    PRIMARY KEY (user_id, date)
-                )
-            """)
-    except Exception:
-        pass
-    try:
-        with get_db() as conn:
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS promo_codes (
-                    code       TEXT PRIMARY KEY,
-                    plan       TEXT NOT NULL,
-                    used       INTEGER DEFAULT 0,
-                    used_by    INTEGER,
-                    created    TEXT DEFAULT (datetime('now')),
-                    FOREIGN KEY (used_by) REFERENCES users(id)
-                )
-            """)
-    except Exception:
-        pass
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
 
 init_db()
-_migrate_db()
 
 # ── Google OAuth ──────────────────────────────────────────────────────────────
 
@@ -223,25 +266,22 @@ def require_login():
 def _get_user_plan(user_id):
     if not user_id:
         return "free"
-    row = get_db().execute("SELECT plan FROM users WHERE id=?", (user_id,)).fetchone()
+    row = _one("SELECT plan FROM users WHERE id=%s", (user_id,))
     return row["plan"] if row else "free"
 
 
 def _copies_used_today(user_id):
     today = date.today().isoformat()
-    row = get_db().execute(
-        "SELECT count FROM copy_log WHERE user_id=? AND date=?", (user_id, today)
-    ).fetchone()
+    row = _one("SELECT count FROM copy_log WHERE user_id=%s AND date=%s", (user_id, today))
     return row["count"] if row else 0
 
 
 def _increment_copy(user_id):
     today = date.today().isoformat()
-    with get_db() as conn:
-        conn.execute("""
-            INSERT INTO copy_log (user_id, date, count) VALUES (?, ?, 1)
-            ON CONFLICT (user_id, date) DO UPDATE SET count = count + 1
-        """, (user_id, today))
+    _run("""
+        INSERT INTO copy_log (user_id, date, count) VALUES (%s, %s, 1)
+        ON CONFLICT (user_id, date) DO UPDATE SET count = copy_log.count + 1
+    """, (user_id, today))
 
 
 @app.route("/api/copy", methods=["POST"])
@@ -1025,41 +1065,33 @@ def register():
         else:
             try:
                 ref_code = secrets.token_urlsafe(6).upper()
-                with get_db() as conn:
-                    conn.execute(
-                        "INSERT INTO users (username, pw_hash, email, referral_code, referred_by) VALUES (?, ?, ?, ?, ?)",
-                        (username, generate_password_hash(password), email or None, ref_code, ref or None)
-                    )
-                row = get_db().execute("SELECT id FROM users WHERE username=?", (username,)).fetchone()
+                _run(
+                    "INSERT INTO users (username, pw_hash, email, referral_code, referred_by) VALUES (%s, %s, %s, %s, %s)",
+                    (username, generate_password_hash(password), email or None, ref_code, ref or None)
+                )
+                row = _one("SELECT id FROM users WHERE username=%s", (username,))
                 user_id = row["id"]
                 session["user_id"] = user_id
                 session["username"] = username
 
                 # If referred by someone, give new user 7 days Pro trial + reward referrer
                 if ref:
-                    referrer = get_db().execute("SELECT id, plan FROM users WHERE referral_code=?", (ref,)).fetchone()
+                    referrer = _one("SELECT id, plan FROM users WHERE referral_code=%s", (ref,))
                     if referrer:
-                        with get_db() as conn:
-                            conn.execute("UPDATE users SET plan='pro' WHERE id=?", (user_id,))
-                        # Count how many people this referrer has now referred
-                        ref_count = get_db().execute(
-                            "SELECT COUNT(*) FROM users WHERE referred_by=?", (ref,)
-                        ).fetchone()[0]
+                        _run("UPDATE users SET plan='pro' WHERE id=%s", (user_id,))
+                        ref_count = _scalar("SELECT COUNT(*) FROM users WHERE referred_by=%s", (ref,))
                         referrer_plan = referrer["plan"]
-                        # Reward: 2 referrals = Basic, 4 referrals = Pro
                         if ref_count >= 4 and referrer_plan != "pro":
-                            with get_db() as conn:
-                                conn.execute("UPDATE users SET plan='pro' WHERE id=?", (referrer["id"],))
+                            _run("UPDATE users SET plan='pro' WHERE id=%s", (referrer["id"],))
                         elif ref_count >= 2 and referrer_plan == "free":
-                            with get_db() as conn:
-                                conn.execute("UPDATE users SET plan='basic' WHERE id=?", (referrer["id"],))
+                            _run("UPDATE users SET plan='basic' WHERE id=%s", (referrer["id"],))
 
                 # Send welcome email
                 if email:
                     send_welcome_email(email, username, ref_code)
 
                 return redirect("/indicators")
-            except sqlite3.IntegrityError:
+            except psycopg2.errors.UniqueViolation:
                 error = "Username already taken."
     return render_template_string(AUTH_HTML, mode="register", error=error, ref=ref)
 
@@ -1070,7 +1102,7 @@ def login():
     if request.method == "POST":
         username = request.form.get("username", "").strip()
         password = request.form.get("password", "")
-        row = get_db().execute("SELECT * FROM users WHERE username=?", (username,)).fetchone()
+        row = _one("SELECT * FROM users WHERE username=%s", (username,))
         if not row or not check_password_hash(row["pw_hash"], password):
             error = "Invalid username or password."
         else:
@@ -1105,22 +1137,16 @@ def google_callback():
         email = userinfo.get("email", "")
         name  = userinfo.get("name", email.split("@")[0] if email else "user")
 
-        db  = get_db()
-        row = db.execute("SELECT * FROM users WHERE google_id=?", (google_id,)).fetchone()
+        row = _one("SELECT * FROM users WHERE google_id=%s", (google_id,))
         if not row:
-            # Build a unique username from the Google display name
             base = name.replace(" ", "_").lower()[:20]
             username = base
             i = 1
-            while db.execute("SELECT 1 FROM users WHERE username=?", (username,)).fetchone():
+            while _one("SELECT 1 FROM users WHERE username=%s", (username,)):
                 username = f"{base}{i}"
                 i += 1
-            with get_db() as conn:
-                conn.execute(
-                    "INSERT INTO users (username, pw_hash, google_id) VALUES (?, '', ?)",
-                    (username, google_id),
-                )
-            row = get_db().execute("SELECT * FROM users WHERE google_id=?", (google_id,)).fetchone()
+            _run("INSERT INTO users (username, pw_hash, google_id) VALUES (%s, '', %s)", (username, google_id))
+            row = _one("SELECT * FROM users WHERE google_id=%s", (google_id,))
 
         session["user_id"]  = row["id"]
         session["username"] = row["username"]
@@ -1136,25 +1162,20 @@ def google_callback():
 @login_required
 def toggle_favorite(key):
     user_id = session["user_id"]
-    with get_db() as conn:
-        existing = conn.execute(
-            "SELECT 1 FROM favorites WHERE user_id=? AND indicator_key=?", (user_id, key)
-        ).fetchone()
-        if existing:
-            conn.execute("DELETE FROM favorites WHERE user_id=? AND indicator_key=?", (user_id, key))
-            return jsonify({"favorited": False})
-        else:
-            conn.execute("INSERT INTO favorites (user_id, indicator_key) VALUES (?, ?)", (user_id, key))
-            return jsonify({"favorited": True})
+    existing = _one("SELECT 1 FROM favorites WHERE user_id=%s AND indicator_key=%s", (user_id, key))
+    if existing:
+        _run("DELETE FROM favorites WHERE user_id=%s AND indicator_key=%s", (user_id, key))
+        return jsonify({"favorited": False})
+    else:
+        _run("INSERT INTO favorites (user_id, indicator_key) VALUES (%s, %s)", (user_id, key))
+        return jsonify({"favorited": True})
 
 
 @app.route("/favorites")
 @login_required
 def favorites_page():
     user_id = session["user_id"]
-    rows = get_db().execute(
-        "SELECT indicator_key FROM favorites WHERE user_id=?", (user_id,)
-    ).fetchall()
+    rows = _q("SELECT indicator_key FROM favorites WHERE user_id=%s", (user_id,))
     keys = [r["indicator_key"] for r in rows]
     saved = {k: v for k, v in INDICATORS.items() if k in keys}
     return render_template_string(FAVORITES_HTML,
@@ -1174,18 +1195,12 @@ def request_page():
         if not name or not desc:
             error = "Please fill in both fields."
         else:
-            with get_db() as conn:
-                conn.execute("INSERT INTO requests (author, name, description) VALUES (?, ?, ?)",
-                             (author, name, desc))
+            _run("INSERT INTO requests (author, name, description) VALUES (%s, %s, %s)", (author, name, desc))
             success = "Request submitted! Thanks."
-    reqs = get_db().execute(
-        "SELECT * FROM requests ORDER BY votes DESC, created ASC"
-    ).fetchall()
+    reqs = _q("SELECT * FROM requests ORDER BY votes DESC, created ASC")
     user_votes = set()
     if "user_id" in session:
-        rows = get_db().execute(
-            "SELECT request_id FROM request_votes WHERE user_id=?", (session["user_id"],)
-        ).fetchall()
+        rows = _q("SELECT request_id FROM request_votes WHERE user_id=%s", (session["user_id"],))
         user_votes = {r["request_id"] for r in rows}
     return render_template_string(REQUEST_HTML,
         reqs=reqs, user_votes=user_votes,
@@ -1196,19 +1211,19 @@ def request_page():
 @login_required
 def vote_request(req_id):
     user_id = session["user_id"]
-    with get_db() as conn:
-        existing = conn.execute(
-            "SELECT 1 FROM request_votes WHERE user_id=? AND request_id=?", (user_id, req_id)
-        ).fetchone()
+    with _tx() as cur:
+        cur.execute("SELECT 1 FROM request_votes WHERE user_id=%s AND request_id=%s", (user_id, req_id))
+        existing = cur.fetchone()
         if existing:
-            conn.execute("DELETE FROM request_votes WHERE user_id=? AND request_id=?", (user_id, req_id))
-            conn.execute("UPDATE requests SET votes = votes - 1 WHERE id=?", (req_id,))
+            cur.execute("DELETE FROM request_votes WHERE user_id=%s AND request_id=%s", (user_id, req_id))
+            cur.execute("UPDATE requests SET votes = votes - 1 WHERE id=%s", (req_id,))
             voted = False
         else:
-            conn.execute("INSERT INTO request_votes (user_id, request_id) VALUES (?, ?)", (user_id, req_id))
-            conn.execute("UPDATE requests SET votes = votes + 1 WHERE id=?", (req_id,))
+            cur.execute("INSERT INTO request_votes (user_id, request_id) VALUES (%s, %s)", (user_id, req_id))
+            cur.execute("UPDATE requests SET votes = votes + 1 WHERE id=%s", (req_id,))
             voted = True
-        row = conn.execute("SELECT votes FROM requests WHERE id=?", (req_id,)).fetchone()
+        cur.execute("SELECT votes FROM requests WHERE id=%s", (req_id,))
+        row = cur.fetchone()
     return jsonify({"voted": voted, "votes": row["votes"]})
 
 
@@ -1254,10 +1269,8 @@ def indicators_page():
     # Favorites
     is_favorited = False
     if kind and "user_id" in session:
-        row = get_db().execute(
-            "SELECT 1 FROM favorites WHERE user_id=? AND indicator_key=?",
-            (session["user_id"], kind)
-        ).fetchone()
+        row = _one("SELECT 1 FROM favorites WHERE user_id=%s AND indicator_key=%s",
+                   (session["user_id"], kind))
         is_favorited = bool(row)
 
     # Ratings
@@ -1346,20 +1359,18 @@ def stripe_webhook():
                 plan  = "pro" if price in (STRIPE_PRO_PRICE, STRIPE_PRO_PRICE_YEARLY) else "basic"
             except Exception:
                 plan = "basic"
-            with get_db() as conn:
-                conn.execute(
-                    "UPDATE users SET plan=?, stripe_customer_id=?, stripe_subscription_id=? WHERE id=?",
-                    (plan, customer, sub_id, int(user_id))
-                )
+            _run(
+                "UPDATE users SET plan=%s, stripe_customer_id=%s, stripe_subscription_id=%s WHERE id=%s",
+                (plan, customer, sub_id, int(user_id))
+            )
 
     elif event["type"] == "customer.subscription.deleted":
         customer = event["data"]["object"].get("customer")
         if customer:
-            with get_db() as conn:
-                conn.execute(
-                    "UPDATE users SET plan='free', stripe_subscription_id=NULL WHERE stripe_customer_id=?",
-                    (customer,)
-                )
+            _run(
+                "UPDATE users SET plan='free', stripe_subscription_id=NULL WHERE stripe_customer_id=%s",
+                (customer,)
+            )
 
     return "ok", 200
 
@@ -1368,8 +1379,7 @@ def stripe_webhook():
 @login_required
 def billing():
     user_id = session["user_id"]
-    db  = get_db()
-    row = db.execute("SELECT plan, stripe_customer_id FROM users WHERE id=?", (user_id,)).fetchone()
+    row = _one("SELECT plan, stripe_customer_id FROM users WHERE id=%s", (user_id,))
     plan        = row["plan"] if row else "free"
     customer_id = row["stripe_customer_id"] if row else None
     portal_url  = None
@@ -1420,27 +1430,24 @@ def admin_codes():
     if request.method == "POST" and request.form.get("action") == "generate":
         new_plan = request.form.get("plan", "pro")
         new_code = secrets.token_urlsafe(8).upper()
-        with get_db() as conn:
-            conn.execute("INSERT INTO promo_codes (code, plan) VALUES (?, ?)", (new_code, new_plan))
+        _run("INSERT INTO promo_codes (code, plan) VALUES (%s, %s)", (new_code, new_plan))
 
     # Delete a code
     if request.method == "POST" and request.form.get("action") == "delete":
-        with get_db() as conn:
-            conn.execute("DELETE FROM promo_codes WHERE code=?", (request.form.get("code"),))
+        _run("DELETE FROM promo_codes WHERE code=%s", (request.form.get("code"),))
 
-    codes = get_db().execute("SELECT * FROM promo_codes ORDER BY created DESC").fetchall()
+    codes = _q("SELECT * FROM promo_codes ORDER BY created DESC")
 
     # Dashboard stats
-    db = get_db()
-    total_users   = db.execute("SELECT COUNT(*) FROM users").fetchone()[0]
-    free_users    = db.execute("SELECT COUNT(*) FROM users WHERE plan='free' OR plan IS NULL").fetchone()[0]
-    basic_users   = db.execute("SELECT COUNT(*) FROM users WHERE plan='basic'").fetchone()[0]
-    pro_users     = db.execute("SELECT COUNT(*) FROM users WHERE plan='pro'").fetchone()[0]
-    new_today     = db.execute("SELECT COUNT(*) FROM users WHERE date(created)=date('now')").fetchone()[0]
-    new_week      = db.execute("SELECT COUNT(*) FROM users WHERE created >= datetime('now', '-7 days')").fetchone()[0]
-    total_copies  = db.execute("SELECT SUM(count) FROM copy_log").fetchone()[0] or 0
-    copies_today  = db.execute("SELECT SUM(count) FROM copy_log WHERE date=date('now')").fetchone()[0] or 0
-    recent_users  = db.execute("SELECT username, plan, email, created FROM users ORDER BY created DESC LIMIT 10").fetchall()
+    total_users   = _scalar("SELECT COUNT(*) FROM users")
+    free_users    = _scalar("SELECT COUNT(*) FROM users WHERE plan='free' OR plan IS NULL")
+    basic_users   = _scalar("SELECT COUNT(*) FROM users WHERE plan='basic'")
+    pro_users     = _scalar("SELECT COUNT(*) FROM users WHERE plan='pro'")
+    new_today     = _scalar("SELECT COUNT(*) FROM users WHERE created::date = CURRENT_DATE")
+    new_week      = _scalar("SELECT COUNT(*) FROM users WHERE created >= NOW() - INTERVAL '7 days'")
+    total_copies  = _scalar("SELECT COALESCE(SUM(count), 0) FROM copy_log")
+    copies_today  = _scalar("SELECT COALESCE(SUM(count), 0) FROM copy_log WHERE date=CURRENT_DATE::text")
+    recent_users  = _q("SELECT username, plan, email, created FROM users ORDER BY created DESC LIMIT 10")
 
     return render_template_string(ADMIN_CODES_HTML,
         codes=codes, new_code=new_code, new_plan=new_plan,
@@ -1459,16 +1466,16 @@ def redeem():
     if request.method == "POST":
         code = request.form.get("code", "").strip().upper()
         user_id = session["user_id"]
-        row = get_db().execute("SELECT * FROM promo_codes WHERE code=?", (code,)).fetchone()
+        row = _one("SELECT * FROM promo_codes WHERE code=%s", (code,))
         if not row:
             error = "Invalid code."
         elif row["used"]:
             error = "This code has already been used."
         else:
             plan = row["plan"]
-            with get_db() as conn:
-                conn.execute("UPDATE promo_codes SET used=1, used_by=? WHERE code=?", (user_id, code))
-                conn.execute("UPDATE users SET plan=? WHERE id=?", (plan, user_id))
+            with _tx() as cur:
+                cur.execute("UPDATE promo_codes SET used=1, used_by=%s WHERE code=%s", (user_id, code))
+                cur.execute("UPDATE users SET plan=%s WHERE id=%s", (plan, user_id))
             message = f"Success! Your account has been upgraded to {plan.upper()}."
     return render_template_string(REDEEM_HTML, message=message, error=error, current_user=current_user())
 
@@ -1477,16 +1484,12 @@ def redeem():
 @login_required
 def refer():
     user_id = session["user_id"]
-    row = get_db().execute("SELECT referral_code, plan FROM users WHERE id=?", (user_id,)).fetchone()
-    ref_code   = row["referral_code"] if row else None
-    # Generate one if missing
+    row = _one("SELECT referral_code, plan FROM users WHERE id=%s", (user_id,))
+    ref_code = row["referral_code"] if row else None
     if not ref_code:
         ref_code = secrets.token_urlsafe(6).upper()
-        with get_db() as conn:
-            conn.execute("UPDATE users SET referral_code=? WHERE id=?", (ref_code, user_id))
-    referral_count = get_db().execute(
-        "SELECT COUNT(*) FROM users WHERE referred_by=?", (ref_code,)
-    ).fetchone()[0]
+        _run("UPDATE users SET referral_code=%s WHERE id=%s", (ref_code, user_id))
+    referral_count = _scalar("SELECT COUNT(*) FROM users WHERE referred_by=%s", (ref_code,))
     referral_link = f"{APP_URL}/register?ref={ref_code}"
     return render_template_string(REFER_HTML,
         ref_code=ref_code, referral_link=referral_link,
@@ -1616,9 +1619,7 @@ ADMIN_CODES_HTML = """<!DOCTYPE html>
 @login_required
 def watchlist_page():
     user_id = session["user_id"]
-    rows = get_db().execute(
-        "SELECT ticker FROM watchlist WHERE user_id=? ORDER BY added ASC", (user_id,)
-    ).fetchall()
+    rows = _q("SELECT ticker FROM watchlist WHERE user_id=%s ORDER BY added ASC", (user_id,))
     tickers = [r["ticker"] for r in rows]
     return render_template_string(WATCHLIST_HTML, tickers=tickers, current_user=current_user())
 
@@ -1628,16 +1629,13 @@ def watchlist_page():
 def toggle_watchlist(ticker):
     ticker = ticker.upper()[:10]
     user_id = session["user_id"]
-    with get_db() as conn:
-        existing = conn.execute(
-            "SELECT 1 FROM watchlist WHERE user_id=? AND ticker=?", (user_id, ticker)
-        ).fetchone()
-        if existing:
-            conn.execute("DELETE FROM watchlist WHERE user_id=? AND ticker=?", (user_id, ticker))
-            return jsonify({"watching": False})
-        else:
-            conn.execute("INSERT INTO watchlist (user_id, ticker) VALUES (?, ?)", (user_id, ticker))
-            return jsonify({"watching": True})
+    existing = _one("SELECT 1 FROM watchlist WHERE user_id=%s AND ticker=%s", (user_id, ticker))
+    if existing:
+        _run("DELETE FROM watchlist WHERE user_id=%s AND ticker=%s", (user_id, ticker))
+        return jsonify({"watching": False})
+    else:
+        _run("INSERT INTO watchlist (user_id, ticker) VALUES (%s, %s)", (user_id, ticker))
+        return jsonify({"watching": True})
 
 
 @app.route("/api/watchlist/prices")
@@ -1645,9 +1643,7 @@ def toggle_watchlist(ticker):
 def watchlist_prices():
     import yfinance as yf
     user_id = session["user_id"]
-    rows = get_db().execute(
-        "SELECT ticker FROM watchlist WHERE user_id=?", (user_id,)
-    ).fetchall()
+    rows = _q("SELECT ticker FROM watchlist WHERE user_id=%s", (user_id,))
     tickers = [r["ticker"] for r in rows]
     if not tickers:
         return jsonify([])
@@ -1675,22 +1671,23 @@ def watchlist_prices():
 
 def _get_ratings(keys: list[str], user_id: int | None) -> dict:
     """Return {key: {"ups": N, "downs": N, "user_vote": 0/1/-1}} for each key."""
-    db = get_db()
     result = {k: {"ups": 0, "downs": 0, "user_vote": 0} for k in keys}
-    rows = db.execute(
-        "SELECT indicator_key, vote FROM indicator_ratings WHERE indicator_key IN ({})".format(
-            ",".join("?" * len(keys))), keys
-    ).fetchall()
+    if not keys:
+        return result
+    placeholders = ",".join(["%s"] * len(keys))
+    rows = _q(
+        f"SELECT indicator_key, vote FROM indicator_ratings WHERE indicator_key IN ({placeholders})", keys
+    )
     for r in rows:
         if r["vote"] == 1:
             result[r["indicator_key"]]["ups"] += 1
         else:
             result[r["indicator_key"]]["downs"] += 1
     if user_id:
-        urows = db.execute(
-            "SELECT indicator_key, vote FROM indicator_ratings WHERE user_id=? AND indicator_key IN ({})".format(
-                ",".join("?" * len(keys))), [user_id] + keys
-        ).fetchall()
+        urows = _q(
+            f"SELECT indicator_key, vote FROM indicator_ratings WHERE user_id=%s AND indicator_key IN ({placeholders})",
+            [user_id] + keys
+        )
         for r in urows:
             result[r["indicator_key"]]["user_vote"] = r["vote"]
     return result
@@ -1703,20 +1700,16 @@ def rate_indicator(key, vote):
         return jsonify({"error": "invalid"}), 400
     user_id  = session["user_id"]
     vote_val = 1 if vote == "up" else -1
-    with get_db() as conn:
-        existing = conn.execute(
-            "SELECT vote FROM indicator_ratings WHERE user_id=? AND indicator_key=?",
-            (user_id, key)
-        ).fetchone()
-        if existing and existing["vote"] == vote_val:
-            conn.execute("DELETE FROM indicator_ratings WHERE user_id=? AND indicator_key=?", (user_id, key))
-            user_vote = 0
-        else:
-            conn.execute(
-                "INSERT OR REPLACE INTO indicator_ratings (user_id, indicator_key, vote) VALUES (?, ?, ?)",
-                (user_id, key, vote_val)
-            )
-            user_vote = vote_val
+    existing = _one("SELECT vote FROM indicator_ratings WHERE user_id=%s AND indicator_key=%s", (user_id, key))
+    if existing and existing["vote"] == vote_val:
+        _run("DELETE FROM indicator_ratings WHERE user_id=%s AND indicator_key=%s", (user_id, key))
+        user_vote = 0
+    else:
+        _run("""
+            INSERT INTO indicator_ratings (user_id, indicator_key, vote) VALUES (%s, %s, %s)
+            ON CONFLICT (user_id, indicator_key) DO UPDATE SET vote=%s
+        """, (user_id, key, vote_val, vote_val))
+        user_vote = vote_val
     ratings = _get_ratings([key], user_id)
     return jsonify({**ratings[key], "user_vote": user_vote})
 
