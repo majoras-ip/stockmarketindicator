@@ -1315,7 +1315,7 @@ def pricing():
 
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "changeme")
 
-@app.route("/manage/codes", methods=["GET", "POST"])
+@app.route("/studio", methods=["GET", "POST"])
 def admin_codes():
     # Simple password check via query param or session
     if request.method == "POST" and request.form.get("password"):
