@@ -3242,6 +3242,81 @@ HOME_HTML = """<!DOCTYPE html>
     .preview-title { color: #8b949e; font-size: 0.75rem; margin-left: 6px; }
     .preview-body { padding: 16px; }
 
+    /* Stats strip */
+    .stats-strip {
+      display: flex; justify-content: center; gap: 0; flex-wrap: wrap;
+      background: var(--bg2); border-bottom: 1px solid var(--border);
+    }
+    .stat-item {
+      padding: 18px 32px; text-align: center; border-right: 1px solid var(--border);
+    }
+    .stat-item:last-child { border-right: none; }
+    .stat-num { font-size: 1.5rem; font-weight: 800; color: var(--accent); }
+    .stat-label { font-size: 0.75rem; color: var(--muted); margin-top: 2px; }
+
+    /* Pro features section */
+    .pro-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
+    .pro-card {
+      background: var(--bg2); border: 1px solid var(--border); border-radius: 10px;
+      padding: 22px; position: relative; overflow: hidden;
+    }
+    .pro-card::before {
+      content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+      background: linear-gradient(90deg, var(--accent), #79c0ff);
+    }
+    .pro-card.green::before { background: linear-gradient(90deg, #3fb950, #56d364); }
+    .pro-card.orange::before { background: linear-gradient(90deg, #e3b341, #ffa657); }
+    .pro-card-tag {
+      display: inline-block; font-size: 0.68rem; font-weight: 700; padding: 2px 8px;
+      border-radius: 10px; margin-bottom: 10px;
+    }
+    .tag-pro { background: #1f3a5f; color: var(--accent); }
+    .tag-basic { background: #1f2d1f; color: #3fb950; }
+    .pro-card h3 { font-size: 0.95rem; margin-bottom: 6px; }
+    .pro-card p { color: var(--muted); font-size: 0.82rem; line-height: 1.55; }
+    .pro-card-icon { font-size: 1.5rem; margin-bottom: 10px; }
+
+    /* Pricing teaser */
+    .pricing-teaser {
+      background: linear-gradient(135deg, var(--bg2) 0%, var(--bg) 100%);
+      border: 1px solid var(--border); border-radius: 12px;
+      padding: 40px 32px; text-align: center; margin-top: 0;
+    }
+    .pricing-teaser h2 { font-size: 1.4rem; margin-bottom: 8px; }
+    .pricing-teaser h2 span { color: var(--accent); }
+    .pricing-teaser p { color: var(--muted); font-size: 0.9rem; margin-bottom: 24px; }
+    .pricing-row { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-bottom: 16px; }
+    .price-pill {
+      background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+      padding: 14px 24px; min-width: 140px; text-align: center;
+    }
+    .price-pill.featured { border-color: var(--accent); background: rgba(88,166,255,0.06); }
+    .price-pill .p-name { font-size: 0.78rem; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 6px; }
+    .price-pill .p-price { font-size: 1.4rem; font-weight: 800; }
+    .price-pill .p-price span { font-size: 0.8rem; font-weight: 400; color: var(--muted); }
+    .trial-note { color: var(--muted); font-size: 0.8rem; }
+    .trial-note strong { color: #3fb950; }
+
+    /* FAQ */
+    .faq-list { margin-top: 0; }
+    .faq-item {
+      background: var(--bg2); border: 1px solid var(--border); border-radius: 8px;
+      margin-bottom: 8px; overflow: hidden;
+    }
+    .faq-q {
+      padding: 16px 20px; cursor: pointer; font-size: 0.9rem; font-weight: 600;
+      display: flex; justify-content: space-between; align-items: center;
+      user-select: none;
+    }
+    .faq-q:hover { background: var(--bg3); }
+    .faq-chevron { color: var(--muted); font-size: 0.8rem; transition: transform .2s; }
+    .faq-a {
+      display: none; padding: 0 20px 16px; color: var(--muted);
+      font-size: 0.85rem; line-height: 1.65;
+    }
+    .faq-item.open .faq-a { display: block; }
+    .faq-item.open .faq-chevron { transform: rotate(180deg); }
+
     footer { text-align: center; padding: 32px 24px; color: var(--muted); font-size: 0.8rem; border-top: 1px solid var(--border); }
   </style>
 </head>
@@ -3334,6 +3409,26 @@ HOME_HTML = """<!DOCTYPE html>
   </div>
 </div>
 
+<!-- Stats strip -->
+<div class="stats-strip">
+  <div class="stat-item">
+    <div class="stat-num">20+</div>
+    <div class="stat-label">Pine Script indicators</div>
+  </div>
+  <div class="stat-item">
+    <div class="stat-num">Free</div>
+    <div class="stat-label">Works on TradingView free</div>
+  </div>
+  <div class="stat-item">
+    <div class="stat-num">7-day</div>
+    <div class="stat-label">Free trial on Pro & Basic</div>
+  </div>
+  <div class="stat-item">
+    <div class="stat-num">v5</div>
+    <div class="stat-label">Pine Script v5 / v6</div>
+  </div>
+</div>
+
 <!-- Features -->
 <div class="section">
   <h2>Why <span>ChartEdge</span>?</h2>
@@ -3346,17 +3441,27 @@ HOME_HTML = """<!DOCTYPE html>
     <div class="feature">
       <div class="feature-icon">🆓</div>
       <h3>No paid plan needed</h3>
-      <p>All indicators use Pine Script v5 and work on TradingView's free tier. No Pro, no Pro+, no subscription required.</p>
+      <p>All indicators use Pine Script v5/v6 and work on TradingView's free tier. No Pro, no Pro+, no upgrade required.</p>
     </div>
     <div class="feature">
       <div class="feature-icon">🎯</div>
       <h3>Any chart, any ticker</h3>
-      <p>Indicators automatically adapt to whatever symbol and timeframe you're viewing. No configuration needed.</p>
+      <p>Indicators automatically adapt to whatever symbol and timeframe you're viewing. No manual configuration needed.</p>
+    </div>
+    <div class="feature">
+      <div class="feature-icon">📋</div>
+      <h3>Personal watchlist</h3>
+      <p>Save your favourite tickers to a private watchlist for quick access. Available on all plans including free.</p>
     </div>
     <div class="feature">
       <div class="feature-icon">🤖</div>
       <h3>LSTM volatility forecast</h3>
-      <p>Powered by a deep learning model trained on real market data. Get a 30-minute volatility forecast for any ticker.</p>
+      <p>Powered by a deep learning model trained on real market data. Get a live 30-minute volatility forecast for any ticker.</p>
+    </div>
+    <div class="feature">
+      <div class="feature-icon">🎁</div>
+      <h3>Refer & earn</h3>
+      <p>Share your unique link — when a friend upgrades to any paid plan, you both get 7 days of that plan for free.</p>
     </div>
   </div>
 </div>
@@ -3388,6 +3493,63 @@ HOME_HTML = """<!DOCTYPE html>
     <a class="ind-pill" href="/indicators?kind=feargreed">
       <div class="cat">Momentum</div><div class="iname">Fear & Greed</div>
     </a>
+    <a class="ind-pill" href="/flow">
+      <div class="cat">Options · Pro</div><div class="iname">Options Flow</div>
+    </a>
+    <a class="ind-pill" href="/gamma">
+      <div class="cat">Options · Basic+</div><div class="iname">Gamma Exposure</div>
+    </a>
+    <a class="ind-pill" href="/earnings">
+      <div class="cat">Calendar · Basic+</div><div class="iname">Earnings Calendar</div>
+    </a>
+  </div>
+  <div style="text-align:center;margin-top:24px;">
+    <a class="btn-primary" href="/indicators">Browse all indicators →</a>
+  </div>
+</div>
+
+<hr class="divider">
+
+<!-- Pro features -->
+<div class="section">
+  <h2>More with <span>Basic & Pro</span></h2>
+  <div class="pro-grid">
+    <div class="pro-card">
+      <div class="pro-card-icon">📅</div>
+      <div class="pro-card-tag tag-basic">Basic</div>
+      <h3>Earnings Calendar</h3>
+      <p>See upcoming earnings dates for any ticker at a glance. Never get caught off-guard by a surprise earnings move again.</p>
+    </div>
+    <div class="pro-card green">
+      <div class="pro-card-icon">📊</div>
+      <div class="pro-card-tag tag-basic">Basic</div>
+      <h3>Gamma Exposure (GEX)</h3>
+      <p>Real-time gamma exposure chart calculated from live options chains. Identify key dealer-hedging price levels before the market moves.</p>
+    </div>
+    <div class="pro-card orange">
+      <div class="pro-card-icon">🌊</div>
+      <div class="pro-card-tag tag-pro">Pro</div>
+      <h3>Options Flow</h3>
+      <p>Track large call and put activity across the options chain with net flow visualization. See where the smart money is positioned.</p>
+    </div>
+    <div class="pro-card">
+      <div class="pro-card-icon">📈</div>
+      <div class="pro-card-tag tag-pro">Pro</div>
+      <h3>Unlimited Copies</h3>
+      <p>Free accounts are limited to 3 copies per day. Pro removes all limits so you can build out your full indicator setup without interruption.</p>
+    </div>
+    <div class="pro-card green">
+      <div class="pro-card-icon">💾</div>
+      <div class="pro-card-tag tag-basic">Basic</div>
+      <h3>Larger Watchlist</h3>
+      <p>Basic and Pro plans support up to 10 and unlimited tickers in your personal watchlist respectively.</p>
+    </div>
+    <div class="pro-card orange">
+      <div class="pro-card-icon">🤖</div>
+      <div class="pro-card-tag tag-pro">Pro</div>
+      <h3>Live LSTM Forecast</h3>
+      <p>Generate a real-time 30-minute volatility forecast for any ticker directly from the dashboard — no code required.</p>
+    </div>
   </div>
 </div>
 
@@ -3400,24 +3562,102 @@ HOME_HTML = """<!DOCTYPE html>
     <div class="steps">
       <div class="step">
         <div class="step-num">1</div>
+        <h4>Create a free account</h4>
+        <p>Sign up in seconds — no credit card required. Free accounts get 3 copies per day forever.</p>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
         <h4>Pick an indicator</h4>
         <p>Browse by category or search by name on the Indicators page.</p>
       </div>
       <div class="step">
-        <div class="step-num">2</div>
-        <h4>Copy the code</h4>
-        <p>Hit the Copy button — the Pine Script code is in your clipboard.</p>
-      </div>
-      <div class="step">
         <div class="step-num">3</div>
-        <h4>Open TradingView</h4>
-        <p>Go to any chart → Pine Script Editor at the bottom of the screen.</p>
+        <h4>Copy the code</h4>
+        <p>Hit the Copy button — the Pine Script code goes straight to your clipboard.</p>
       </div>
       <div class="step">
         <div class="step-num">4</div>
-        <h4>Paste & add to chart</h4>
-        <p>Paste the code, click Add to chart. The indicator appears instantly.</p>
+        <h4>Paste into TradingView</h4>
+        <p>Open any chart → Pine Script Editor → paste → Add to chart. Done in seconds.</p>
       </div>
+    </div>
+  </div>
+</div>
+
+<hr class="divider">
+
+<!-- Pricing teaser -->
+<div class="section">
+  <div class="pricing-teaser">
+    <h2>Simple, transparent <span>pricing</span></h2>
+    <p>Start free. Upgrade anytime. Cancel anytime. First paid month includes a 7-day free trial.</p>
+    <div class="pricing-row">
+      <div class="price-pill">
+        <div class="p-name">Free</div>
+        <div class="p-price">$0<span>/mo</span></div>
+      </div>
+      <div class="price-pill featured">
+        <div class="p-name">Basic</div>
+        <div class="p-price">$9.99<span>/mo</span></div>
+      </div>
+      <div class="price-pill">
+        <div class="p-name">Pro</div>
+        <div class="p-price">$15.99<span>/mo</span></div>
+      </div>
+    </div>
+    <p class="trial-note"><strong>7-day free trial</strong> on your first subscription · Annual plans save up to 47%</p>
+    <br>
+    <a class="btn-primary" href="/pricing">See full pricing →</a>
+  </div>
+</div>
+
+<hr class="divider">
+
+<!-- FAQ -->
+<div class="section">
+  <h2>Frequently asked <span>questions</span></h2>
+  <div class="faq-list">
+    <div class="faq-item">
+      <div class="faq-q" onclick="toggleFaq(this)">
+        Do the indicators work on a free TradingView account?
+        <span class="faq-chevron">▼</span>
+      </div>
+      <div class="faq-a">Yes — all Pine Script indicators on ChartEdge are built with TradingView's free tier in mind. They use Pine Script v5/v6 and do not require any TradingView paid plan to run.</div>
+    </div>
+    <div class="faq-item">
+      <div class="faq-q" onclick="toggleFaq(this)">
+        What is the free plan limit?
+        <span class="faq-chevron">▼</span>
+      </div>
+      <div class="faq-a">Free accounts can copy up to 3 indicators per day and save up to 3 tickers to their watchlist. Basic and Pro plans raise or remove those limits and unlock additional tools like Gamma Exposure, Options Flow, and the Earnings Calendar.</div>
+    </div>
+    <div class="faq-item">
+      <div class="faq-q" onclick="toggleFaq(this)">
+        Is there a free trial for paid plans?
+        <span class="faq-chevron">▼</span>
+      </div>
+      <div class="faq-a">Yes — your first subscription (Basic or Pro, monthly or yearly) includes a 7-day free trial. You won't be charged until the trial ends, and you can cancel any time before that with no cost.</div>
+    </div>
+    <div class="faq-item">
+      <div class="faq-q" onclick="toggleFaq(this)">
+        How does the referral program work?
+        <span class="faq-chevron">▼</span>
+      </div>
+      <div class="faq-a">Share your unique referral link from the Refer a Friend page. When either you or someone you referred upgrades to a paid plan, both of you receive 7 days of that plan for free — automatically, no codes needed.</div>
+    </div>
+    <div class="faq-item">
+      <div class="faq-q" onclick="toggleFaq(this)">
+        What is Options Flow / Gamma Exposure?
+        <span class="faq-chevron">▼</span>
+      </div>
+      <div class="faq-a">Options Flow shows the net call vs put activity across a ticker's options chain — useful for spotting where large traders are positioning. Gamma Exposure (GEX) uses Black-Scholes to calculate where market makers are likely to hedge, highlighting key support and resistance price levels. Both pull live data from real options chains.</div>
+    </div>
+    <div class="faq-item">
+      <div class="faq-q" onclick="toggleFaq(this)">
+        Can I cancel my subscription?
+        <span class="faq-chevron">▼</span>
+      </div>
+      <div class="faq-a">Absolutely. You can manage or cancel your subscription at any time from the Billing page. There are no cancellation fees and your access continues until the end of the billing period you already paid for.</div>
     </div>
   </div>
 </div>
@@ -3426,6 +3666,9 @@ HOME_HTML = """<!DOCTYPE html>
 
 <script>
 """ + _THEME_JS + """
+function toggleFaq(el) {
+  el.closest('.faq-item').classList.toggle('open');
+}
 </script>
 </body>
 </html>"""
