@@ -2139,15 +2139,28 @@ HOME_HTML = """<!DOCTYPE html>
     /* Divider */
     .divider { border: none; border-top: 1px solid var(--border); margin: 0; }
 
+    /* Hero preview */
+    .hero-preview {
+      margin: 40px auto 0; max-width: 680px;
+      background: #0d1117; border: 1px solid #30363d; border-radius: 10px;
+      overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+    }
+    .preview-bar {
+      background: #161b22; border-bottom: 1px solid #30363d;
+      padding: 8px 14px; display: flex; align-items: center; gap: 8px;
+    }
+    .preview-dot { width: 10px; height: 10px; border-radius: 50%; }
+    .preview-title { color: #8b949e; font-size: 0.75rem; margin-left: 6px; }
+    .preview-body { padding: 16px; }
+
     footer { text-align: center; padding: 32px 24px; color: var(--muted); font-size: 0.8rem; border-top: 1px solid var(--border); }
   </style>
 </head>
 <body>
 <nav>
   <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span></a>
-  <div class="nav-links">
-""" + _NAV_LINKS + """
-  </div>
+  <button class="hamburger" onclick="toggleMobileNav(event)">☰</button>
+  <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
 </nav>
 
 <!-- Hero -->
@@ -2158,6 +2171,77 @@ HOME_HTML = """<!DOCTYPE html>
   <div class="hero-btns">
     <a class="btn-primary" href="/indicators">Browse Indicators</a>
     <a class="btn-secondary" href="/generate">LSTM Forecast</a>
+  </div>
+
+  <!-- Chart preview mockup -->
+  <div class="hero-preview">
+    <div class="preview-bar">
+      <div class="preview-dot" style="background:#ff5f57"></div>
+      <div class="preview-dot" style="background:#febc2e"></div>
+      <div class="preview-dot" style="background:#28c840"></div>
+      <span class="preview-title">TradingView — SPY 5m · VWAP + Bands</span>
+    </div>
+    <div class="preview-body">
+      <svg viewBox="0 0 640 200" width="100%" xmlns="http://www.w3.org/2000/svg" style="display:block">
+        <!-- Grid lines -->
+        <line x1="0" y1="50"  x2="640" y2="50"  stroke="#21262d" stroke-width="1"/>
+        <line x1="0" y1="100" x2="640" y2="100" stroke="#21262d" stroke-width="1"/>
+        <line x1="0" y1="150" x2="640" y2="150" stroke="#21262d" stroke-width="1"/>
+        <!-- VWAP upper band -->
+        <polyline points="0,70 60,65 120,60 180,55 240,52 300,48 360,50 420,53 480,55 540,52 640,48"
+          fill="none" stroke="#58a6ff" stroke-width="1" stroke-dasharray="4,3" opacity="0.5"/>
+        <!-- VWAP line -->
+        <polyline points="0,100 60,95 120,92 180,88 240,85 300,82 360,84 420,86 480,88 540,84 640,80"
+          fill="none" stroke="#58a6ff" stroke-width="2"/>
+        <!-- VWAP lower band -->
+        <polyline points="0,130 60,125 120,124 180,121 240,118 300,116 360,118 420,119 480,121 540,116 640,112"
+          fill="none" stroke="#58a6ff" stroke-width="1" stroke-dasharray="4,3" opacity="0.5"/>
+        <!-- VWAP band fill -->
+        <polygon points="0,70 60,65 120,60 180,55 240,52 300,48 360,50 420,53 480,55 540,52 640,48 640,112 540,116 480,121 420,119 360,118 300,116 240,118 180,121 120,124 60,125 0,130"
+          fill="#58a6ff" opacity="0.06"/>
+        <!-- Candlesticks -->
+        <rect x="10"  y="88" width="8" height="20" fill="#3fb950" rx="1"/>
+        <line x1="14" y1="85" x2="14" y2="112" stroke="#3fb950" stroke-width="1.5"/>
+        <rect x="30"  y="84" width="8" height="16" fill="#3fb950" rx="1"/>
+        <line x1="34" y1="80" x2="34" y2="103" stroke="#3fb950" stroke-width="1.5"/>
+        <rect x="50"  y="86" width="8" height="18" fill="#f85149" rx="1"/>
+        <line x1="54" y1="82" x2="54" y2="108" stroke="#f85149" stroke-width="1.5"/>
+        <rect x="70"  y="80" width="8" height="14" fill="#3fb950" rx="1"/>
+        <line x1="74" y1="76" x2="74" y2="97"  stroke="#3fb950" stroke-width="1.5"/>
+        <rect x="90"  y="75" width="8" height="18" fill="#3fb950" rx="1"/>
+        <line x1="94" y1="71" x2="94" y2="96"  stroke="#3fb950" stroke-width="1.5"/>
+        <rect x="110" y="78" width="8" height="16" fill="#f85149" rx="1"/>
+        <line x1="114" y1="74" x2="114" y2="98" stroke="#f85149" stroke-width="1.5"/>
+        <rect x="130" y="72" width="8" height="14" fill="#3fb950" rx="1"/>
+        <line x1="134" y1="68" x2="134" y2="89" stroke="#3fb950" stroke-width="1.5"/>
+        <rect x="150" y="68" width="8" height="16" fill="#3fb950" rx="1"/>
+        <line x1="154" y1="64" x2="154" y2="88" stroke="#3fb950" stroke-width="1.5"/>
+        <rect x="170" y="70" width="8" height="18" fill="#f85149" rx="1"/>
+        <line x1="174" y1="66" x2="174" y2="92" stroke="#f85149" stroke-width="1.5"/>
+        <rect x="190" y="65" width="8" height="14" fill="#3fb950" rx="1"/>
+        <line x1="194" y1="61" x2="194" y2="82" stroke="#3fb950" stroke-width="1.5"/>
+        <rect x="210" y="62" width="8" height="16" fill="#3fb950" rx="1"/>
+        <line x1="214" y1="58" x2="214" y2="82" stroke="#3fb950" stroke-width="1.5"/>
+        <rect x="230" y="66" width="8" height="18" fill="#f85149" rx="1"/>
+        <line x1="234" y1="62" x2="234" y2="88" stroke="#f85149" stroke-width="1.5"/>
+        <!-- Volume bars at bottom -->
+        <rect x="10"  y="178" width="8" height="12" fill="#3fb950" opacity="0.5" rx="1"/>
+        <rect x="30"  y="175" width="8" height="15" fill="#3fb950" opacity="0.5" rx="1"/>
+        <rect x="50"  y="180" width="8" height="10" fill="#f85149" opacity="0.5" rx="1"/>
+        <rect x="70"  y="174" width="8" height="16" fill="#3fb950" opacity="0.5" rx="1"/>
+        <rect x="90"  y="172" width="8" height="18" fill="#3fb950" opacity="0.5" rx="1"/>
+        <rect x="110" y="177" width="8" height="13" fill="#f85149" opacity="0.5" rx="1"/>
+        <rect x="130" y="173" width="8" height="17" fill="#3fb950" opacity="0.5" rx="1"/>
+        <rect x="150" y="170" width="8" height="20" fill="#3fb950" opacity="0.5" rx="1"/>
+        <rect x="170" y="175" width="8" height="15" fill="#f85149" opacity="0.5" rx="1"/>
+        <rect x="190" y="171" width="8" height="19" fill="#3fb950" opacity="0.5" rx="1"/>
+        <rect x="210" y="169" width="8" height="21" fill="#3fb950" opacity="0.5" rx="1"/>
+        <rect x="230" y="174" width="8" height="16" fill="#f85149" opacity="0.5" rx="1"/>
+        <!-- Label -->
+        <rect x="530" y="72" width="100" height="22" rx="4" fill="#1f6feb" opacity="0.85"/>
+        <text x="580" y="87" text-anchor="middle" fill="white" font-size="10" font-family="monospace">VWAP 524.18</text>
+      </svg>
+    </div>
   </div>
 </div>
 
@@ -3407,9 +3491,17 @@ def dashboard():
     return render_template_string(DASHBOARD_HTML, current_user=current_user())
 
 
+@app.route("/debug/oauth")
+def debug_oauth():
+    redirect_uri = url_for("google_callback", _external=True, _scheme="https")
+    return jsonify({
+        "redirect_uri": redirect_uri,
+        "client_id": os.environ.get("GOOGLE_CLIENT_ID", "NOT SET")[:20] + "..." if os.environ.get("GOOGLE_CLIENT_ID") else "NOT SET",
+    })
+
 @app.route("/")
 def index():
-    return render_template_string(HOME_HTML)
+    return render_template_string(HOME_HTML, current_user=current_user())
 
 
 # ── Entry point ───────────────────────────────────────────────────────────────
