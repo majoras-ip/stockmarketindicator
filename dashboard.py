@@ -1035,12 +1035,24 @@ def register():
                 session["user_id"] = user_id
                 session["username"] = username
 
-                # If referred by someone, give new user 7 days Pro trial
+                # If referred by someone, give new user 7 days Pro trial + reward referrer
                 if ref:
-                    referrer = get_db().execute("SELECT id FROM users WHERE referral_code=?", (ref,)).fetchone()
+                    referrer = get_db().execute("SELECT id, plan FROM users WHERE referral_code=?", (ref,)).fetchone()
                     if referrer:
                         with get_db() as conn:
                             conn.execute("UPDATE users SET plan='pro' WHERE id=?", (user_id,))
+                        # Count how many people this referrer has now referred
+                        ref_count = get_db().execute(
+                            "SELECT COUNT(*) FROM users WHERE referred_by=?", (ref,)
+                        ).fetchone()[0]
+                        referrer_plan = referrer["plan"]
+                        # Reward: 2 referrals = Basic, 4 referrals = Pro
+                        if ref_count >= 4 and referrer_plan != "pro":
+                            with get_db() as conn:
+                                conn.execute("UPDATE users SET plan='pro' WHERE id=?", (referrer["id"],))
+                        elif ref_count >= 2 and referrer_plan == "free":
+                            with get_db() as conn:
+                                conn.execute("UPDATE users SET plan='basic' WHERE id=?", (referrer["id"],))
 
                 # Send welcome email
                 if email:
@@ -4383,6 +4395,23 @@ REFER_HTML = """<!DOCTYPE html>
     </div>
   </div>
 
+  <div style="margin-bottom:28px;">
+    <div style="display:flex;justify-content:space-between;font-size:.82rem;color:var(--muted);margin-bottom:6px;">
+      <span>Basic reward (2 referrals)</span>
+      <span>{{ [referral_count, 2]|min }}/2</span>
+    </div>
+    <div style="background:var(--border);border-radius:4px;height:8px;margin-bottom:14px;">
+      <div style="background:var(--accent);height:8px;border-radius:4px;width:{{ [referral_count * 50, 100]|min }}%;transition:width .4s;"></div>
+    </div>
+    <div style="display:flex;justify-content:space-between;font-size:.82rem;color:var(--muted);margin-bottom:6px;">
+      <span>Pro reward (4 referrals)</span>
+      <span>{{ [referral_count, 4]|min }}/4</span>
+    </div>
+    <div style="background:var(--border);border-radius:4px;height:8px;">
+      <div style="background:#3fb950;height:8px;border-radius:4px;width:{{ [referral_count * 25, 100]|min }}%;transition:width .4s;"></div>
+    </div>
+  </div>
+
   <div class="refer-link-box">
     <input id="ref-link" type="text" value="{{ referral_link }}" readonly>
     <button onclick="copyLink()">Copy Link</button>
@@ -4401,7 +4430,7 @@ REFER_HTML = """<!DOCTYPE html>
     </div>
     <div class="step-row">
       <div class="step-num">3</div>
-      <div class="step-text"><strong>They start trading smarter</strong><br><span>Full access to all Pro indicators and forecasts during their trial.</span></div>
+      <div class="step-text"><strong>You get rewarded</strong><br><span>2 referrals → <strong>Basic free</strong> &nbsp;·&nbsp; 4 referrals → <strong>Pro free</strong></span></div>
     </div>
   </div>
 </div>
