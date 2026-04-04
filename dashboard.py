@@ -3202,6 +3202,11 @@ INDICATORS_HTML = """<!DOCTYPE html>
       <div class="how-to-body" id="howto-body">{{ how_to }}</div>
     </div>
     {% endif %}
+    {% if description %}
+    <div style="margin-top:14px;border-top:1px solid var(--border);padding-top:14px;">
+      <div style="color:var(--muted);font-size:0.82rem;line-height:1.65;">{{ description }}</div>
+    </div>
+    {% endif %}
   </div>
   {% endif %}
 </div>
