@@ -37,6 +37,11 @@ app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", secrets.token_hex(32))
 CORS(app)
 
+@app.errorhandler(500)
+def handle_500(e):
+    import traceback
+    return f"<pre>500 Error:\n{traceback.format_exc()}</pre>", 500
+
 # ── Stripe ────────────────────────────────────────────────────────────────────
 stripe.api_key = os.environ.get("STRIPE_SECRET_KEY", "")
 STRIPE_BASIC_PRICE         = "price_1TIXWYBcm3kIFrAZRBWgcmuJ"
@@ -1424,17 +1429,20 @@ def admin_codes():
     if not session.get("admin"):
         return render_template_string(ADMIN_LOGIN_HTML, error=False)
 
-    # Generate a new code
-    new_code = None
-    new_plan = None
-    if request.method == "POST" and request.form.get("action") == "generate":
-        new_plan = request.form.get("plan", "pro")
-        new_code = secrets.token_urlsafe(8).upper()
-        _run("INSERT INTO promo_codes (code, plan) VALUES (%s, %s)", (new_code, new_plan))
+    try:
+        # Generate a new code
+        new_code = None
+        new_plan = None
+        if request.method == "POST" and request.form.get("action") == "generate":
+            new_plan = request.form.get("plan", "pro")
+            new_code = secrets.token_urlsafe(8).upper()
+            _run("INSERT INTO promo_codes (code, plan) VALUES (%s, %s)", (new_code, new_plan))
 
-    # Delete a code
-    if request.method == "POST" and request.form.get("action") == "delete":
-        _run("DELETE FROM promo_codes WHERE code=%s", (request.form.get("code"),))
+        # Delete a code
+        if request.method == "POST" and request.form.get("action") == "delete":
+            _run("DELETE FROM promo_codes WHERE code=%s", (request.form.get("code"),))
+    except Exception as e:
+        return f"Action error: {e}", 500
 
     codes = _q("SELECT * FROM promo_codes ORDER BY created DESC")
 
