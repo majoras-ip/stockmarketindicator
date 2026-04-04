@@ -1996,16 +1996,32 @@ def flow_api():
     if plan != "pro":
         return jsonify({"error": "upgrade_required"}), 403
     import yfinance as yf
+    import requests as _requests
+    from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
     ticker = request.args.get("ticker", "SPY").upper()[:10]
     try:
-        t = yf.Ticker(ticker)
-        expirations = t.options
-        if not expirations:
+        session_yf = _requests.Session()
+        session_yf.headers.update({"User-Agent": "Mozilla/5.0"})
+
+        def _fetch():
+            t = yf.Ticker(ticker, session=session_yf)
+            exps = t.options
+            if not exps:
+                return None, None, None
+            req_exp = request.args.get("exp", "")
+            exp = req_exp if req_exp in exps else exps[0]
+            chain = t.option_chain(exp)
+            return exps, exp, chain
+
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            try:
+                expirations, exp, chain = pool.submit(_fetch).result(timeout=18)
+            except FuturesTimeout:
+                return jsonify({"error": "Yahoo Finance timed out — try again in a moment."}), 504
+
+        if expirations is None:
             return jsonify({"error": "No options data found for " + ticker}), 404
 
-        requested_exp = request.args.get("exp", "")
-        exp = requested_exp if requested_exp in expirations else expirations[0]
-        chain = t.option_chain(exp)
         calls = chain.calls
         puts  = chain.puts
 
@@ -2074,18 +2090,33 @@ def gamma_api():
         return jsonify({"error": "upgrade_required"}), 403
     import yfinance as yf
     import numpy as np
+    import requests as _requests
     from scipy.stats import norm
+    from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
     ticker = request.args.get("ticker", "SPY").upper()[:10]
     try:
-        t = yf.Ticker(ticker)
-        spot = round(float(t.fast_info.last_price), 2)
-        expirations = t.options
-        if not expirations:
-            return jsonify({"error": "No options data for " + ticker}), 404
+        session_yf = _requests.Session()
+        session_yf.headers.update({"User-Agent": "Mozilla/5.0"})
 
-        requested_exp = request.args.get("exp", "")
-        exp = requested_exp if requested_exp in expirations else expirations[0]
-        chain = t.option_chain(exp)
+        def _fetch():
+            t = yf.Ticker(ticker, session=session_yf)
+            spot_ = round(float(t.fast_info.last_price), 2)
+            exps  = t.options
+            if not exps:
+                return None, None, None, None
+            req_exp = request.args.get("exp", "")
+            exp_ = req_exp if req_exp in exps else exps[0]
+            chain_ = t.option_chain(exp_)
+            return spot_, exps, exp_, chain_
+
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            try:
+                spot, expirations, exp, chain = pool.submit(_fetch).result(timeout=18)
+            except FuturesTimeout:
+                return jsonify({"error": "Yahoo Finance timed out — try again in a moment."}), 504
+
+        if expirations is None:
+            return jsonify({"error": "No options data for " + ticker}), 404
 
         from datetime import date
         today = date.today()
