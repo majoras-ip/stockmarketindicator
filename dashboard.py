@@ -1287,198 +1287,10 @@ def billing():
         current_user=current_user())
 
 
-BILLING_HTML = """<!DOCTYPE html>
-<html data-theme="dark">
-<head>
-  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Billing · ChartEdge</title>
-""" + _META + """
-  <style>
-    :root{--bg:#0d1117;--bg2:#161b22;--text:#e6edf3;--muted:#8b949e;--border:#30363d;--accent:#58a6ff;}
-    [data-theme="light"]{--bg:#fff;--bg2:#f6f8fa;--text:#1f2328;--muted:#636c76;--border:#d0d7de;--accent:#0969da;}
-    *{box-sizing:border-box;margin:0;padding:0;}
-    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);}
-    nav{display:flex;align-items:center;justify-content:space-between;padding:14px 28px;border-bottom:1px solid var(--border);background:var(--bg2);position:sticky;top:0;z-index:100;flex-wrap:wrap;gap:8px;}
-    .logo{font-size:1.2rem;font-weight:700;text-decoration:none;}
-    .nav-links{display:flex;align-items:center;gap:4px;flex-wrap:wrap;}
-    .drop-btn{background:none;border:none;color:var(--text);font-size:.85rem;cursor:pointer;padding:6px 10px;border-radius:6px;}
-    .drop-btn:hover,.drop-btn.open{background:var(--border);}
-    .dropdown{position:relative;}
-    .drop-menu{display:none;position:absolute;top:calc(100% + 6px);left:0;background:var(--bg2);border:1px solid var(--border);border-radius:8px;min-width:180px;z-index:200;padding:4px 0;box-shadow:0 8px 24px rgba(0,0,0,.4);}
-    .drop-menu.open{display:block;}
-    .drop-menu a{display:block;padding:8px 14px;font-size:.85rem;color:var(--text);text-decoration:none;}
-    .drop-menu a:hover{background:var(--border);}
-    .theme-toggle{background:none;border:1px solid var(--border);color:var(--muted);font-size:.78rem;cursor:pointer;padding:5px 10px;border-radius:6px;}
-    .hamburger{display:none;background:none;border:1px solid var(--border);color:var(--text);font-size:1.1rem;cursor:pointer;padding:4px 10px;border-radius:6px;}
-    @media(max-width:640px){.hamburger{display:block;}.nav-links{display:none;flex-direction:column;align-items:flex-start;width:100%;padding:8px 0;}.nav-links.open{display:flex;}.dropdown{width:100%;}.drop-btn{width:100%;text-align:left;}.drop-menu{position:static;box-shadow:none;border:none;padding-left:12px;}.drop-menu.open{display:block;}}
-    .page{max-width:600px;margin:0 auto;padding:48px 24px 80px;}
-    .page h1{font-size:1.8rem;margin-bottom:24px;}
-    .page h1 span{color:var(--accent);}
-    .card{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:24px;margin-bottom:16px;}
-    .plan-badge{display:inline-block;padding:4px 12px;border-radius:20px;font-size:.8rem;font-weight:600;margin-bottom:16px;}
-    .badge-free{background:var(--bg);border:1px solid var(--border);color:var(--muted);}
-    .badge-basic{background:#1f3a5f;color:#58a6ff;}
-    .badge-pro{background:#1f2d1f;color:#3fb950;}
-    .btn{display:inline-block;padding:10px 20px;border-radius:8px;font-size:.9rem;text-decoration:none;cursor:pointer;border:none;}
-    .btn-primary{background:var(--accent);color:#fff;}
-    .btn-secondary{background:var(--bg);border:1px solid var(--border);color:var(--text);}
-    .success-box{background:#1f2d1f;border:1px solid #3fb950;border-radius:8px;padding:14px 18px;margin-bottom:20px;color:#3fb950;font-size:.9rem;}
-    footer{text-align:center;padding:32px 24px;color:var(--muted);font-size:.8rem;border-top:1px solid var(--border);}
-  </style>
-</head>
-<body>
-<nav>
-  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span></a>
-  <button class="hamburger" onclick="toggleMobileNav(event)">☰</button>
-  <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
-</nav>
-<div class="page">
-  <h1>Your <span>Billing</span></h1>
-  {% if success %}
-  <div class="success-box">✓ Payment successful! Your plan has been upgraded.</div>
-  {% endif %}
-  <div class="card">
-    <div class="plan-badge badge-{{ plan }}">{{ plan|upper }}</div>
-    <h3 style="margin-bottom:8px;">Current plan</h3>
-    <p style="color:var(--muted);font-size:.9rem;margin-bottom:20px;">
-      {% if plan == 'free' %}3 copies/day · Free forever
-      {% elif plan == 'basic' %}10 copies/day · $9.99/month
-      {% else %}Unlimited copies · $15.99/month
-      {% endif %}
-    </p>
-    {% if portal_url %}
-    <a href="{{ portal_url }}" class="btn btn-secondary">Manage / Cancel Subscription →</a>
-    {% elif plan == 'free' %}
-    <a href="/pricing" class="btn btn-primary">Upgrade Plan</a>
-    {% endif %}
-  </div>
-  <a href="/indicators" style="color:var(--muted);font-size:.85rem;">← Back to indicators</a>
-</div>
-<footer>© 2026 ChartEdge · <a href="/privacy" style="color:inherit">Privacy</a> · <a href="/terms" style="color:inherit">Terms</a></footer>
-<script>""" + _THEME_JS + """</script>
-</body>
-</html>"""
+# BILLING_HTML defined below after _META/_NAV_LINKS/_THEME_JS
 
 
-PRICING_HTML = """<!DOCTYPE html>
-<html data-theme="dark">
-<head>
-  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Pricing · ChartEdge</title>
-""" + _META + """
-  <style>
-    :root{--bg:#0d1117;--bg2:#161b22;--text:#e6edf3;--muted:#8b949e;--border:#30363d;--accent:#58a6ff;}
-    [data-theme="light"]{--bg:#fff;--bg2:#f6f8fa;--text:#1f2328;--muted:#636c76;--border:#d0d7de;--accent:#0969da;}
-    *{box-sizing:border-box;margin:0;padding:0;}
-    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);}
-    nav{display:flex;align-items:center;justify-content:space-between;padding:14px 28px;border-bottom:1px solid var(--border);background:var(--bg2);position:sticky;top:0;z-index:100;flex-wrap:wrap;gap:8px;}
-    .logo{font-size:1.2rem;font-weight:700;text-decoration:none;}
-    .nav-links{display:flex;align-items:center;gap:4px;flex-wrap:wrap;}
-    .drop-btn{background:none;border:none;color:var(--text);font-size:.85rem;cursor:pointer;padding:6px 10px;border-radius:6px;}
-    .drop-btn:hover,.drop-btn.open{background:var(--border);}
-    .dropdown{position:relative;}
-    .drop-menu{display:none;position:absolute;top:calc(100% + 6px);left:0;background:var(--bg2);border:1px solid var(--border);border-radius:8px;min-width:180px;z-index:200;padding:4px 0;box-shadow:0 8px 24px rgba(0,0,0,.4);}
-    .drop-menu.open{display:block;}
-    .drop-menu a{display:block;padding:8px 14px;font-size:.85rem;color:var(--text);text-decoration:none;}
-    .drop-menu a:hover{background:var(--border);}
-    .theme-toggle{background:none;border:1px solid var(--border);color:var(--muted);font-size:.78rem;cursor:pointer;padding:5px 10px;border-radius:6px;}
-    .hamburger{display:none;background:none;border:1px solid var(--border);color:var(--text);font-size:1.1rem;cursor:pointer;padding:4px 10px;border-radius:6px;}
-    @media(max-width:640px){.hamburger{display:block;}.nav-links{display:none;flex-direction:column;align-items:flex-start;width:100%;padding:8px 0;}.nav-links.open{display:flex;}.dropdown{width:100%;}.drop-btn{width:100%;text-align:left;}.drop-menu{position:static;box-shadow:none;border:none;padding-left:12px;}.drop-menu.open{display:block;}}
-    .page{max-width:860px;margin:0 auto;padding:48px 24px 80px;}
-    .page h1{font-size:2rem;text-align:center;margin-bottom:8px;}
-    .page h1 span{color:var(--accent);}
-    .subtitle{text-align:center;color:var(--muted);margin-bottom:40px;}
-    .plans{display:flex;gap:20px;justify-content:center;flex-wrap:wrap;}
-    .plan{flex:1;min-width:220px;max-width:260px;background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:28px 24px;position:relative;}
-    .plan.featured{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent);}
-    .plan-badge{position:absolute;top:-12px;left:50%;transform:translateX(-50%);background:var(--accent);color:#fff;font-size:.72rem;font-weight:700;padding:3px 12px;border-radius:20px;white-space:nowrap;}
-    .plan-name{font-size:1rem;font-weight:700;margin-bottom:4px;}
-    .plan-price{font-size:2rem;font-weight:800;margin:12px 0 4px;}
-    .plan-price span{font-size:1rem;font-weight:400;color:var(--muted);}
-    .plan-desc{color:var(--muted);font-size:.83rem;margin-bottom:20px;}
-    .plan-features{list-style:none;margin-bottom:24px;}
-    .plan-features li{font-size:.85rem;padding:6px 0;border-bottom:1px solid var(--border);color:var(--muted);}
-    .plan-features li:last-child{border:none;}
-    .plan-features li::before{content:"✓ ";color:#3fb950;}
-    .plan-features li.no::before{content:"✗ ";color:var(--muted);}
-    .plan-features li.no{opacity:.6;}
-    .btn-plan{display:block;text-align:center;padding:11px;border-radius:8px;font-size:.9rem;font-weight:600;text-decoration:none;}
-    .btn-free{background:var(--bg);border:1px solid var(--border);color:var(--text);}
-    .btn-basic{background:var(--bg);border:2px solid var(--accent);color:var(--accent);}
-    .btn-pro{background:var(--accent);color:#fff;}
-    .btn-plan:hover{opacity:.88;}
-    .error-box{background:#2d1f1f;border:1px solid #f85149;border-radius:8px;padding:12px 16px;margin-bottom:20px;color:#f85149;font-size:.88rem;text-align:center;}
-    footer{text-align:center;padding:32px 24px;color:var(--muted);font-size:.8rem;border-top:1px solid var(--border);}
-  </style>
-</head>
-<body>
-<nav>
-  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span></a>
-  <button class="hamburger" onclick="toggleMobileNav(event)">☰</button>
-  <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
-</nav>
-<div class="page">
-  <h1>Simple <span>Pricing</span></h1>
-  <p class="subtitle">Start free. Upgrade when you need more.</p>
-  {% if error %}<div class="error-box">Something went wrong with checkout. Please try again.</div>{% endif %}
-  <div class="plans">
-    <!-- Free -->
-    <div class="plan">
-      <div class="plan-name">Free</div>
-      <div class="plan-price">$0<span>/mo</span></div>
-      <div class="plan-desc">Get started with no commitment.</div>
-      <ul class="plan-features">
-        <li>3 copies per day</li>
-        <li>All indicators visible</li>
-        <li>Watchlist</li>
-        <li>Earnings calendar</li>
-        <li class="no">LSTM forecast</li>
-      </ul>
-      <a href="/indicators" class="btn-plan btn-free">Start Free</a>
-    </div>
-    <!-- Basic -->
-    <div class="plan">
-      <div class="plan-name">Basic</div>
-      <div class="plan-price">$9.99<span>/mo</span></div>
-      <div class="plan-desc">For active traders who copy often.</div>
-      <ul class="plan-features">
-        <li>10 copies per day</li>
-        <li>All indicators visible</li>
-        <li>Watchlist</li>
-        <li>Earnings calendar</li>
-        <li class="no">LSTM forecast</li>
-      </ul>
-      {% if current_user %}
-      <a href="/subscribe/basic" class="btn-plan btn-basic">Get Basic</a>
-      {% else %}
-      <a href="/login?next=/subscribe/basic" class="btn-plan btn-basic">Get Basic</a>
-      {% endif %}
-    </div>
-    <!-- Pro -->
-    <div class="plan featured">
-      <div class="plan-badge">MOST POPULAR</div>
-      <div class="plan-name">Pro</div>
-      <div class="plan-price">$15.99<span>/mo</span></div>
-      <div class="plan-desc">Unlimited access for power users.</div>
-      <ul class="plan-features">
-        <li>Unlimited copies</li>
-        <li>All indicators visible</li>
-        <li>Watchlist</li>
-        <li>Earnings calendar</li>
-        <li>LSTM forecast</li>
-      </ul>
-      {% if current_user %}
-      <a href="/subscribe/pro" class="btn-plan btn-pro">Get Pro</a>
-      {% else %}
-      <a href="/login?next=/subscribe/pro" class="btn-plan btn-pro">Get Pro</a>
-      {% endif %}
-    </div>
-  </div>
-</div>
-<footer>© 2026 ChartEdge · <a href="/privacy" style="color:inherit">Privacy</a> · <a href="/terms" style="color:inherit">Terms</a></footer>
-<script>""" + _THEME_JS + """</script>
-</body>
-</html>"""
+# PRICING_HTML defined below after _META/_NAV_LINKS/_THEME_JS
 
 
 @app.route("/pricing")
@@ -1917,6 +1729,170 @@ function toggleTheme() {
   });
 })();
 """
+
+# ── Pricing / Billing HTML ────────────────────────────────────────────────────
+
+BILLING_HTML = """<!DOCTYPE html>
+<html data-theme="dark">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Billing · ChartEdge</title>
+""" + _META + """
+  <style>
+    :root{--bg:#0d1117;--bg2:#161b22;--text:#e6edf3;--muted:#8b949e;--border:#30363d;--accent:#58a6ff;}
+    [data-theme="light"]{--bg:#fff;--bg2:#f6f8fa;--text:#1f2328;--muted:#636c76;--border:#d0d7de;--accent:#0969da;}
+    *{box-sizing:border-box;margin:0;padding:0;}
+    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);}
+    nav{display:flex;align-items:center;justify-content:space-between;padding:14px 28px;border-bottom:1px solid var(--border);background:var(--bg2);position:sticky;top:0;z-index:100;flex-wrap:wrap;gap:8px;}
+    .logo{font-size:1.2rem;font-weight:700;text-decoration:none;}
+    .nav-links{display:flex;align-items:center;gap:4px;flex-wrap:wrap;}
+    .drop-btn{background:none;border:none;color:var(--text);font-size:.85rem;cursor:pointer;padding:6px 10px;border-radius:6px;}
+    .drop-btn:hover,.drop-btn.open{background:var(--border);}
+    .dropdown{position:relative;}
+    .drop-menu{display:none;position:absolute;top:calc(100% + 6px);left:0;background:var(--bg2);border:1px solid var(--border);border-radius:8px;min-width:180px;z-index:200;padding:4px 0;box-shadow:0 8px 24px rgba(0,0,0,.4);}
+    .drop-menu.open{display:block;}
+    .drop-menu a{display:block;padding:8px 14px;font-size:.85rem;color:var(--text);text-decoration:none;}
+    .drop-menu a:hover{background:var(--border);}
+    .theme-toggle{background:none;border:1px solid var(--border);color:var(--muted);font-size:.78rem;cursor:pointer;padding:5px 10px;border-radius:6px;}
+    .hamburger{display:none;background:none;border:1px solid var(--border);color:var(--text);font-size:1.1rem;cursor:pointer;padding:4px 10px;border-radius:6px;}
+    @media(max-width:640px){.hamburger{display:block;}.nav-links{display:none;flex-direction:column;align-items:flex-start;width:100%;padding:8px 0;}.nav-links.open{display:flex;}.dropdown{width:100%;}.drop-btn{width:100%;text-align:left;}.drop-menu{position:static;box-shadow:none;border:none;padding-left:12px;}.drop-menu.open{display:block;}}
+    .page{max-width:600px;margin:0 auto;padding:48px 24px 80px;}
+    .page h1{font-size:1.8rem;margin-bottom:24px;} .page h1 span{color:var(--accent);}
+    .card{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:24px;margin-bottom:16px;}
+    .plan-badge{display:inline-block;padding:4px 12px;border-radius:20px;font-size:.8rem;font-weight:600;margin-bottom:16px;}
+    .badge-free{background:var(--bg);border:1px solid var(--border);color:var(--muted);}
+    .badge-basic{background:#1f3a5f;color:#58a6ff;} .badge-pro{background:#1f2d1f;color:#3fb950;}
+    .btn{display:inline-block;padding:10px 20px;border-radius:8px;font-size:.9rem;text-decoration:none;cursor:pointer;border:none;}
+    .btn-primary{background:var(--accent);color:#fff;} .btn-secondary{background:var(--bg);border:1px solid var(--border);color:var(--text);}
+    .success-box{background:#1f2d1f;border:1px solid #3fb950;border-radius:8px;padding:14px 18px;margin-bottom:20px;color:#3fb950;font-size:.9rem;}
+    footer{text-align:center;padding:32px 24px;color:var(--muted);font-size:.8rem;border-top:1px solid var(--border);}
+  </style>
+</head>
+<body>
+<nav>
+  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span></a>
+  <button class="hamburger" onclick="toggleMobileNav(event)">☰</button>
+  <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
+</nav>
+<div class="page">
+  <h1>Your <span>Billing</span></h1>
+  {% if success %}<div class="success-box">✓ Payment successful! Your plan has been upgraded.</div>{% endif %}
+  <div class="card">
+    <div class="plan-badge badge-{{ plan }}">{{ plan|upper }}</div>
+    <h3 style="margin-bottom:8px;">Current plan</h3>
+    <p style="color:var(--muted);font-size:.9rem;margin-bottom:20px;">
+      {% if plan == 'free' %}3 copies/day · Free forever
+      {% elif plan == 'basic' %}10 copies/day · $9.99/month
+      {% else %}Unlimited copies · $15.99/month{% endif %}
+    </p>
+    {% if portal_url %}<a href="{{ portal_url }}" class="btn btn-secondary">Manage / Cancel Subscription →</a>
+    {% elif plan == 'free' %}<a href="/pricing" class="btn btn-primary">Upgrade Plan</a>{% endif %}
+  </div>
+  <a href="/indicators" style="color:var(--muted);font-size:.85rem;">← Back to indicators</a>
+</div>
+<footer>© 2026 ChartEdge · <a href="/privacy" style="color:inherit">Privacy</a> · <a href="/terms" style="color:inherit">Terms</a></footer>
+<script>""" + _THEME_JS + """</script>
+</body>
+</html>"""
+
+
+PRICING_HTML = """<!DOCTYPE html>
+<html data-theme="dark">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Pricing · ChartEdge</title>
+""" + _META + """
+  <style>
+    :root{--bg:#0d1117;--bg2:#161b22;--text:#e6edf3;--muted:#8b949e;--border:#30363d;--accent:#58a6ff;}
+    [data-theme="light"]{--bg:#fff;--bg2:#f6f8fa;--text:#1f2328;--muted:#636c76;--border:#d0d7de;--accent:#0969da;}
+    *{box-sizing:border-box;margin:0;padding:0;}
+    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);}
+    nav{display:flex;align-items:center;justify-content:space-between;padding:14px 28px;border-bottom:1px solid var(--border);background:var(--bg2);position:sticky;top:0;z-index:100;flex-wrap:wrap;gap:8px;}
+    .logo{font-size:1.2rem;font-weight:700;text-decoration:none;}
+    .nav-links{display:flex;align-items:center;gap:4px;flex-wrap:wrap;}
+    .drop-btn{background:none;border:none;color:var(--text);font-size:.85rem;cursor:pointer;padding:6px 10px;border-radius:6px;}
+    .drop-btn:hover,.drop-btn.open{background:var(--border);}
+    .dropdown{position:relative;}
+    .drop-menu{display:none;position:absolute;top:calc(100% + 6px);left:0;background:var(--bg2);border:1px solid var(--border);border-radius:8px;min-width:180px;z-index:200;padding:4px 0;box-shadow:0 8px 24px rgba(0,0,0,.4);}
+    .drop-menu.open{display:block;}
+    .drop-menu a{display:block;padding:8px 14px;font-size:.85rem;color:var(--text);text-decoration:none;}
+    .drop-menu a:hover{background:var(--border);}
+    .theme-toggle{background:none;border:1px solid var(--border);color:var(--muted);font-size:.78rem;cursor:pointer;padding:5px 10px;border-radius:6px;}
+    .hamburger{display:none;background:none;border:1px solid var(--border);color:var(--text);font-size:1.1rem;cursor:pointer;padding:4px 10px;border-radius:6px;}
+    @media(max-width:640px){.hamburger{display:block;}.nav-links{display:none;flex-direction:column;align-items:flex-start;width:100%;padding:8px 0;}.nav-links.open{display:flex;}.dropdown{width:100%;}.drop-btn{width:100%;text-align:left;}.drop-menu{position:static;box-shadow:none;border:none;padding-left:12px;}.drop-menu.open{display:block;}}
+    .page{max-width:860px;margin:0 auto;padding:48px 24px 80px;}
+    .page h1{font-size:2rem;text-align:center;margin-bottom:8px;} .page h1 span{color:var(--accent);}
+    .subtitle{text-align:center;color:var(--muted);margin-bottom:40px;}
+    .plans{display:flex;gap:20px;justify-content:center;flex-wrap:wrap;}
+    .plan{flex:1;min-width:220px;max-width:260px;background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:28px 24px;position:relative;}
+    .plan.featured{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent);}
+    .plan-badge{position:absolute;top:-12px;left:50%;transform:translateX(-50%);background:var(--accent);color:#fff;font-size:.72rem;font-weight:700;padding:3px 12px;border-radius:20px;white-space:nowrap;}
+    .plan-name{font-size:1rem;font-weight:700;margin-bottom:4px;}
+    .plan-price{font-size:2rem;font-weight:800;margin:12px 0 4px;} .plan-price span{font-size:1rem;font-weight:400;color:var(--muted);}
+    .plan-desc{color:var(--muted);font-size:.83rem;margin-bottom:20px;}
+    .plan-features{list-style:none;margin-bottom:24px;}
+    .plan-features li{font-size:.85rem;padding:6px 0;border-bottom:1px solid var(--border);color:var(--muted);}
+    .plan-features li:last-child{border:none;} .plan-features li::before{content:"✓ ";color:#3fb950;}
+    .plan-features li.no::before{content:"✗ ";color:var(--muted);} .plan-features li.no{opacity:.6;}
+    .btn-plan{display:block;text-align:center;padding:11px;border-radius:8px;font-size:.9rem;font-weight:600;text-decoration:none;}
+    .btn-free{background:var(--bg);border:1px solid var(--border);color:var(--text);}
+    .btn-basic{background:var(--bg);border:2px solid var(--accent);color:var(--accent);}
+    .btn-pro{background:var(--accent);color:#fff;} .btn-plan:hover{opacity:.88;}
+    .error-box{background:#2d1f1f;border:1px solid #f85149;border-radius:8px;padding:12px 16px;margin-bottom:20px;color:#f85149;font-size:.88rem;text-align:center;}
+    footer{text-align:center;padding:32px 24px;color:var(--muted);font-size:.8rem;border-top:1px solid var(--border);}
+  </style>
+</head>
+<body>
+<nav>
+  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span></a>
+  <button class="hamburger" onclick="toggleMobileNav(event)">☰</button>
+  <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
+</nav>
+<div class="page">
+  <h1>Simple <span>Pricing</span></h1>
+  <p class="subtitle">Start free. Upgrade when you need more.</p>
+  {% if error %}<div class="error-box">Something went wrong with checkout. Please try again.</div>{% endif %}
+  <div class="plans">
+    <div class="plan">
+      <div class="plan-name">Free</div>
+      <div class="plan-price">$0<span>/mo</span></div>
+      <div class="plan-desc">Get started with no commitment.</div>
+      <ul class="plan-features">
+        <li>3 copies per day</li><li>All indicators visible</li>
+        <li>Watchlist</li><li>Earnings calendar</li><li class="no">LSTM forecast</li>
+      </ul>
+      <a href="/indicators" class="btn-plan btn-free">Start Free</a>
+    </div>
+    <div class="plan">
+      <div class="plan-name">Basic</div>
+      <div class="plan-price">$9.99<span>/mo</span></div>
+      <div class="plan-desc">For active traders who copy often.</div>
+      <ul class="plan-features">
+        <li>10 copies per day</li><li>All indicators visible</li>
+        <li>Watchlist</li><li>Earnings calendar</li><li class="no">LSTM forecast</li>
+      </ul>
+      {% if current_user %}<a href="/subscribe/basic" class="btn-plan btn-basic">Get Basic</a>
+      {% else %}<a href="/login?next=/subscribe/basic" class="btn-plan btn-basic">Get Basic</a>{% endif %}
+    </div>
+    <div class="plan featured">
+      <div class="plan-badge">MOST POPULAR</div>
+      <div class="plan-name">Pro</div>
+      <div class="plan-price">$15.99<span>/mo</span></div>
+      <div class="plan-desc">Unlimited access for power users.</div>
+      <ul class="plan-features">
+        <li>Unlimited copies</li><li>All indicators visible</li>
+        <li>Watchlist</li><li>Earnings calendar</li><li>LSTM forecast</li>
+      </ul>
+      {% if current_user %}<a href="/subscribe/pro" class="btn-plan btn-pro">Get Pro</a>
+      {% else %}<a href="/login?next=/subscribe/pro" class="btn-plan btn-pro">Get Pro</a>{% endif %}
+    </div>
+  </div>
+</div>
+<footer>© 2026 ChartEdge · <a href="/privacy" style="color:inherit">Privacy</a> · <a href="/terms" style="color:inherit">Terms</a></footer>
+<script>""" + _THEME_JS + """</script>
+</body>
+</html>"""
+
 
 # ── Auth HTML ─────────────────────────────────────────────────────────────────
 
