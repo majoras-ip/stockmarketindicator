@@ -1456,62 +1456,7 @@ ADMIN_CODES_HTML = """<!DOCTYPE html>
 </body></html>"""
 
 
-REDEEM_HTML = """<!DOCTYPE html>
-<html data-theme="dark">
-<head>
-  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Redeem Code · ChartEdge</title>
-""" + _META + """
-  <style>
-    :root{--bg:#0d1117;--bg2:#161b22;--text:#e6edf3;--muted:#8b949e;--border:#30363d;--accent:#58a6ff;}
-    [data-theme="light"]{--bg:#fff;--bg2:#f6f8fa;--text:#1f2328;--muted:#636c76;--border:#d0d7de;--accent:#0969da;}
-    *{box-sizing:border-box;margin:0;padding:0;}
-    body{font-family:-apple-system,sans-serif;background:var(--bg);color:var(--text);}
-    nav{display:flex;align-items:center;justify-content:space-between;padding:14px 28px;border-bottom:1px solid var(--border);background:var(--bg2);position:sticky;top:0;z-index:100;flex-wrap:wrap;gap:8px;}
-    .logo{font-size:1.2rem;font-weight:700;text-decoration:none;}
-    .nav-links{display:flex;align-items:center;gap:4px;flex-wrap:wrap;}
-    .drop-btn{background:none;border:none;color:var(--text);font-size:.85rem;cursor:pointer;padding:6px 10px;border-radius:6px;}
-    .drop-btn:hover,.drop-btn.open{background:var(--border);}
-    .dropdown{position:relative;}
-    .drop-menu{display:none;position:absolute;top:calc(100% + 6px);left:0;background:var(--bg2);border:1px solid var(--border);border-radius:8px;min-width:180px;z-index:200;padding:4px 0;box-shadow:0 8px 24px rgba(0,0,0,.4);}
-    .drop-menu.open{display:block;}
-    .drop-menu a{display:block;padding:8px 14px;font-size:.85rem;color:var(--text);text-decoration:none;}
-    .drop-menu a:hover{background:var(--border);}
-    .theme-toggle{background:none;border:1px solid var(--border);color:var(--muted);font-size:.78rem;cursor:pointer;padding:5px 10px;border-radius:6px;}
-    .hamburger{display:none;background:none;border:1px solid var(--border);color:var(--text);font-size:1.1rem;cursor:pointer;padding:4px 10px;border-radius:6px;}
-    @media(max-width:640px){.hamburger{display:block;}.nav-links{display:none;flex-direction:column;align-items:flex-start;width:100%;padding:8px 0;}.nav-links.open{display:flex;}.dropdown{width:100%;}.drop-btn{width:100%;text-align:left;}.drop-menu{position:static;box-shadow:none;border:none;padding-left:12px;}.drop-menu.open{display:block;}}
-    .page{max-width:480px;margin:80px auto;padding:0 24px;}
-    .page h1{font-size:1.8rem;margin-bottom:8px;} .page h1 span{color:var(--accent);}
-    .page p{color:var(--muted);margin-bottom:28px;font-size:.92rem;}
-    .code-input{width:100%;padding:14px;font-size:1.1rem;letter-spacing:3px;text-transform:uppercase;background:var(--bg2);border:1px solid var(--border);color:var(--text);border-radius:8px;margin-bottom:12px;text-align:center;}
-    .code-input:focus{outline:none;border-color:var(--accent);}
-    .btn-redeem{width:100%;padding:12px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-size:1rem;font-weight:600;cursor:pointer;}
-    .success{background:#1f2d1f;border:1px solid #3fb950;border-radius:8px;padding:14px 18px;color:#3fb950;margin-bottom:20px;font-size:.9rem;}
-    .error{background:#2d1f1f;border:1px solid #f85149;border-radius:8px;padding:14px 18px;color:#f85149;margin-bottom:20px;font-size:.9rem;}
-    footer{text-align:center;padding:32px 24px;color:var(--muted);font-size:.8rem;border-top:1px solid var(--border);margin-top:60px;}
-  </style>
-</head>
-<body>
-<nav>
-  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span></a>
-  <button class="hamburger" onclick="toggleMobileNav(event)">☰</button>
-  <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
-</nav>
-<div class="page">
-  <h1>Redeem <span>Code</span></h1>
-  <p>Enter a promo code to upgrade your account instantly.</p>
-  {% if message %}<div class="success">{{ message }}</div>{% endif %}
-  {% if error %}<div class="error">{{ error }}</div>{% endif %}
-  <form method="POST">
-    <input class="code-input" type="text" name="code" placeholder="XXXXXXXX" maxlength="20" autofocus>
-    <button class="btn-redeem" type="submit">Redeem</button>
-  </form>
-</div>
-<footer>© 2026 ChartEdge · <a href="/privacy" style="color:inherit">Privacy</a> · <a href="/terms" style="color:inherit">Terms</a></footer>
-<script>""" + _THEME_JS + """</script>
-</body>
-</html>"""
-
+# REDEEM_HTML defined below after _META/_NAV_LINKS/_THEME_JS
 
 # ── Watchlist ─────────────────────────────────────────────────────────────────
 
@@ -1945,7 +1890,64 @@ function toggleTheme() {
 })();
 """
 
-# ── Pricing / Billing HTML ────────────────────────────────────────────────────
+# ── Pricing / Billing / Redeem HTML ──────────────────────────────────────────
+
+REDEEM_HTML = """<!DOCTYPE html>
+<html data-theme="dark">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Redeem Code · ChartEdge</title>
+""" + _META + """
+  <style>
+    :root{--bg:#0d1117;--bg2:#161b22;--text:#e6edf3;--muted:#8b949e;--border:#30363d;--accent:#58a6ff;}
+    [data-theme="light"]{--bg:#fff;--bg2:#f6f8fa;--text:#1f2328;--muted:#636c76;--border:#d0d7de;--accent:#0969da;}
+    *{box-sizing:border-box;margin:0;padding:0;}
+    body{font-family:-apple-system,sans-serif;background:var(--bg);color:var(--text);}
+    nav{display:flex;align-items:center;justify-content:space-between;padding:14px 28px;border-bottom:1px solid var(--border);background:var(--bg2);position:sticky;top:0;z-index:100;flex-wrap:wrap;gap:8px;}
+    .logo{font-size:1.2rem;font-weight:700;text-decoration:none;}
+    .nav-links{display:flex;align-items:center;gap:4px;flex-wrap:wrap;}
+    .drop-btn{background:none;border:none;color:var(--text);font-size:.85rem;cursor:pointer;padding:6px 10px;border-radius:6px;}
+    .drop-btn:hover,.drop-btn.open{background:var(--border);}
+    .dropdown{position:relative;}
+    .drop-menu{display:none;position:absolute;top:calc(100% + 6px);left:0;background:var(--bg2);border:1px solid var(--border);border-radius:8px;min-width:180px;z-index:200;padding:4px 0;box-shadow:0 8px 24px rgba(0,0,0,.4);}
+    .drop-menu.open{display:block;}
+    .drop-menu a{display:block;padding:8px 14px;font-size:.85rem;color:var(--text);text-decoration:none;}
+    .drop-menu a:hover{background:var(--border);}
+    .theme-toggle{background:none;border:1px solid var(--border);color:var(--muted);font-size:.78rem;cursor:pointer;padding:5px 10px;border-radius:6px;}
+    .hamburger{display:none;background:none;border:1px solid var(--border);color:var(--text);font-size:1.1rem;cursor:pointer;padding:4px 10px;border-radius:6px;}
+    @media(max-width:640px){.hamburger{display:block;}.nav-links{display:none;flex-direction:column;align-items:flex-start;width:100%;padding:8px 0;}.nav-links.open{display:flex;}.dropdown{width:100%;}.drop-btn{width:100%;text-align:left;}.drop-menu{position:static;box-shadow:none;border:none;padding-left:12px;}.drop-menu.open{display:block;}}
+    .page{max-width:480px;margin:80px auto;padding:0 24px;}
+    .page h1{font-size:1.8rem;margin-bottom:8px;} .page h1 span{color:var(--accent);}
+    .page p{color:var(--muted);margin-bottom:28px;font-size:.92rem;}
+    .code-input{width:100%;padding:14px;font-size:1.1rem;letter-spacing:3px;text-transform:uppercase;background:var(--bg2);border:1px solid var(--border);color:var(--text);border-radius:8px;margin-bottom:12px;text-align:center;}
+    .code-input:focus{outline:none;border-color:var(--accent);}
+    .btn-redeem{width:100%;padding:12px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-size:1rem;font-weight:600;cursor:pointer;}
+    .success{background:#1f2d1f;border:1px solid #3fb950;border-radius:8px;padding:14px 18px;color:#3fb950;margin-bottom:20px;font-size:.9rem;}
+    .error{background:#2d1f1f;border:1px solid #f85149;border-radius:8px;padding:14px 18px;color:#f85149;margin-bottom:20px;font-size:.9rem;}
+    footer{text-align:center;padding:32px 24px;color:var(--muted);font-size:.8rem;border-top:1px solid var(--border);margin-top:60px;}
+  </style>
+</head>
+<body>
+<nav>
+  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span></a>
+  <button class="hamburger" onclick="toggleMobileNav(event)">☰</button>
+  <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
+</nav>
+<div class="page">
+  <h1>Redeem <span>Code</span></h1>
+  <p>Enter a promo code to upgrade your account instantly.</p>
+  {% if message %}<div class="success">{{ message }}</div>{% endif %}
+  {% if error %}<div class="error">{{ error }}</div>{% endif %}
+  <form method="POST">
+    <input class="code-input" type="text" name="code" placeholder="XXXXXXXX" maxlength="20" autofocus>
+    <button class="btn-redeem" type="submit">Redeem</button>
+  </form>
+</div>
+<footer>© 2026 ChartEdge · <a href="/privacy" style="color:inherit">Privacy</a> · <a href="/terms" style="color:inherit">Terms</a></footer>
+<script>""" + _THEME_JS + """</script>
+</body>
+</html>"""
+
 
 BILLING_HTML = """<!DOCTYPE html>
 <html data-theme="dark">
