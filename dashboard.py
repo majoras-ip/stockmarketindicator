@@ -5254,7 +5254,7 @@ FLOW_HTML = """<!DOCTYPE html>
            onkeydown="if(event.key==='Enter'){event.preventDefault();loadFlow();}">
     <button type="button" onclick="loadFlow()">Search</button>
   </div>
-  <div id="flow-content" style="min-height:60px;"></div>
+  <div id="flow-content" style="min-height:60px;text-align:center;padding:32px;color:var(--muted);">Loading SPY options data…</div>
 </div>
 <footer>© 2026 ChartEdge · Options data via yfinance · Not financial advice</footer>
 <script>
@@ -5347,6 +5347,11 @@ function loadFlowExp(el, exp) {
 }
 
 function fmt(n) { return n >= 1000 ? (n/1000).toFixed(1) + 'K' : String(n); }
+
+document.addEventListener('DOMContentLoaded', function() {
+  document.getElementById('ticker-input').value = 'SPY';
+  loadFlow();
+});
 """ + _THEME_JS + """
 </script>
 </body>
