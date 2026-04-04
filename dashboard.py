@@ -1041,6 +1041,141 @@ if barstate.islast
 """
 
 
+def _pine_smallcap_pullback() -> str:
+    return """\
+//@version=5
+indicator("Small Cap Micro Pullback", overlay=true, max_bars_back=500)
+
+// ── Inputs ──────────────────────────────────────────────────────────────────
+ema_fast  = input.int(9,   "Fast EMA",              minval=1)
+ema_mid   = input.int(20,  "Mid EMA",               minval=1)
+ema_slow  = input.int(50,  "Slow EMA",              minval=1)
+vol_mult  = input.float(1.5, "Volume surge ×",      minval=1.0, step=0.1, tooltip="Signal only fires when volume exceeds this multiple of the 20-bar average — filters noise.")
+max_pb    = input.int(5,   "Max pullback bars",     minval=1,  maxval=15,  tooltip="How many consecutive pullback bars are allowed before the setup is invalidated.")
+atr_mult  = input.float(1.5, "Stop ATR ×",         minval=0.5, step=0.1,  tooltip="Suggested stop = pullback low minus this many ATRs.")
+show_stop = input.bool(true, "Show suggested stop")
+
+// ── Core calculations ────────────────────────────────────────────────────────
+e_fast = ta.ema(close, ema_fast)
+e_mid  = ta.ema(close, ema_mid)
+e_slow = ta.ema(close, ema_slow)
+atr    = ta.atr(14)
+
+vol_avg   = ta.sma(volume, 20)
+vol_surge = volume >= vol_avg * vol_mult
+
+// ── Trend filter: EMAs stacked bullishly, price above fast EMA ───────────────
+uptrend = e_fast > e_mid and e_mid > e_slow and close > e_fast
+
+// ── Relative volume label (bottom-right table) ───────────────────────────────
+rvol = volume / vol_avg
+
+// ── Micro pullback detection ─────────────────────────────────────────────────
+// A micro pullback is a shallow retracement toward the fast EMA while the
+// broader uptrend structure (EMA stack) remains intact.
+// Conditions per pullback bar:
+//   1. EMA stack still bullish
+//   2. Close is below the prior bar's close  -OR-  low wicks into the fast EMA
+//   3. Volume is at or below average (healthy, low-volume consolidation)
+
+touching_ema  = low <= e_fast * 1.003              // low within 0.3% of fast EMA
+weak_candle   = close < close[1] or close < open   // bearish or doji candle
+low_vol_bar   = volume <= vol_avg * 1.1            // volume not spiking
+
+pullback_bar  = uptrend and (touching_ema or weak_candle) and low_vol_bar
+
+// Count consecutive pullback bars
+var int pb_count = 0
+pb_count := pullback_bar ? pb_count + 1 : 0
+
+in_pb_zone = pb_count > 0 and pb_count <= max_pb
+
+// ── Entry signal ─────────────────────────────────────────────────────────────
+// Reclaim of fast EMA on above-average volume after a micro pullback
+reclaim = close > e_fast and close > open              // bullish close above EMA
+entry   = in_pb_zone[1] and reclaim and vol_surge and uptrend
+
+// ── Pullback low for stop placement ──────────────────────────────────────────
+var float pb_low = na
+if entry
+    pb_low := low[1]
+    for i = 2 to max_pb
+        if pb_count[i] > 0
+            pb_low := math.min(pb_low, low[i])
+        else
+            break
+
+stop_price = pb_low - atr * atr_mult
+
+// ── Plots ────────────────────────────────────────────────────────────────────
+plot(e_fast, "9 EMA",  color=color.new(color.yellow, 0), linewidth=1)
+plot(e_mid,  "20 EMA", color=color.new(color.orange, 0), linewidth=1)
+plot(e_slow, "50 EMA", color=color.new(color.red,   20), linewidth=2)
+
+// Soft blue background while in pullback zone
+bgcolor(in_pb_zone ? color.new(color.blue, 90) : na, title="Pullback Zone")
+
+// Green triangle below entry bar
+plotshape(entry, "Entry Signal",
+          style    = shape.triangleup,
+          location = location.belowbar,
+          color    = color.new(color.lime, 0),
+          size     = size.normal)
+
+// Entry label
+if entry
+    label.new(bar_index, low - atr * 0.4,
+              "PULLBACK\\n" + str.tostring(math.round(rvol, 1)) + "× vol",
+              style     = label.style_label_up,
+              color     = color.new(color.lime, 20),
+              textcolor = color.white,
+              size      = size.small)
+
+// Suggested stop line
+plot(show_stop and entry ? stop_price : na,
+     "Suggested Stop", color=color.new(color.red, 20),
+     style=plot.style_linebr, linewidth=1)
+
+if show_stop and entry
+    label.new(bar_index, stop_price,
+              "stop " + str.tostring(math.round(stop_price, 2)),
+              style     = label.style_label_right,
+              color     = color.new(color.red, 30),
+              textcolor = color.white,
+              size      = size.tiny)
+
+// ── RVOL table (top-right) ────────────────────────────────────────────────────
+var table t = table.new(position.top_right, 2, 3,
+                        bgcolor=color.new(color.black, 70), border_width=1,
+                        border_color=color.new(color.gray, 60))
+if barstate.islast
+    rvol_color = rvol >= 2.0 ? color.new(color.red,   20)
+               : rvol >= 1.5 ? color.new(color.orange, 20)
+               : rvol >= 1.0 ? color.new(color.teal,   20)
+               :                color.new(color.gray,   30)
+
+    table.cell(t, 0, 0, "RVOL",   text_color=color.new(color.gray,  0), text_size=size.tiny)
+    table.cell(t, 1, 0, str.tostring(math.round(rvol, 2)) + "×",
+               text_color=rvol_color, text_size=size.small)
+
+    trend_str   = uptrend ? "UPTREND" : "NO TREND"
+    trend_color = uptrend ? color.new(color.lime, 20) : color.new(color.gray, 20)
+    table.cell(t, 0, 1, "TREND",  text_color=color.new(color.gray, 0), text_size=size.tiny)
+    table.cell(t, 1, 1, trend_str, text_color=trend_color, text_size=size.small)
+
+    pb_str   = in_pb_zone ? "PULLBACK (" + str.tostring(pb_count) + ")" : "-"
+    pb_color = in_pb_zone ? color.new(color.blue, 10) : color.new(color.gray, 30)
+    table.cell(t, 0, 2, "SETUP",  text_color=color.new(color.gray, 0), text_size=size.tiny)
+    table.cell(t, 1, 2, pb_str,   text_color=pb_color, text_size=size.small)
+
+// ── Alerts ───────────────────────────────────────────────────────────────────
+alertcondition(entry, "Micro Pullback Entry",
+    "Small Cap Micro Pullback setup on {{ticker}} — {{interval}} | RVOL {{volume}}")
+alertcondition(in_pb_zone and not in_pb_zone[1], "Pullback Started",
+    "Micro pullback forming on {{ticker}} — watch for entry")
+"""
+
+
 # Each entry: (name, fn, short_description, category, how_to_use)
 INDICATORS = {
     "volume":    ("24h Volume",      _pine_volume,    "Cumulative volume since market open vs 20-day average daily volume. Red = above average day.",          "volume",     "Add to any chart. Appears as a separate panel below the price. Green bars = normal up-volume, red bars = unusually high volume (1.5× avg). Orange line is the average daily volume benchmark — when the bars are tracking above it, today is an active day."),
@@ -1058,6 +1193,7 @@ INDICATORS = {
     "obv":           ("OBV",               _pine_obv,       "On-Balance Volume — tracks whether volume is flowing into or out of a stock. Divergence labels flag when price and OBV disagree.", "volume", "Add as a separate panel. OBV rising = money flowing in (bullish). OBV falling = money flowing out (bearish). When OBV diverges from price — price falling but OBV rising (D+ label) = smart money buying the dip. Orange signal line helps confirm trend direction."),
     "bbsqueeze":     ("Bollinger Squeeze",      _pine_bb_squeeze,      "Detects when Bollinger Bands contract inside Keltner Channels — a coiling signal before a big move. Orange dot = in squeeze, blue = fired.", "volatility", "Add as a separate panel. Orange dots on the zero line = squeeze is active (market coiling). Blue dots = squeeze just fired (potential breakout). Green histogram = bullish momentum building, red = bearish. The bigger the histogram bars after the squeeze fires, the stronger the move."),
     "unusualopts":   ("Unusual Options Volume", _pine_unusual_options, "Flags bars where volume spikes above a multiple of the 20-bar average. Red = unusual, orange = elevated.", "volume",   "Add as a separate panel. Each bar shows today's volume as a multiple of the average (1.0 = normal). Red bars with a ⚡ label = unusual spike (default 2× threshold). Orange = elevated but not extreme. Adjust the threshold in TradingView settings. High spikes often precede big moves — watch for them before earnings or news."),
+    "smallcap_pb":   ("Small Cap Micro Pullback", _pine_smallcap_pullback, "Detects shallow pullbacks to the 9 EMA in an uptrending small cap. Green triangle = reclaim signal. Includes RVOL table and suggested stop.", "smallcap", "Paste onto a 1m, 2m, or 5m intraday chart. Works best on small/mid-cap stocks showing a strong pre-market gap or morning momentum run. The blue shading shows the pullback zone. A green triangle fires when price reclaims the 9 EMA with above-average volume after the pullback. The red dashed line is a suggested ATR-based stop below the pullback low. Adjust 'Max pullback bars' and 'Volume surge ×' in TradingView's indicator settings to tune sensitivity. Best used alongside the VWAP indicator to confirm the reclaim happens above VWAP."),
 }
 
 CATEGORIES = {
@@ -1066,6 +1202,7 @@ CATEGORIES = {
     "momentum":   "Momentum",
     "volume":     "Volume",
     "volatility": "Volatility",
+    "smallcap":   "Small Cap",
 }
 
 
@@ -3492,6 +3629,9 @@ HOME_HTML = """<!DOCTYPE html>
     </a>
     <a class="ind-pill" href="/indicators?kind=feargreed">
       <div class="cat">Momentum</div><div class="iname">Fear & Greed</div>
+    </a>
+    <a class="ind-pill" href="/indicators?kind=smallcap_pb">
+      <div class="cat">Small Cap</div><div class="iname">Micro Pullback</div>
     </a>
     <a class="ind-pill" href="/flow">
       <div class="cat">Options · Pro</div><div class="iname">Options Flow</div>
