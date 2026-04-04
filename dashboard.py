@@ -154,7 +154,9 @@ def init_db():
                 stripe_subscription_id TEXT,
                 email    TEXT,
                 referral_code TEXT,
-                referred_by TEXT
+                referred_by TEXT,
+                plan_expires  TIMESTAMP,
+                trial_used    INTEGER DEFAULT 0
             )
         """)
         cur.execute("""
@@ -221,7 +223,15 @@ def init_db():
     finally:
         conn.close()
 
+def _migrate_pg():
+    for col in ["plan_expires TIMESTAMP", "trial_used INTEGER DEFAULT 0"]:
+        try:
+            _run(f"ALTER TABLE users ADD COLUMN {col}")
+        except Exception:
+            pass
+
 init_db()
+_migrate_pg()
 
 # ── Google OAuth ──────────────────────────────────────────────────────────────
 
@@ -267,8 +277,19 @@ def require_login():
 def _get_user_plan(user_id):
     if not user_id:
         return "free"
-    row = _one("SELECT plan FROM users WHERE id=%s", (user_id,))
-    return row["plan"] if row else "free"
+    from datetime import datetime, timezone
+    row = _one("SELECT plan, plan_expires FROM users WHERE id=%s", (user_id,))
+    if not row:
+        return "free"
+    plan = row["plan"] or "free"
+    expires = row["plan_expires"]
+    if expires and plan != "free":
+        now = datetime.now(timezone.utc)
+        exp = expires.replace(tzinfo=timezone.utc) if expires.tzinfo is None else expires
+        if now > exp:
+            _run("UPDATE users SET plan='free', plan_expires=NULL WHERE id=%s", (user_id,))
+            return "free"
+    return plan
 
 
 def _copies_used_today(user_id):
@@ -1323,8 +1344,12 @@ def subscribe(plan):
     if not price_id:
         return redirect("/pricing?error=1")
     user_id = session["user_id"]
+    # Only offer trial if user hasn't used one before
+    row = _one("SELECT trial_used FROM users WHERE id=%s", (user_id,))
+    trial_used = row["trial_used"] if row else 1
+    trial_days = 7 if not trial_used else 0
     try:
-        checkout = stripe.checkout.Session.create(
+        params = dict(
             payment_method_types=["card"],
             mode="subscription",
             line_items=[{"price": price_id, "quantity": 1}],
@@ -1332,6 +1357,9 @@ def subscribe(plan):
             cancel_url=APP_URL + "/pricing",
             client_reference_id=str(user_id),
         )
+        if trial_days:
+            params["subscription_data"] = {"trial_period_days": trial_days}
+        checkout = stripe.checkout.Session.create(**params)
         return redirect(checkout.url)
     except Exception as e:
         log.error("Stripe checkout error: %s", e)
@@ -1349,11 +1377,10 @@ def stripe_webhook():
 
     if event["type"] == "checkout.session.completed":
         cs = event["data"]["object"]
-        user_id   = cs.get("client_reference_id")
-        customer  = cs.get("customer")
-        sub_id    = cs.get("subscription")
+        user_id  = cs.get("client_reference_id")
+        customer = cs.get("customer")
+        sub_id   = cs.get("subscription")
         if user_id:
-            # Determine plan from subscription
             try:
                 sub   = stripe.Subscription.retrieve(sub_id)
                 price = sub["items"]["data"][0]["price"]["id"]
@@ -1361,15 +1388,33 @@ def stripe_webhook():
             except Exception:
                 plan = "basic"
             _run(
-                "UPDATE users SET plan=%s, stripe_customer_id=%s, stripe_subscription_id=%s WHERE id=%s",
+                "UPDATE users SET plan=%s, stripe_customer_id=%s, stripe_subscription_id=%s, trial_used=1 WHERE id=%s",
                 (plan, customer, sub_id, int(user_id))
             )
+            # Referral reward: give the other person same plan for 7 days
+            from datetime import datetime, timezone, timedelta
+            expires = datetime.now(timezone.utc) + timedelta(days=7)
+            buyer = _one("SELECT referred_by, referral_code FROM users WHERE id=%s", (int(user_id),))
+            if buyer:
+                # If buyer was referred, reward the referrer
+                if buyer["referred_by"]:
+                    referrer = _one("SELECT id, plan FROM users WHERE referral_code=%s", (buyer["referred_by"],))
+                    if referrer and referrer["plan"] == "free":
+                        _run("UPDATE users SET plan=%s, plan_expires=%s WHERE id=%s",
+                             (plan, expires, referrer["id"]))
+                # If buyer referred others, reward referred users who are still free
+                if buyer["referral_code"]:
+                    referred = _one("SELECT id FROM users WHERE referred_by=%s AND plan='free'",
+                                    (buyer["referral_code"],))
+                    if referred:
+                        _run("UPDATE users SET plan=%s, plan_expires=%s WHERE id=%s",
+                             (plan, expires, referred["id"]))
 
     elif event["type"] == "customer.subscription.deleted":
         customer = event["data"]["object"].get("customer")
         if customer:
             _run(
-                "UPDATE users SET plan='free', stripe_subscription_id=NULL WHERE stripe_customer_id=%s",
+                "UPDATE users SET plan='free', stripe_subscription_id=NULL, plan_expires=NULL WHERE stripe_customer_id=%s",
                 (customer,)
             )
 
@@ -1380,9 +1425,10 @@ def stripe_webhook():
 @login_required
 def billing():
     user_id = session["user_id"]
-    row = _one("SELECT plan, stripe_customer_id FROM users WHERE id=%s", (user_id,))
-    plan        = row["plan"] if row else "free"
+    row = _one("SELECT plan, stripe_customer_id, plan_expires FROM users WHERE id=%s", (user_id,))
+    plan        = _get_user_plan(user_id)
     customer_id = row["stripe_customer_id"] if row else None
+    plan_expires = row["plan_expires"] if row else None
     portal_url  = None
     if customer_id:
         try:
@@ -1396,7 +1442,7 @@ def billing():
     success = request.args.get("success") == "1"
     return render_template_string(BILLING_HTML,
         plan=plan, portal_url=portal_url, success=success,
-        current_user=current_user())
+        plan_expires=plan_expires, current_user=current_user())
 
 
 # BILLING_HTML defined below after _META/_NAV_LINKS/_THEME_JS
@@ -2333,11 +2379,14 @@ BILLING_HTML = """<!DOCTYPE html>
   <div class="card">
     <div class="plan-badge badge-{{ plan }}">{{ plan|upper }}</div>
     <h3 style="margin-bottom:8px;">Current plan</h3>
-    <p style="color:var(--muted);font-size:.9rem;margin-bottom:20px;">
+    <p style="color:var(--muted);font-size:.9rem;margin-bottom:{% if plan_expires %}12px{% else %}20px{% endif %};">
       {% if plan == 'free' %}3 copies/day · Free forever
       {% elif plan == 'basic' %}10 copies/day · $9.99/month
       {% else %}Unlimited copies · $15.99/month{% endif %}
     </p>
+    {% if plan_expires and plan != 'free' %}
+    <p style="color:#e3b341;font-size:.82rem;margin-bottom:20px;">⏳ Referral reward — access expires {{ plan_expires.strftime('%b %d, %Y') }}</p>
+    {% endif %}
     {% if portal_url %}<a href="{{ portal_url }}" class="btn btn-secondary">Manage / Cancel Subscription →</a>
     {% elif plan == 'free' %}<a href="/pricing" class="btn btn-primary">Upgrade Plan</a>{% endif %}
   </div>
