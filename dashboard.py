@@ -2237,10 +2237,10 @@ def volume_api():
         results = []
         for t in _VOLUME_TICKERS:
             try:
-                if len(_VOLUME_TICKERS) == 1:
-                    df = raw
-                else:
+                if isinstance(raw.columns, pd.MultiIndex):
                     df = raw[t] if t in raw.columns.get_level_values(0) else None
+                else:
+                    df = raw
                 if df is None or len(df) < 5:
                     continue
                 df = df.dropna(subset=["Volume"])
@@ -2284,10 +2284,13 @@ def volume_ticker_api():
     if not ticker:
         return jsonify({"error": "No ticker provided"}), 400
     try:
+        import pandas as pd
         df = yf.download(ticker, period="32d", interval="1d",
                          auto_adjust=True, progress=False)
         if df is None or len(df) < 5:
             return jsonify({"error": "No data for " + ticker}), 404
+        if isinstance(df.columns, pd.MultiIndex):
+            df.columns = df.columns.get_level_values(0)
         df = df.dropna(subset=["Volume"])
         if len(df) < 5:
             return jsonify({"error": "Not enough history for " + ticker}), 404
