@@ -2747,7 +2747,7 @@ PROFILE_HTML = """<!DOCTYPE html>
     .btn-save { background: var(--accent); color: #fff; border: none; border-radius: 6px; padding: 9px 22px; font-size: .9rem; font-weight: 600; cursor: pointer; align-self: flex-start; }
     .btn-save:hover { opacity: .85; }
     .error-msg { background: #2d1515; border: 1px solid var(--red); color: var(--red); border-radius: 6px; padding: 10px 14px; font-size: .85rem; }
-    .pencil-btn { background: none; border: none; cursor: pointer; font-size: .85rem; color: var(--muted); padding: 2px 5px; border-radius: 4px; vertical-align: middle; margin-left: 6px; }
+    .pencil-btn { background: none; border: none; cursor: pointer; font-size: .85rem; color: var(--muted); padding: 2px 5px; border-radius: 4px; vertical-align: middle; margin-left: 6px; display: inline-block; transform: scaleX(-1); }
     .pencil-btn:hover { color: var(--accent); background: var(--bg3); }
   </style>
 </head>
