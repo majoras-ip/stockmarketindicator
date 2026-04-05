@@ -2578,6 +2578,7 @@ _NAV_LINKS = """
         <a href="/gamma">Gamma Exposure</a>
         <a href="/volume">Unusual Volume</a>
         <a href="/news">News</a>
+        <a href="/insider">Insider Trading</a>
       </div>
     </div>
     <div class="dropdown">
@@ -2973,7 +2974,7 @@ PRICING_HTML = """<!DOCTYPE html>
       <div class="plan-desc">Get started with no commitment.</div>
       <ul class="plan-features">
         <li>3 copies per day</li><li>All indicators visible</li>
-        <li>Unusual volume</li><li>Market news</li><li class="no">Ticker news</li><li class="no">Earnings calendar</li><li class="no">Gamma exposure</li><li class="no">LSTM forecast</li><li class="no">Options flow</li>
+        <li>Unusual volume</li><li>Market news</li><li class="no">Ticker news</li><li class="no">Earnings calendar</li><li class="no">Gamma exposure</li><li class="no">LSTM forecast</li><li class="no">Options flow</li><li class="no">Insider trading</li>
       </ul>
       <a href="/indicators" class="btn-plan btn-free">Start Free</a>
     </div>
@@ -2983,7 +2984,7 @@ PRICING_HTML = """<!DOCTYPE html>
       <div class="plan-desc">For active traders who copy often.</div>
       <ul class="plan-features">
         <li>10 copies per day</li><li>All indicators visible</li>
-        <li>Unusual volume</li><li>Market news</li><li>Ticker news</li><li>Earnings calendar</li><li>Gamma exposure</li><li class="no">LSTM forecast</li><li class="no">Options flow</li>
+        <li>Unusual volume</li><li>Market news</li><li>Ticker news</li><li>Earnings calendar</li><li>Gamma exposure</li><li class="no">LSTM forecast</li><li class="no">Options flow</li><li class="no">Insider trading</li>
 
       </ul>
       {% if current_user %}
@@ -2999,7 +3000,7 @@ PRICING_HTML = """<!DOCTYPE html>
       <div class="plan-desc">Unlimited access for power users.</div>
       <ul class="plan-features">
         <li>Unlimited copies</li><li>All indicators visible</li>
-        <li>Unusual volume</li><li>Market news</li><li>Ticker news</li><li>Earnings calendar</li><li>Gamma exposure</li><li>LSTM forecast</li><li>Options flow</li>
+        <li>Unusual volume</li><li>Market news</li><li>Ticker news</li><li>Earnings calendar</li><li>Gamma exposure</li><li>LSTM forecast</li><li>Options flow</li><li>Insider trading</li>
       </ul>
       {% if current_user %}
       <a href="/subscribe/pro" class="btn-plan btn-pro" id="btn-pro">Get Pro</a>
@@ -4792,6 +4793,198 @@ TERMS_HTML = """<!DOCTYPE html>
 <script>""" + _THEME_JS + """</script>
 </body>
 </html>"""
+
+# ── Insider Trading ───────────────────────────────────────────────────────────
+
+_insider_cache = {"data": [], "ts": 0}
+
+@app.route("/insider")
+@login_required
+def insider_page():
+    plan = _get_user_plan(session.get("user_id"))
+    if plan != "pro":
+        return redirect("/pricing?upgrade=insider")
+    return render_template_string(INSIDER_HTML, current_user=current_user())
+
+@app.route("/api/insider")
+@login_required
+def api_insider():
+    import time, feedparser, requests as _req
+    plan = _get_user_plan(session.get("user_id"))
+    if plan != "pro":
+        return jsonify({"error": "Pro required"}), 403
+
+    now = time.time()
+    if now - _insider_cache["ts"] < 600 and _insider_cache["data"]:
+        return jsonify(_insider_cache["data"])
+
+    results = []
+    try:
+        headers = {"User-Agent": "ChartEdge/1.0 contact@chartedge.com"}
+        url = "https://efts.sec.gov/LATEST/search-index?q=%22form+4%22&dateRange=custom&startdt={}&enddt={}&hits.hits._source=period_of_report,entity_name,file_date,period_of_report&hits.hits.total.value=true&hits.hits.hits.total.value=true".format(
+            date.today().isoformat(), date.today().isoformat()
+        )
+        # Use SEC EDGAR full-text search RSS for Form 4
+        feed_url = "https://efts.sec.gov/LATEST/search-index?q=%22form+4%22&forms=4&hits.hits.total.value=1"
+        rss = feedparser.parse("https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&type=4&dateb=&owner=include&count=40&search_text=&output=atom", request_headers=headers)
+        for entry in rss.entries[:40]:
+            title   = entry.get("title", "")
+            link    = entry.get("link", "")
+            updated = entry.get("updated", "")[:10] if entry.get("updated") else ""
+            summary = entry.get("summary", "")
+            results.append({"title": title, "link": link, "date": updated, "summary": summary})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+    _insider_cache["data"] = results
+    _insider_cache["ts"]   = now
+    return jsonify(results)
+
+@app.route("/api/insider/ticker")
+@login_required
+def api_insider_ticker():
+    import feedparser
+    plan = _get_user_plan(session.get("user_id"))
+    if plan != "pro":
+        return jsonify({"error": "Pro required"}), 403
+    ticker = request.args.get("ticker", "").upper().strip()
+    if not ticker:
+        return jsonify([])
+    try:
+        headers = {"User-Agent": "ChartEdge/1.0 contact@chartedge.com"}
+        rss = feedparser.parse(
+            f"https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&company={ticker}&CIK=&type=4&dateb=&owner=include&count=20&search_text=&output=atom",
+            request_headers=headers
+        )
+        results = []
+        for entry in rss.entries[:20]:
+            results.append({
+                "title":   entry.get("title", ""),
+                "link":    entry.get("link", ""),
+                "date":    entry.get("updated", "")[:10] if entry.get("updated") else "",
+                "summary": entry.get("summary", ""),
+            })
+        return jsonify(results)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+INSIDER_HTML = """<!DOCTYPE html>
+<html data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">""" + _META + """
+  <title>Insider Trading · ChartEdge</title>
+  <style>
+    :root[data-theme="dark"]  { --bg:#0d1117; --bg2:#161b22; --bg3:#21262d; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --green:#3fb950; --red:#f85149; }
+    :root[data-theme="light"] { --bg:#ffffff; --bg2:#f6f8fa; --bg3:#eaeef2; --border:#d0d7de; --text:#1f2328; --muted:#636c76; --accent:#0969da; --green:#1a7f37; --red:#cf222e; }
+    * { box-sizing:border-box; margin:0; padding:0; }
+    body { font-family:-apple-system,sans-serif; background:var(--bg); color:var(--text); min-height:100vh; }
+    nav { background:var(--bg2); border-bottom:1px solid var(--border); padding:14px 24px; display:flex; align-items:center; justify-content:space-between; }
+    .logo { font-size:1.1rem; font-weight:bold; text-decoration:none; }
+    """ + _NAV_CSS + """
+    .page { max-width:900px; margin:0 auto; padding:36px 24px; }
+    h1 { font-size:1.6rem; margin-bottom:6px; } h1 span { color:var(--accent); }
+    .sub { color:var(--muted); font-size:.85rem; margin-bottom:24px; }
+    .search-row { display:flex; gap:10px; margin-bottom:24px; }
+    .search-row input { flex:1; background:var(--bg2); border:1px solid var(--border); border-radius:6px; padding:9px 14px; color:var(--text); font-size:.9rem; }
+    .search-row button { background:var(--accent); color:#fff; border:none; border-radius:6px; padding:9px 18px; font-size:.9rem; font-weight:600; cursor:pointer; }
+    .search-row button:hover { opacity:.85; }
+    .back-btn { background:none; border:none; color:var(--accent); font-size:.85rem; cursor:pointer; margin-bottom:16px; padding:0; }
+    .filing-table { width:100%; border-collapse:collapse; }
+    .filing-table th { text-align:left; font-size:.72rem; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; padding:8px 12px; border-bottom:1px solid var(--border); }
+    .filing-table td { padding:10px 12px; border-bottom:1px solid var(--border); font-size:.85rem; vertical-align:top; }
+    .filing-table tr:hover td { background:var(--bg2); }
+    .filing-link { color:var(--accent); text-decoration:none; font-size:.8rem; }
+    .filing-link:hover { text-decoration:underline; }
+    .date-badge { color:var(--muted); font-size:.78rem; white-space:nowrap; }
+    .loading { color:var(--muted); padding:40px; text-align:center; }
+    .pro-badge { display:inline-block; background:#2a2000; color:#e3b341; border:1px solid #e3b34140; border-radius:4px; font-size:.7rem; font-weight:700; padding:2px 8px; margin-left:8px; vertical-align:middle; }
+    footer { text-align:center; padding:32px 24px; color:var(--muted); font-size:.8rem; border-top:1px solid var(--border); margin-top:20px; }
+  </style>
+</head>
+<body>
+<nav>
+  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span></a>
+  <button class="hamburger" onclick="toggleMobileNav(event)">☰</button>
+  <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
+</nav>
+
+<div class="page">
+  <h1>Insider Trading <span>Feed</span> <span class="pro-badge">PRO</span></h1>
+  <p class="sub">SEC Form 4 filings — directors and officers buying or selling shares</p>
+
+  <div class="search-row">
+    <input type="text" id="ticker-input" placeholder="Search by ticker (e.g. AAPL)" onkeydown="if(event.key==='Enter')searchTicker()">
+    <button onclick="searchTicker()">Search</button>
+  </div>
+
+  <div id="back-wrap" style="display:none">
+    <button class="back-btn" onclick="showAll()">← All filings</button>
+  </div>
+
+  <div id="content" class="loading">Loading filings…</div>
+</div>
+
+<footer>© 2026 ChartEdge · Data via SEC EDGAR · Not financial advice</footer>
+<script>""" + _THEME_JS + """
+var allFilings = [];
+
+function renderTable(filings, title) {
+  if (!filings.length) {
+    document.getElementById('content').innerHTML = '<p style="color:var(--muted);padding:20px 0;">No filings found.</p>';
+    return;
+  }
+  var html = title ? '<h2 style="font-size:1rem;margin-bottom:14px;color:var(--muted);">' + title + '</h2>' : '';
+  html += '<table class="filing-table"><thead><tr><th>Filing</th><th>Date</th><th>Link</th></tr></thead><tbody>';
+  for (var i = 0; i < filings.length; i++) {
+    var f = filings[i];
+    html += '<tr><td>' + (f.title || '—') + '</td>';
+    html += '<td class="date-badge">' + (f.date || '—') + '</td>';
+    html += '<td><a class="filing-link" href="' + (f.link || '#') + '" target="_blank" rel="noopener">View →</a></td></tr>';
+  }
+  html += '</tbody></table>';
+  document.getElementById('content').innerHTML = html;
+}
+
+async function loadAll() {
+  try {
+    var res = await fetch('/api/insider');
+    var data = await res.json();
+    if (data.error) { document.getElementById('content').innerHTML = '<p style="color:var(--red)">Error: ' + data.error + '</p>'; return; }
+    allFilings = data;
+    renderTable(data);
+  } catch(e) {
+    document.getElementById('content').innerHTML = '<p style="color:var(--red)">Failed to load filings.</p>';
+  }
+}
+
+async function searchTicker() {
+  var ticker = document.getElementById('ticker-input').value.trim().toUpperCase();
+  if (!ticker) return;
+  document.getElementById('content').innerHTML = '<div class="loading">Searching ' + ticker + '…</div>';
+  document.getElementById('back-wrap').style.display = 'block';
+  try {
+    var res = await fetch('/api/insider/ticker?ticker=' + ticker);
+    var data = await res.json();
+    if (data.error) { document.getElementById('content').innerHTML = '<p style="color:var(--red)">Error: ' + data.error + '</p>'; return; }
+    renderTable(data, 'Form 4 filings for ' + ticker);
+  } catch(e) {
+    document.getElementById('content').innerHTML = '<p style="color:var(--red)">Search failed.</p>';
+  }
+}
+
+function showAll() {
+  document.getElementById('back-wrap').style.display = 'none';
+  document.getElementById('ticker-input').value = '';
+  renderTable(allFilings);
+}
+
+loadAll();
+</script>
+</body>
+</html>"""
+
 
 # ── News ─────────────────────────────────────────────────────────────────────
 
