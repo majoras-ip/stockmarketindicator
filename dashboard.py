@@ -4830,19 +4830,22 @@ def api_insider():
 
     results = []
     try:
-        headers = {"User-Agent": "ChartEdge/1.0 contact@chartedge.com"}
-        url = "https://efts.sec.gov/LATEST/search-index?q=%22form+4%22&dateRange=custom&startdt={}&enddt={}&hits.hits._source=period_of_report,entity_name,file_date,period_of_report&hits.hits.total.value=true&hits.hits.hits.total.value=true".format(
-            date.today().isoformat(), date.today().isoformat()
+        import requests as _req
+        headers = {"User-Agent": "ChartEdge ayden.j.folkerts@gmail.com", "Accept-Encoding": "gzip, deflate"}
+        resp = _req.get(
+            "https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&type=4&dateb=&owner=include&count=40&output=atom",
+            headers=headers, timeout=15
         )
-        # Use SEC EDGAR full-text search RSS for Form 4
-        feed_url = "https://efts.sec.gov/LATEST/search-index?q=%22form+4%22&forms=4&hits.hits.total.value=1"
-        rss = feedparser.parse("https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&type=4&dateb=&owner=include&count=40&search_text=&output=atom", request_headers=headers)
+        import feedparser
+        rss = feedparser.parse(resp.text)
         for entry in rss.entries[:40]:
             title   = entry.get("title", "")
             link    = entry.get("link", "")
             updated = entry.get("updated", "")[:10] if entry.get("updated") else ""
             summary = entry.get("summary", "")
             results.append({"title": title, "link": link, "date": updated, "summary": summary})
+        if not results:
+            return jsonify({"error": "SEC EDGAR returned no filings. Try again shortly."}), 503
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -4861,11 +4864,13 @@ def api_insider_ticker():
     if not ticker:
         return jsonify([])
     try:
-        headers = {"User-Agent": "ChartEdge/1.0 contact@chartedge.com"}
-        rss = feedparser.parse(
+        import requests as _req, feedparser
+        headers = {"User-Agent": "ChartEdge ayden.j.folkerts@gmail.com", "Accept-Encoding": "gzip, deflate"}
+        resp = _req.get(
             f"https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&company={ticker}&CIK=&type=4&dateb=&owner=include&count=20&search_text=&output=atom",
-            request_headers=headers
+            headers=headers, timeout=15
         )
+        rss = feedparser.parse(resp.text)
         results = []
         for entry in rss.entries[:20]:
             results.append({
