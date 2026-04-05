@@ -1996,17 +1996,13 @@ def flow_api():
     if plan != "pro":
         return jsonify({"error": "upgrade_required"}), 403
     import yfinance as yf
-    import requests as _requests
     from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
     ticker = request.args.get("ticker", "SPY").upper()[:10]
     try:
-        session_yf = _requests.Session()
-        session_yf.headers.update({"User-Agent": "Mozilla/5.0"})
-
         req_exp = request.args.get("exp", "")
 
         def _fetch():
-            t = yf.Ticker(ticker, session=session_yf)
+            t = yf.Ticker(ticker)
             exps = t.options
             if not exps:
                 return None, None, None
@@ -2098,18 +2094,14 @@ def gamma_api():
         return jsonify({"error": "upgrade_required"}), 403
     import yfinance as yf
     import numpy as np
-    import requests as _requests
     from scipy.stats import norm
     from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
     ticker = request.args.get("ticker", "SPY").upper()[:10]
     try:
-        session_yf = _requests.Session()
-        session_yf.headers.update({"User-Agent": "Mozilla/5.0"})
-
         req_exp = request.args.get("exp", "")
 
         def _fetch():
-            t = yf.Ticker(ticker, session=session_yf)
+            t = yf.Ticker(ticker)
             spot_ = round(float(t.fast_info.last_price), 2)
             exps  = t.options
             if not exps:
