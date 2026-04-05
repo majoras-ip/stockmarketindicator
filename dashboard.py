@@ -5023,19 +5023,22 @@ def api_premarket():
     results = []
     try:
         import pandas as pd
-        tickers = _VOLUME_TICKERS
-        raw = yf.download(tickers, period="5d", interval="1d", progress=False, auto_adjust=True)
-        closes = raw["Close"] if isinstance(raw.columns, pd.MultiIndex) else raw[["Close"]]
+        raw = yf.download(" ".join(_VOLUME_TICKERS), period="5d", interval="1d",
+                          group_by="ticker", auto_adjust=True, progress=False)
 
-        for ticker in tickers:
+        for ticker in _VOLUME_TICKERS:
             try:
-                if ticker not in closes.columns:
+                if isinstance(raw.columns, pd.MultiIndex):
+                    df = raw[ticker] if ticker in raw.columns.get_level_values(0) else None
+                else:
+                    df = raw
+                if df is None or len(df) < 2:
                     continue
-                col = closes[ticker].dropna()
-                if len(col) < 2:
+                df = df.dropna(subset=["Close"])
+                if len(df) < 2:
                     continue
-                price = float(col.iloc[-1])
-                prev  = float(col.iloc[-2])
+                price = float(df["Close"].iloc[-1])
+                prev  = float(df["Close"].iloc[-2])
                 if not prev or not price:
                     continue
                 chg     = round(price - prev, 2)
