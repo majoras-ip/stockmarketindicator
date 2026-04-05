@@ -1853,11 +1853,17 @@ def watchlist_prices():
             prev  = round(float(info.previous_close), 2)
             chg   = round(price - prev, 2)
             chg_pct = round((chg / prev) * 100, 2) if prev else 0
+            vol     = int(info.volume or 0)
+            avg_vol = int(info.three_month_average_volume or 0)
+            ratio   = round(vol / avg_vol, 2) if avg_vol > 0 else None
             results.append({
-                "ticker":   ticker,
-                "price":    price,
-                "change":   chg,
+                "ticker":     ticker,
+                "price":      price,
+                "change":     chg,
                 "change_pct": chg_pct,
+                "volume":     vol,
+                "avg_vol":    avg_vol,
+                "vol_ratio":  ratio,
             })
         except Exception:
             results.append({"ticker": ticker, "price": None, "change": None, "change_pct": None})
@@ -4651,8 +4657,13 @@ WATCHLIST_HTML = """<!DOCTYPE html>
     .ticker-sym { font-size: 1.1rem; font-weight: bold; color: var(--accent); }
     .ticker-price { font-size: 1.2rem; color: var(--text); }
     .ticker-chg { font-size: 0.85rem; }
+    .ticker-vol { font-size: 0.78rem; color: var(--muted); margin-top: 2px; }
     .up   { color: var(--green); }
     .down { color: var(--red); }
+    .vol-badge { display: inline-block; padding: 1px 7px; border-radius: 4px; font-size: .72rem; font-weight: 700; margin-left: 6px; }
+    .vol-2  { background: #1a2a1a; color: var(--green); }
+    .vol-5  { background: #2a2a10; color: #e3b341; }
+    .vol-10 { background: #2d1f1f; color: var(--red); }
     .btn-remove { background: none; border: 1px solid var(--border); color: var(--muted); padding: 5px 12px; border-radius: 6px; font-family: monospace; font-size: 0.8rem; cursor: pointer; }
     .btn-remove:hover { border-color: var(--red); color: var(--red); }
     .empty { text-align: center; padding: 60px 24px; color: var(--muted); }
@@ -4686,7 +4697,8 @@ WATCHLIST_HTML = """<!DOCTYPE html>
       <div class="ticker-left">
         <span class="ticker-sym">{{ t }}</span>
         <span class="ticker-price" id="price-{{ t }}"><span class="spin"></span></span>
-        <span class="ticker-chg"  id="chg-{{ t }}"></span>
+        <span class="ticker-chg"   id="chg-{{ t }}"></span>
+        <span class="ticker-vol"   id="vol-{{ t }}"></span>
       </div>
       <button class="btn-remove" onclick="removeTicker('{{ t }}')">✕ Remove</button>
     </div>
@@ -4698,6 +4710,13 @@ WATCHLIST_HTML = """<!DOCTYPE html>
 </div>
 <footer>© 2026 ChartEdge · Not financial advice · <a href="/privacy" style="color:inherit">Privacy</a> · <a href="/terms" style="color:inherit">Terms</a></footer>
 <script>
+function fmtVol(n) {
+  if (n >= 1e9) return (n/1e9).toFixed(1) + 'B';
+  if (n >= 1e6) return (n/1e6).toFixed(1) + 'M';
+  if (n >= 1e3) return (n/1e3).toFixed(0) + 'K';
+  return String(n);
+}
+
 async function loadPrices() {
   try {
     const res  = await fetch('/api/watchlist/prices');
@@ -4705,15 +4724,20 @@ async function loadPrices() {
     data.forEach(item => {
       const priceEl = document.getElementById('price-' + item.ticker);
       const chgEl   = document.getElementById('chg-'   + item.ticker);
+      var   volEl   = document.getElementById('vol-'   + item.ticker);
       if (!priceEl) return;
-      if (item.price === null) {
-        priceEl.textContent = '—';
-        return;
-      }
+      if (item.price === null) { priceEl.textContent = '—'; return; }
       priceEl.textContent = '$' + item.price.toFixed(2);
       const sign = item.change >= 0 ? '+' : '';
       chgEl.textContent = sign + item.change.toFixed(2) + ' (' + sign + item.change_pct.toFixed(2) + '%)';
       chgEl.className = 'ticker-chg ' + (item.change >= 0 ? 'up' : 'down');
+      if (volEl && item.vol_ratio !== null) {
+        var badge = '';
+        if (item.vol_ratio >= 10) badge = '<span class="vol-badge vol-10">' + item.vol_ratio.toFixed(1) + 'x</span>';
+        else if (item.vol_ratio >= 5) badge = '<span class="vol-badge vol-5">' + item.vol_ratio.toFixed(1) + 'x</span>';
+        else if (item.vol_ratio >= 2) badge = '<span class="vol-badge vol-2">' + item.vol_ratio.toFixed(1) + 'x</span>';
+        volEl.innerHTML = 'Vol ' + fmtVol(item.volume) + badge;
+      }
     });
     document.getElementById('last-updated').textContent =
       'Updated ' + new Date().toLocaleTimeString();
@@ -4743,7 +4767,8 @@ async function addTicker() {
         left.className = 'ticker-left';
         left.innerHTML = '<span class="ticker-sym">' + ticker + '</span>'
           + '<span class="ticker-price" id="price-' + ticker + '"><span class="spin"></span></span>'
-          + '<span class="ticker-chg" id="chg-' + ticker + '"></span>';
+          + '<span class="ticker-chg" id="chg-' + ticker + '"></span>'
+          + '<span class="ticker-vol" id="vol-' + ticker + '"></span>';
         var btn = document.createElement('button');
         btn.className = 'btn-remove';
         btn.textContent = '\u2715 Remove';
