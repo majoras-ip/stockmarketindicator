@@ -2190,6 +2190,89 @@ def gamma_api():
         return jsonify({"error": str(e)}), 500
 
 
+# ── Unusual Volume ────────────────────────────────────────────────────────────
+
+_VOLUME_TICKERS = [
+    "SPY","QQQ","IWM","DIA","GLD","SLV","TLT","HYG","XLF","XLK","XLE","XLV","XLI","XLC","ARKK",
+    "AAPL","MSFT","NVDA","AMZN","GOOGL","META","TSLA","AVGO","JPM","JNJ","UNH","V","MA","HD",
+    "PG","XOM","CVX","AMD","INTC","BAC","C","WFC","GS","MS","F","GM","PLTR","NIO","BABA",
+    "SNAP","UBER","COIN","MSTR","SQ","PYPL","SHOP","ROKU","NFLX","DIS","WMT","TGT","COST",
+    "AMGN","PFE","MRK","LLY","ABBV","GME","AMC","SOFI","HOOD","RIVN","LCID","SMCI","ARM",
+    "MU","QCOM","TXN","AMAT","LRCX","KLAC","ASML","TSM","ORCL","CRM","NOW","SNOW","PANW",
+    "CRWD","DDOG","NET","ZS","OKTA","RBLX","U","ABNB","DASH","LYFT","PINS","RDDT","APP",
+    "MELI","SE","NU","GRAB","CELH","DKNG","PENN","MGM","LVS","WYNN",
+]
+
+_volume_cache: dict = {"ts": 0, "data": []}
+_VOLUME_CACHE_SECS = 1200  # 20 min
+
+@app.route("/volume")
+@login_required
+def volume_page():
+    plan = _get_user_plan(session.get("user_id"))
+    if plan == "free":
+        return redirect("/pricing?upgrade=volume")
+    return render_template_string(VOLUME_HTML, current_user=current_user())
+
+
+@app.route("/api/volume")
+@login_required
+def volume_api():
+    import time, yfinance as yf
+    import pandas as pd
+    plan = _get_user_plan(session.get("user_id"))
+    if plan == "free":
+        return jsonify({"error": "upgrade_required"}), 403
+
+    now = time.time()
+    if now - _volume_cache["ts"] < _VOLUME_CACHE_SECS and _volume_cache["data"]:
+        return jsonify({"results": _volume_cache["data"], "cached": True,
+                        "age_min": int((now - _volume_cache["ts"]) / 60)})
+
+    try:
+        tickers = " ".join(_VOLUME_TICKERS)
+        raw = yf.download(tickers, period="32d", interval="1d",
+                          group_by="ticker", auto_adjust=True, progress=False)
+
+        results = []
+        for t in _VOLUME_TICKERS:
+            try:
+                if len(_VOLUME_TICKERS) == 1:
+                    df = raw
+                else:
+                    df = raw[t] if t in raw.columns.get_level_values(0) else None
+                if df is None or len(df) < 5:
+                    continue
+                df = df.dropna(subset=["Volume"])
+                if len(df) < 5:
+                    continue
+                today_vol  = int(df["Volume"].iloc[-1])
+                avg_vol    = int(df["Volume"].iloc[-31:-1].mean())
+                if avg_vol < 100_000 or today_vol == 0:
+                    continue
+                ratio      = round(today_vol / avg_vol, 2)
+                price      = round(float(df["Close"].iloc[-1]), 2)
+                prev_close = float(df["Close"].iloc[-2])
+                chg_pct    = round((price - prev_close) / prev_close * 100, 2)
+                results.append({
+                    "ticker":    t,
+                    "price":     price,
+                    "chg_pct":   chg_pct,
+                    "volume":    today_vol,
+                    "avg_vol":   avg_vol,
+                    "ratio":     ratio,
+                })
+            except Exception:
+                continue
+
+        results.sort(key=lambda x: x["ratio"], reverse=True)
+        _volume_cache["ts"]   = time.time()
+        _volume_cache["data"] = results
+        return jsonify({"results": results, "cached": False, "age_min": 0})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 # ── FAQ ───────────────────────────────────────────────────────────────────────
 
 @app.route("/faq")
@@ -2383,6 +2466,7 @@ _NAV_LINKS = """
         <a href="/earnings">Earnings Calendar</a>
         <a href="/flow">Options Flow</a>
         <a href="/gamma">Gamma Exposure</a>
+        <a href="/volume">Unusual Volume</a>
         <a href="/news">News</a>
       </div>
     </div>
@@ -5240,6 +5324,156 @@ function renderGamma(d) {
 document.addEventListener('DOMContentLoaded', function() {
   document.getElementById('gamma-content').innerHTML = '<div class="loading">Enter a ticker above to load gamma exposure.</div>';
 });
+""" + _THEME_JS + """
+</script>
+</body>
+</html>"""
+
+
+VOLUME_HTML = """<!DOCTYPE html>
+<html data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">""" + _META + """
+  <title>Unusual Volume · ChartEdge</title>
+  <style>
+    :root[data-theme="dark"]  { --bg:#0d1117; --bg2:#161b22; --bg3:#21262d; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --green:#3fb950; --red:#f85149; }
+    :root[data-theme="light"] { --bg:#ffffff; --bg2:#f6f8fa; --bg3:#eaeef2; --border:#d0d7de; --text:#1f2328; --muted:#636c76; --accent:#0969da; --green:#1a7f37; --red:#cf222e; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: monospace; background: var(--bg); color: var(--text); min-height: 100vh; }
+    nav { background: var(--bg2); border-bottom: 1px solid var(--border); padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; }
+    .logo { color: var(--accent); font-size: 1.1rem; font-weight: bold; text-decoration: none; }
+    """ + _NAV_CSS + """
+    .hero { text-align: center; padding: 40px 24px 28px; border-bottom: 1px solid var(--border); }
+    .hero h1 { font-size: 1.6rem; margin-bottom: 8px; }
+    .hero h1 span { color: var(--accent); }
+    .hero p { color: var(--muted); font-size: .9rem; }
+    .container { max-width: 960px; margin: 0 auto; padding: 28px 24px; }
+    .toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
+    .filter-btn { background: var(--bg2); border: 1px solid var(--border); border-radius: 6px; padding: 6px 14px; font-size: .8rem; color: var(--muted); cursor: pointer; font-family: monospace; }
+    .filter-btn.active { border-color: var(--accent); color: var(--accent); }
+    .scan-btn { background: var(--accent); color: #fff; border: none; border-radius: 6px; padding: 7px 18px; font-size: .85rem; cursor: pointer; font-weight: 700; font-family: monospace; margin-left: auto; }
+    .scan-btn:hover { opacity: .88; }
+    .scan-btn:disabled { opacity: .5; cursor: not-allowed; }
+    .status { font-size: .78rem; color: var(--muted); }
+    table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+    thead th { padding: 10px 14px; text-align: left; color: var(--muted); font-weight: 600; border-bottom: 2px solid var(--border); white-space: nowrap; }
+    tbody td { padding: 10px 14px; border-bottom: 1px solid var(--border); }
+    tbody tr:last-child td { border-bottom: none; }
+    tbody tr:hover td { background: var(--bg3); }
+    .ticker-sym { color: var(--accent); font-weight: 700; font-size: .95rem; }
+    .up  { color: var(--green); }
+    .dn  { color: var(--red); }
+    .ratio-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-weight: 700; font-size: .8rem; }
+    .ratio-2  { background: #1a2a1a; color: var(--green); }
+    .ratio-5  { background: #2a2a10; color: #e3b341; }
+    .ratio-10 { background: #2d1f1f; color: var(--red); }
+    .section { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+    .loading-msg { text-align: center; padding: 60px; color: var(--muted); }
+    footer { text-align: center; padding: 32px 24px; color: var(--muted); font-size: .8rem; border-top: 1px solid var(--border); margin-top: 20px; }
+  </style>
+</head>
+<body>
+<nav>
+  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span></a>
+  <button class="hamburger" onclick="toggleMobileNav(event)">☰</button>
+  <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
+</nav>
+<div class="hero">
+  <h1>Unusual <span>Volume</span></h1>
+  <p>Stocks trading significantly above their 30-day average volume</p>
+</div>
+<div class="container">
+  <div class="toolbar">
+    <button class="filter-btn active" data-min="1"  onclick="setFilter(this)">All</button>
+    <button class="filter-btn"        data-min="2"  onclick="setFilter(this)">2x+</button>
+    <button class="filter-btn"        data-min="5"  onclick="setFilter(this)">5x+</button>
+    <button class="filter-btn"        data-min="10" onclick="setFilter(this)">10x+</button>
+    <span class="status" id="status"></span>
+    <button class="scan-btn" id="scan-btn" onclick="runScan()">&#9654; Scan Now</button>
+  </div>
+  <div class="section" id="vol-content">
+    <div class="loading-msg">Click Scan Now to find unusual volume.</div>
+  </div>
+</div>
+<footer>© 2026 ChartEdge · Volume data via yfinance · Not financial advice</footer>
+<script>
+var allResults = [];
+var minRatio   = 1;
+
+function setFilter(btn) {
+  document.querySelectorAll('.filter-btn').forEach(function(b) { b.classList.remove('active'); });
+  btn.classList.add('active');
+  minRatio = parseFloat(btn.getAttribute('data-min'));
+  renderTable(allResults);
+}
+
+function ratioClass(r) {
+  return r >= 10 ? 'ratio-10' : r >= 5 ? 'ratio-5' : 'ratio-2';
+}
+
+function fmtVol(n) {
+  if (n >= 1e9) return (n / 1e9).toFixed(2) + 'B';
+  if (n >= 1e6) return (n / 1e6).toFixed(2) + 'M';
+  if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K';
+  return String(n);
+}
+
+function renderTable(data) {
+  var rows = data.filter(function(r) { return r.ratio >= minRatio; });
+  if (rows.length === 0) {
+    document.getElementById('vol-content').innerHTML = '<div class="loading-msg">No tickers match this filter.</div>';
+    return;
+  }
+  var html = '<table><thead><tr>'
+    + '<th>#</th><th>Ticker</th><th>Price</th><th>Change</th>'
+    + '<th>Today Vol</th><th>Avg Vol (30d)</th><th>Ratio</th>'
+    + '</tr></thead><tbody>';
+  for (var i = 0; i < rows.length; i++) {
+    var r = rows[i];
+    var chgClass = r.chg_pct >= 0 ? 'up' : 'dn';
+    var chgSign  = r.chg_pct >= 0 ? '+' : '';
+    html += '<tr>'
+      + '<td style="color:var(--muted);font-size:.75rem;">' + (i + 1) + '</td>'
+      + '<td><a href="https://finance.yahoo.com/quote/' + r.ticker + '" target="_blank" style="text-decoration:none;" class="ticker-sym">' + r.ticker + '</a></td>'
+      + '<td>$' + r.price.toFixed(2) + '</td>'
+      + '<td class="' + chgClass + '">' + chgSign + r.chg_pct.toFixed(2) + '%</td>'
+      + '<td>' + fmtVol(r.volume) + '</td>'
+      + '<td>' + fmtVol(r.avg_vol) + '</td>'
+      + '<td><span class="ratio-badge ' + ratioClass(r.ratio) + '">' + r.ratio.toFixed(1) + 'x</span></td>'
+      + '</tr>';
+  }
+  html += '</tbody></table>';
+  document.getElementById('vol-content').innerHTML = html;
+}
+
+function runScan() {
+  var btn = document.getElementById('scan-btn');
+  btn.disabled = true;
+  btn.textContent = 'Scanning...';
+  document.getElementById('vol-content').innerHTML = '<div class="loading-msg">Scanning ' + """ + str(len(_VOLUME_TICKERS)) + """ + ' tickers — this takes ~15 seconds...</div>';
+  document.getElementById('status').textContent = '';
+
+  fetch('/api/volume')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      btn.disabled = false;
+      btn.textContent = '\u25b6 Scan Now';
+      if (data.error) {
+        document.getElementById('vol-content').innerHTML = '<div class="loading-msg" style="color:var(--red);">\u26a0 ' + data.error + '</div>';
+        return;
+      }
+      allResults = data.results;
+      var src = data.cached ? ('Cached \u2014 ' + data.age_min + ' min ago') : 'Fresh scan';
+      document.getElementById('status').textContent = allResults.length + ' tickers scanned \u00b7 ' + src;
+      renderTable(allResults);
+    })
+    .catch(function(err) {
+      btn.disabled = false;
+      btn.textContent = '\u25b6 Scan Now';
+      document.getElementById('vol-content').innerHTML = '<div class="loading-msg" style="color:var(--red);">\u26a0 Scan failed: ' + err.message + '</div>';
+    });
+}
 """ + _THEME_JS + """
 </script>
 </body>
