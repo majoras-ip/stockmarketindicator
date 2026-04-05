@@ -184,14 +184,6 @@ def init_db():
             )
         """)
         cur.execute("""
-            CREATE TABLE IF NOT EXISTS watchlist (
-                user_id INTEGER NOT NULL,
-                ticker  TEXT NOT NULL,
-                added   TIMESTAMP DEFAULT NOW(),
-                PRIMARY KEY (user_id, ticker)
-            )
-        """)
-        cur.execute("""
             CREATE TABLE IF NOT EXISTS indicator_ratings (
                 user_id       INTEGER NOT NULL,
                 indicator_key TEXT NOT NULL,
@@ -1748,7 +1740,7 @@ def profile():
     # Stats
     copies     = _scalar("SELECT COUNT(*) FROM copy_log WHERE user_id=%s", (user_id,)) or 0
     fav_count  = _scalar("SELECT COUNT(*) FROM favorites WHERE user_id=%s", (user_id,)) or 0
-    watch_count= _scalar("SELECT COUNT(*) FROM watchlist WHERE user_id=%s", (user_id,)) or 0
+
     referrals  = _scalar("SELECT COUNT(*) FROM users WHERE referred_by=%s", (ref_code,)) or 0 if ref_code else 0
 
     # Member duration
@@ -1825,7 +1817,7 @@ def profile():
     profile_pic = row["profile_pic"] if row else None
     profile_error = session.pop("profile_error", None)
 
-    stats = {"copies": copies, "favorites": fav_count, "watchlist": watch_count, "referrals": referrals}
+    stats = {"copies": copies, "favorites": fav_count, "referrals": referrals}
     return render_template_string(PROFILE_HTML, current_user=username, username=username,
         plan=plan, member_since=member_since, duration_label=duration_label,
         badges=badges, stats=stats, profile_pic=profile_pic, profile_error=profile_error)
@@ -1950,62 +1942,6 @@ ADMIN_CODES_HTML = """<!DOCTYPE html>
 
 # ── Watchlist ─────────────────────────────────────────────────────────────────
 
-@app.route("/watchlist")
-@login_required
-def watchlist_page():
-    user_id = session["user_id"]
-    rows = _q("SELECT ticker FROM watchlist WHERE user_id=%s ORDER BY added ASC", (user_id,))
-    tickers = [r["ticker"] for r in rows]
-    return render_template_string(WATCHLIST_HTML, tickers=tickers, current_user=current_user())
-
-
-@app.route("/api/watchlist/<ticker>", methods=["POST"])
-@login_required
-def toggle_watchlist(ticker):
-    ticker = ticker.upper()[:10]
-    user_id = session["user_id"]
-    existing = _one("SELECT 1 FROM watchlist WHERE user_id=%s AND ticker=%s", (user_id, ticker))
-    if existing:
-        _run("DELETE FROM watchlist WHERE user_id=%s AND ticker=%s", (user_id, ticker))
-        return jsonify({"watching": False})
-    else:
-        _run("INSERT INTO watchlist (user_id, ticker) VALUES (%s, %s)", (user_id, ticker))
-        return jsonify({"watching": True})
-
-
-@app.route("/api/watchlist/prices")
-@login_required
-def watchlist_prices():
-    import yfinance as yf
-    user_id = session["user_id"]
-    rows = _q("SELECT ticker FROM watchlist WHERE user_id=%s", (user_id,))
-    tickers = [r["ticker"] for r in rows]
-    if not tickers:
-        return jsonify([])
-    results = []
-    for ticker in tickers:
-        try:
-            t = yf.Ticker(ticker)
-            info = t.fast_info
-            price = round(float(info.last_price), 2)
-            prev  = round(float(info.previous_close), 2)
-            chg   = round(price - prev, 2)
-            chg_pct = round((chg / prev) * 100, 2) if prev else 0
-            vol     = int(info.volume or 0)
-            avg_vol = int(info.three_month_average_volume or 0)
-            ratio   = round(vol / avg_vol, 2) if avg_vol > 0 else None
-            results.append({
-                "ticker":     ticker,
-                "price":      price,
-                "change":     chg,
-                "change_pct": chg_pct,
-                "volume":     vol,
-                "avg_vol":    avg_vol,
-                "vol_ratio":  ratio,
-            })
-        except Exception:
-            results.append({"ticker": ticker, "price": None, "change": None, "change_pct": None})
-    return jsonify(results)
 
 
 # ── Ratings API ──────────────────────────────────────────────────────────────
@@ -2653,7 +2589,6 @@ _NAV_LINKS = """
         <a href="/request">Request Indicator</a>
         <a href="/faq">FAQ</a>
         {% if current_user %}<a href="/favorites">♥ My Favorites</a>{% endif %}
-        {% if current_user %}<a href="/watchlist">📋 Watchlist</a>{% endif %}
       </div>
     </div>
     <div class="dropdown">
@@ -4022,11 +3957,6 @@ HOME_HTML = """<!DOCTYPE html>
       <p>Indicators automatically adapt to whatever symbol and timeframe you're viewing. No manual configuration needed.</p>
     </div>
     <div class="feature">
-      <div class="feature-icon">📋</div>
-      <h3>Personal watchlist</h3>
-      <p>Save your favourite tickers to a private watchlist for quick access. Available on all plans including free.</p>
-    </div>
-    <div class="feature">
       <div class="feature-icon">🤖</div>
       <h3>LSTM volatility forecast</h3>
       <p>Powered by a deep learning model trained on real market data. Get a live 30-minute volatility forecast for any ticker.</p>
@@ -4158,12 +4088,6 @@ HOME_HTML = """<!DOCTYPE html>
       <h3>Unlimited Copies</h3>
       <p>Free accounts are limited to 3 copies per day. Pro removes all limits so you can build out your full indicator setup without interruption.</p>
     </div>
-    <div class="pro-card green">
-      <div class="pro-card-icon">💾</div>
-      <div class="pro-card-tag tag-basic">Basic</div>
-      <h3>Larger Watchlist</h3>
-      <p>Basic and Pro plans support up to 10 and unlimited tickers in your personal watchlist respectively.</p>
-    </div>
     <div class="pro-card orange">
       <div class="pro-card-icon">🤖</div>
       <div class="pro-card-tag tag-pro">Pro</div>
@@ -4249,7 +4173,7 @@ HOME_HTML = """<!DOCTYPE html>
         What is the free plan limit?
         <span class="faq-chevron">▼</span>
       </div>
-      <div class="faq-a">Free accounts can copy up to 3 indicators per day and save up to 3 tickers to their watchlist. Basic and Pro plans raise or remove those limits and unlock additional tools like Gamma Exposure, Options Flow, and the Earnings Calendar.</div>
+      <div class="faq-a">Free accounts can copy up to 3 indicators per day. Basic and Pro plans raise or remove those limits and unlock additional tools like Gamma Exposure, Options Flow, and the Earnings Calendar.</div>
     </div>
     <div class="faq-item">
       <div class="faq-q" onclick="toggleFaq(this)">
@@ -4871,188 +4795,6 @@ TERMS_HTML = """<!DOCTYPE html>
 <script>""" + _THEME_JS + """</script>
 </body>
 </html>"""
-
-
-# ── Watchlist HTML ───────────────────────────────────────────────────────────
-
-WATCHLIST_HTML = """<!DOCTYPE html>
-<html data-theme="dark">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">""" + _META + """
-  <title>Watchlist — ChartEdge</title>
-  <style>
-    :root[data-theme="dark"]  { --bg:#0d1117; --bg2:#161b22; --bg3:#21262d; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --green:#3fb950; --red:#f85149; }
-    :root[data-theme="light"] { --bg:#ffffff; --bg2:#f6f8fa; --bg3:#eaeef2; --border:#d0d7de; --text:#1f2328; --muted:#636c76; --accent:#0969da; --green:#1a7f37; --red:#cf222e; }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: monospace; background: var(--bg); color: var(--text); min-height: 100vh; transition: background 0.2s, color 0.2s; }
-    nav { background: var(--bg2); border-bottom: 1px solid var(--border); padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; }
-    .logo { color: var(--accent); font-size: 1.1rem; font-weight: bold; text-decoration: none; }
-    """ + _NAV_CSS + """
-    .hero { text-align: center; padding: 40px 24px 28px; border-bottom: 1px solid var(--border); }
-    .hero h1 { font-size: 1.6rem; margin-bottom: 8px; }
-    .hero h1 span { color: var(--accent); }
-    .hero p { color: var(--muted); font-size: 0.9rem; }
-    .container { max-width: 700px; margin: 0 auto; padding: 28px 24px; }
-    .add-row { display: flex; gap: 10px; margin-bottom: 28px; }
-    .add-row input {
-      flex: 1; background: var(--bg2); color: var(--text); border: 1px solid var(--border);
-      padding: 9px 14px; border-radius: 6px; font-family: monospace; font-size: 0.9rem; text-transform: uppercase;
-    }
-    .add-row input:focus { outline: none; border-color: var(--accent); }
-    .btn-add { background: var(--accent); color: #fff; border: none; padding: 9px 20px; border-radius: 6px; font-family: monospace; font-size: 0.9rem; cursor: pointer; font-weight: bold; }
-    .btn-add:hover { opacity: 0.88; }
-    .ticker-grid { display: flex; flex-direction: column; gap: 10px; }
-    .ticker-card {
-      background: var(--bg2); border: 1px solid var(--border); border-radius: 8px;
-      padding: 14px 18px; display: flex; align-items: center; justify-content: space-between;
-    }
-    .ticker-left { display: flex; flex-direction: column; gap: 4px; }
-    .ticker-sym { font-size: 1.1rem; font-weight: bold; color: var(--accent); }
-    .ticker-price { font-size: 1.2rem; color: var(--text); }
-    .ticker-chg { font-size: 0.85rem; }
-    .ticker-vol { font-size: 0.78rem; color: var(--muted); margin-top: 2px; }
-    .up   { color: var(--green); }
-    .down { color: var(--red); }
-    .vol-badge { display: inline-block; padding: 1px 7px; border-radius: 4px; font-size: .72rem; font-weight: 700; margin-left: 6px; }
-    .vol-2  { background: #1a2a1a; color: var(--green); }
-    .vol-5  { background: #2a2a10; color: #e3b341; }
-    .vol-10 { background: #2d1f1f; color: var(--red); }
-    .btn-remove { background: none; border: 1px solid var(--border); color: var(--muted); padding: 5px 12px; border-radius: 6px; font-family: monospace; font-size: 0.8rem; cursor: pointer; }
-    .btn-remove:hover { border-color: var(--red); color: var(--red); }
-    .empty { text-align: center; padding: 60px 24px; color: var(--muted); }
-    .spin { width: 28px; height: 28px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; display: inline-block; }
-    @keyframes spin { to { transform: rotate(360deg); } }
-    .last-updated { color: var(--muted); font-size: 0.75rem; margin-bottom: 14px; }
-    footer { text-align: center; padding: 32px 24px; color: var(--muted); font-size: 0.8rem; border-top: 1px solid var(--border); margin-top: 40px; }
-  </style>
-</head>
-<body>
-<nav>
-  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span></a>
-  <button class="hamburger" onclick="toggleMobileNav(event)">☰</button>
-  <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
-</nav>
-<div class="hero">
-  <h1>My <span>Watchlist</span></h1>
-  <p>Track your favorite tickers with live prices</p>
-</div>
-<div class="container">
-  <div class="add-row">
-    <input id="ticker-input" placeholder="Add ticker… (e.g. AAPL)" maxlength="10"
-           onkeydown="if(event.key==='Enter') addTicker()">
-    <button class="btn-add" onclick="addTicker()">+ Add</button>
-  </div>
-  <div class="last-updated" id="last-updated"></div>
-  <div class="ticker-grid" id="ticker-grid">
-    {% if tickers %}
-    {% for t in tickers %}
-    <div class="ticker-card" id="card-{{ t }}">
-      <div class="ticker-left">
-        <span class="ticker-sym">{{ t }}</span>
-        <span class="ticker-price" id="price-{{ t }}"><span class="spin"></span></span>
-        <span class="ticker-chg"   id="chg-{{ t }}"></span>
-        <span class="ticker-vol"   id="vol-{{ t }}"></span>
-      </div>
-      <button class="btn-remove" onclick="removeTicker('{{ t }}')">✕ Remove</button>
-    </div>
-    {% endfor %}
-    {% else %}
-    <div class="empty" id="empty-msg">No tickers yet — add one above.</div>
-    {% endif %}
-  </div>
-</div>
-<footer>© 2026 ChartEdge · Not financial advice · <a href="/privacy" style="color:inherit">Privacy</a> · <a href="/terms" style="color:inherit">Terms</a></footer>
-<script>
-function fmtVol(n) {
-  if (n >= 1e9) return (n/1e9).toFixed(1) + 'B';
-  if (n >= 1e6) return (n/1e6).toFixed(1) + 'M';
-  if (n >= 1e3) return (n/1e3).toFixed(0) + 'K';
-  return String(n);
-}
-
-async function loadPrices() {
-  try {
-    const res  = await fetch('/api/watchlist/prices');
-    const data = await res.json();
-    data.forEach(item => {
-      const priceEl = document.getElementById('price-' + item.ticker);
-      const chgEl   = document.getElementById('chg-'   + item.ticker);
-      var   volEl   = document.getElementById('vol-'   + item.ticker);
-      if (!priceEl) return;
-      if (item.price === null) { priceEl.textContent = '—'; return; }
-      priceEl.textContent = '$' + item.price.toFixed(2);
-      const sign = item.change >= 0 ? '+' : '';
-      chgEl.textContent = sign + item.change.toFixed(2) + ' (' + sign + item.change_pct.toFixed(2) + '%)';
-      chgEl.className = 'ticker-chg ' + (item.change >= 0 ? 'up' : 'down');
-      if (volEl && item.vol_ratio !== null) {
-        var badge = '';
-        if (item.vol_ratio >= 10) badge = '<span class="vol-badge vol-10">' + item.vol_ratio.toFixed(1) + 'x</span>';
-        else if (item.vol_ratio >= 5) badge = '<span class="vol-badge vol-5">' + item.vol_ratio.toFixed(1) + 'x</span>';
-        else if (item.vol_ratio >= 2) badge = '<span class="vol-badge vol-2">' + item.vol_ratio.toFixed(1) + 'x</span>';
-        volEl.innerHTML = 'Vol ' + fmtVol(item.volume) + badge;
-      }
-    });
-    document.getElementById('last-updated').textContent =
-      'Updated ' + new Date().toLocaleTimeString();
-  } catch(e) {}
-}
-
-async function addTicker() {
-  const input  = document.getElementById('ticker-input');
-  const ticker = input.value.trim().toUpperCase();
-  if (!ticker) return;
-  try {
-    const res  = await fetch('/api/watchlist/' + ticker, {method: 'POST'});
-    if (!res.ok) {
-      if (res.status === 401) { window.location.href = '/login'; return; }
-      return;
-    }
-    const data = await res.json();
-    if (data.watching) {
-      input.value = '';
-      document.getElementById('empty-msg') && document.getElementById('empty-msg').remove();
-      const grid = document.getElementById('ticker-grid');
-      if (!document.getElementById('card-' + ticker)) {
-        var card = document.createElement('div');
-        card.className = 'ticker-card';
-        card.id = 'card-' + ticker;
-        var left = document.createElement('div');
-        left.className = 'ticker-left';
-        left.innerHTML = '<span class="ticker-sym">' + ticker + '</span>'
-          + '<span class="ticker-price" id="price-' + ticker + '"><span class="spin"></span></span>'
-          + '<span class="ticker-chg" id="chg-' + ticker + '"></span>'
-          + '<span class="ticker-vol" id="vol-' + ticker + '"></span>';
-        var btn = document.createElement('button');
-        btn.className = 'btn-remove';
-        btn.textContent = '\u2715 Remove';
-        btn.onclick = (function(t) { return function() { removeTicker(t); }; })(ticker);
-        card.appendChild(left);
-        card.appendChild(btn);
-        grid.appendChild(card);
-        loadPrices();
-      }
-    } else {
-      input.select();
-    }
-  } catch(e) { console.error('addTicker error:', e); }
-}
-
-async function removeTicker(ticker) {
-  await fetch('/api/watchlist/' + ticker, {method: 'POST'});
-  const card = document.getElementById('card-' + ticker);
-  if (card) card.remove();
-  if (!document.querySelector('.ticker-card')) {
-    document.getElementById('ticker-grid').innerHTML = '<div class="empty" id="empty-msg">No tickers yet — add one above.</div>';
-  }
-}
-
-{% if tickers %}loadPrices();{% endif %}
-""" + _THEME_JS + """
-</script>
-</body>
-</html>"""
-
 
 # ── News ─────────────────────────────────────────────────────────────────────
 
