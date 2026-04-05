@@ -208,6 +208,18 @@ def init_db():
                 created TIMESTAMP DEFAULT NOW()
             )
         """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS priority_requests (
+                id          SERIAL PRIMARY KEY,
+                user_id     INTEGER NOT NULL,
+                username    TEXT NOT NULL,
+                title       TEXT NOT NULL,
+                description TEXT NOT NULL,
+                status      TEXT DEFAULT 'pending',
+                created     TIMESTAMP DEFAULT NOW(),
+                updated     TIMESTAMP DEFAULT NOW()
+            )
+        """)
         conn.commit()
     except Exception:
         conn.rollback()
@@ -2580,6 +2592,7 @@ _NAV_LINKS = """
         <a href="/news">News</a>
         <a href="/insider">Insider Trading</a>
         <a href="/premarket">Pre-Market Scanner</a>
+        <a href="/priority">⚡ Priority Service</a>
       </div>
     </div>
     <div class="dropdown">
@@ -2975,7 +2988,7 @@ PRICING_HTML = """<!DOCTYPE html>
       <div class="plan-desc">Get started with no commitment.</div>
       <ul class="plan-features">
         <li>3 copies per day</li><li>All indicators visible</li>
-        <li>Unusual volume</li><li>Market news</li><li class="no">Ticker news</li><li class="no">Earnings calendar</li><li class="no">Gamma exposure</li><li class="no">LSTM forecast</li><li class="no">Options flow</li><li class="no">Insider trading</li><li class="no">Pre-market scanner</li>
+        <li>Unusual volume</li><li>Market news</li><li class="no">Ticker news</li><li class="no">Earnings calendar</li><li class="no">Gamma exposure</li><li class="no">LSTM forecast</li><li class="no">Options flow</li><li class="no">Insider trading</li><li class="no">Pre-market scanner</li><li class="no">Priority requests</li>
       </ul>
       <a href="/indicators" class="btn-plan btn-free">Start Free</a>
     </div>
@@ -2985,7 +2998,7 @@ PRICING_HTML = """<!DOCTYPE html>
       <div class="plan-desc">For active traders who copy often.</div>
       <ul class="plan-features">
         <li>10 copies per day</li><li>All indicators visible</li>
-        <li>Unusual volume</li><li>Market news</li><li>Ticker news</li><li>Earnings calendar</li><li>Gamma exposure</li><li class="no">LSTM forecast</li><li class="no">Options flow</li><li class="no">Insider trading</li><li class="no">Pre-market scanner</li>
+        <li>Unusual volume</li><li>Market news</li><li>Ticker news</li><li>Earnings calendar</li><li>Gamma exposure</li><li class="no">LSTM forecast</li><li class="no">Options flow</li><li class="no">Insider trading</li><li class="no">Pre-market scanner</li><li class="no">Priority requests</li>
 
       </ul>
       {% if current_user %}
@@ -3001,7 +3014,7 @@ PRICING_HTML = """<!DOCTYPE html>
       <div class="plan-desc">Unlimited access for power users.</div>
       <ul class="plan-features">
         <li>Unlimited copies</li><li>All indicators visible</li>
-        <li>Unusual volume</li><li>Market news</li><li>Ticker news</li><li>Earnings calendar</li><li>Gamma exposure</li><li>LSTM forecast</li><li>Options flow</li><li>Insider trading</li><li>Pre-market scanner</li>
+        <li>Unusual volume</li><li>Market news</li><li>Ticker news</li><li>Earnings calendar</li><li>Gamma exposure</li><li>LSTM forecast</li><li>Options flow</li><li>Insider trading</li><li>Pre-market scanner</li><li>Priority requests</li>
       </ul>
       {% if current_user %}
       <a href="/subscribe/pro" class="btn-plan btn-pro" id="btn-pro">Get Pro</a>
@@ -5179,6 +5192,213 @@ loadData(false);
 </script>
 </body>
 </html>"""
+
+
+# ── Priority Service ──────────────────────────────────────────────────────────
+
+PRIORITY_HTML = """<!DOCTYPE html>
+<html lang="en">
+<head>""" + _META + """
+  <title>Priority Service · ChartEdge</title>
+  <style>""" + _NAV_CSS + """
+  body { background: var(--bg); color: var(--fg); font-family: 'Inter', sans-serif; margin: 0; }
+  .priority-wrap { max-width: 760px; margin: 0 auto; padding: 48px 24px 80px; }
+  h1 { font-size: 1.8rem; font-weight: 700; margin-bottom: 6px; }
+  h1 span { color: var(--accent); }
+  .pro-badge { background: linear-gradient(135deg,#f0c040,#e07b00); color: #000;
+               font-size: .65rem; font-weight: 800; padding: 2px 7px; border-radius: 4px;
+               vertical-align: middle; margin-left: 8px; letter-spacing: .06em; }
+  .subtitle { color: var(--muted); font-size: .95rem; margin-bottom: 32px; }
+  .form-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+               padding: 28px; margin-bottom: 40px; }
+  .form-card h2 { font-size: 1.1rem; font-weight: 600; margin: 0 0 20px; }
+  label { display: block; font-size: .8rem; color: var(--muted); margin-bottom: 4px; font-weight: 500; }
+  input[type=text], textarea { width: 100%; box-sizing: border-box; background: var(--bg);
+    border: 1px solid var(--border); color: var(--fg); border-radius: 8px;
+    padding: 10px 14px; font-size: .9rem; font-family: inherit; outline: none; }
+  input[type=text]:focus, textarea:focus { border-color: var(--accent); }
+  textarea { resize: vertical; min-height: 100px; }
+  .form-row { margin-bottom: 18px; }
+  .submit-btn { background: linear-gradient(135deg,#f0c040,#e07b00); color: #000;
+                border: none; border-radius: 8px; padding: 10px 24px;
+                font-weight: 700; font-size: .9rem; cursor: pointer; }
+  .submit-btn:hover { opacity: .88; }
+  .msg-ok  { background: rgba(63,185,80,.12); border: 1px solid rgba(63,185,80,.3);
+             color: #3fb950; border-radius: 8px; padding: 10px 14px; margin-bottom: 20px; font-size: .9rem; }
+  .msg-err { background: rgba(248,81,73,.12); border: 1px solid rgba(248,81,73,.3);
+             color: #f85149; border-radius: 8px; padding: 10px 14px; margin-bottom: 20px; font-size: .9rem; }
+  .reqs-section h2 { font-size: 1.1rem; font-weight: 600; margin-bottom: 16px; }
+  .req-card { background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+              padding: 18px 20px; margin-bottom: 14px; }
+  .req-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+  .req-title { font-weight: 600; font-size: 1rem; margin-bottom: 4px; }
+  .req-desc { color: var(--muted); font-size: .85rem; line-height: 1.5; }
+  .req-meta { font-size: .75rem; color: var(--muted); margin-top: 10px; }
+  .status-badge { display: inline-block; font-size: .7rem; font-weight: 700; padding: 3px 9px;
+                  border-radius: 20px; white-space: nowrap; flex-shrink: 0; }
+  .status-pending  { background: rgba(210,160,40,.15); color: #d2a028; border: 1px solid rgba(210,160,40,.3); }
+  .status-review   { background: rgba(88,166,255,.15); color: #58a6ff; border: 1px solid rgba(88,166,255,.3); }
+  .status-building { background: rgba(63,185,80,.15); color: #3fb950; border: 1px solid rgba(63,185,80,.3); }
+  .status-done     { background: rgba(139,148,158,.15); color: #8b949e; border: 1px solid rgba(139,148,158,.3); }
+  .empty { color: var(--muted); font-size: .9rem; text-align: center; padding: 32px 0; }
+  </style>
+</head>
+<body>
+""" + _NAV_LINKS + """
+<div class="priority-wrap">
+  <h1>Priority <span>Service</span> <span class="pro-badge">PRO</span></h1>
+  <p class="subtitle">Skip the queue — Pro members get their indicator requests reviewed first and built sooner.</p>
+
+  {% if msg_ok %}  <div class="msg-ok">{{ msg_ok }}</div>  {% endif %}
+  {% if msg_err %} <div class="msg-err">{{ msg_err }}</div> {% endif %}
+
+  <div class="form-card">
+    <h2>Submit a Request</h2>
+    <form method="POST" action="/priority">
+      <div class="form-row">
+        <label for="title">Indicator name or idea</label>
+        <input type="text" id="title" name="title" placeholder="e.g. VWAP Anchored to Earnings" maxlength="120" required>
+      </div>
+      <div class="form-row">
+        <label for="description">What should it do? How would you use it?</label>
+        <textarea id="description" name="description" placeholder="Describe the logic, timeframes, inputs..." maxlength="1200" required></textarea>
+      </div>
+      <button type="submit" class="submit-btn">⚡ Submit Priority Request</button>
+    </form>
+  </div>
+
+  <div class="reqs-section">
+    <h2>Your Requests</h2>
+    {% if my_reqs %}
+      {% for r in my_reqs %}
+      <div class="req-card">
+        <div class="req-top">
+          <div>
+            <div class="req-title">{{ r.title }}</div>
+            <div class="req-desc">{{ r.description }}</div>
+          </div>
+          <span class="status-badge status-{{ r.status }}">
+            {% if r.status == 'pending' %}⏳ Pending
+            {% elif r.status == 'review' %}🔍 In Review
+            {% elif r.status == 'building' %}🔨 Building
+            {% else %}✅ Done
+            {% endif %}
+          </span>
+        </div>
+        <div class="req-meta">Submitted {{ r.created.strftime('%b %d, %Y') if r.created else '' }}</div>
+      </div>
+      {% endfor %}
+    {% else %}
+      <div class="empty">No requests yet — submit your first one above.</div>
+    {% endif %}
+  </div>
+</div>
+""" + _THEME_JS + """
+</body>
+</html>"""
+
+
+ADMIN_PRIORITY_HTML = """<!DOCTYPE html>
+<html lang="en">
+<head>""" + _META + """
+  <title>Priority Queue · Admin</title>
+  <style>""" + _NAV_CSS + """
+  body { background: var(--bg); color: var(--fg); font-family: 'Inter', sans-serif; margin: 0; }
+  .wrap { max-width: 900px; margin: 0 auto; padding: 40px 24px 80px; }
+  h1 { font-size: 1.6rem; font-weight: 700; margin-bottom: 24px; }
+  table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+  th { text-align: left; padding: 8px 12px; color: var(--muted); border-bottom: 1px solid var(--border); font-weight: 500; }
+  td { padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  .req-title { font-weight: 600; margin-bottom: 3px; }
+  .req-desc { color: var(--muted); font-size: .8rem; line-height: 1.4; max-width: 360px; }
+  select { background: var(--card); color: var(--fg); border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px; font-size: .8rem; cursor: pointer; }
+  .user-col { font-size: .8rem; color: var(--muted); }
+  .empty { color: var(--muted); padding: 32px 0; text-align: center; }
+  </style>
+</head>
+<body>
+""" + _NAV_LINKS + """
+<div class="wrap">
+  <h1>⚡ Priority Queue</h1>
+  {% if reqs %}
+  <table>
+    <thead><tr><th>Request</th><th>User</th><th>Submitted</th><th>Status</th></tr></thead>
+    <tbody>
+    {% for r in reqs %}
+    <tr>
+      <td>
+        <div class="req-title">{{ r.title }}</div>
+        <div class="req-desc">{{ r.description }}</div>
+      </td>
+      <td class="user-col">{{ r.username }}<br>#{{ r.user_id }}</td>
+      <td class="user-col">{{ r.created.strftime('%b %d, %Y') if r.created else '' }}</td>
+      <td>
+        <form method="POST" action="/admin/priority/{{ r.id }}/status" style="display:inline">
+          <select name="status" onchange="this.form.submit()">
+            <option value="pending"  {% if r.status=='pending'  %}selected{% endif %}>⏳ Pending</option>
+            <option value="review"   {% if r.status=='review'   %}selected{% endif %}>🔍 In Review</option>
+            <option value="building" {% if r.status=='building' %}selected{% endif %}>🔨 Building</option>
+            <option value="done"     {% if r.status=='done'     %}selected{% endif %}>✅ Done</option>
+          </select>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty">No priority requests yet.</div>
+  {% endif %}
+</div>
+""" + _THEME_JS + """
+</body>
+</html>"""
+
+
+@app.route("/priority", methods=["GET", "POST"])
+@login_required
+def priority_page():
+    plan = _get_user_plan(session.get("user_id"))
+    if plan != "pro":
+        return redirect("/pricing?upgrade=priority")
+    user_id  = session["user_id"]
+    username = session.get("username", "")
+    msg_ok = msg_err = None
+    if request.method == "POST":
+        title = request.form.get("title", "").strip()
+        desc  = request.form.get("description", "").strip()
+        if not title or not desc:
+            msg_err = "Please fill in both fields."
+        elif len(title) > 120 or len(desc) > 1200:
+            msg_err = "Input too long."
+        else:
+            _run("INSERT INTO priority_requests (user_id, username, title, description) VALUES (%s, %s, %s, %s)",
+                 (user_id, username, title, desc))
+            msg_ok = "Request submitted! We'll review it within 24 hours."
+    my_reqs = _q("SELECT * FROM priority_requests WHERE user_id=%s ORDER BY created DESC", (user_id,))
+    return render_template_string(PRIORITY_HTML, my_reqs=my_reqs,
+                                  msg_ok=msg_ok, msg_err=msg_err, current_user=current_user())
+
+
+@app.route("/admin/priority")
+@login_required
+def admin_priority_page():
+    if session.get("username") not in ("ayden", "admin"):
+        return redirect("/")
+    reqs = _q("SELECT * FROM priority_requests ORDER BY created DESC")
+    return render_template_string(ADMIN_PRIORITY_HTML, reqs=reqs, current_user=current_user())
+
+
+@app.route("/admin/priority/<int:req_id>/status", methods=["POST"])
+@login_required
+def admin_priority_update(req_id):
+    if session.get("username") not in ("ayden", "admin"):
+        return redirect("/")
+    status = request.form.get("status", "pending")
+    if status not in ("pending", "review", "building", "done"):
+        status = "pending"
+    _run("UPDATE priority_requests SET status=%s, updated=NOW() WHERE id=%s", (status, req_id))
+    return redirect("/admin/priority")
 
 
 # ── News ─────────────────────────────────────────────────────────────────────
