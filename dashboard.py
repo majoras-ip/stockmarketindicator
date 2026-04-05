@@ -5022,28 +5022,29 @@ def api_premarket():
 
     results = []
     try:
+        import pandas as pd
         tickers = _VOLUME_TICKERS
-        raw = yf.download(tickers, period="2d", interval="1d", progress=False, auto_adjust=True)
-        if isinstance(raw.columns, __import__('pandas').MultiIndex):
-            closes = raw["Close"]
-        else:
-            closes = raw[["Close"]]
+        raw = yf.download(tickers, period="5d", interval="1d", progress=False, auto_adjust=True)
+        closes = raw["Close"] if isinstance(raw.columns, pd.MultiIndex) else raw[["Close"]]
 
         for ticker in tickers:
             try:
-                t     = yf.Ticker(ticker)
-                fi    = t.fast_info
-                price = float(fi.last_price or 0)
-                prev  = float(closes[ticker].dropna().iloc[-1]) if ticker in closes.columns else float(fi.previous_close or 0)
+                if ticker not in closes.columns:
+                    continue
+                col = closes[ticker].dropna()
+                if len(col) < 2:
+                    continue
+                price = float(col.iloc[-1])
+                prev  = float(col.iloc[-2])
                 if not prev or not price:
                     continue
                 chg     = round(price - prev, 2)
                 chg_pct = round((chg / prev) * 100, 2)
                 results.append({
-                    "ticker":   ticker,
-                    "price":    round(price, 2),
-                    "prev":     round(prev, 2),
-                    "change":   chg,
+                    "ticker":     ticker,
+                    "price":      round(price, 2),
+                    "prev":       round(prev, 2),
+                    "change":     chg,
                     "change_pct": chg_pct,
                 })
             except Exception:
