@@ -4840,6 +4840,7 @@ def _fetch_news(max_per_feed: int = 15) -> list[dict]:
                     "published": published,
                     "summary":   summary,
                     "_ts":       ts,
+                    "ts":        ts,
                 })
         except Exception as exc:
             log.warning("Feed %s failed: %s", source, exc)
@@ -4892,7 +4893,8 @@ def api_news_ticker():
             if not title:
                 continue
             articles.append({"title": title, "link": link, "source": pub,
-                              "published": published, "summary": summary[:200]})
+                              "published": published, "summary": summary[:200],
+                              "ts": float(ts) if isinstance(ts, (int, float)) else 0})
         return jsonify({"ticker": ticker, "articles": articles})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -5068,7 +5070,7 @@ function loadTickerNews() {
         var a = data.articles[i];
         html += '<div class="news-card" style="margin-bottom:10px;">'
           + '<div class="news-meta"><span class="source-tag">' + (a.source || 'News') + '</span>'
-          + '<span class="news-time">' + (a.published || '') + '</span></div>'
+          + '<span class="news-time">' + (a.ts ? fmtDate(a.ts) : (a.published || '')) + '</span></div>'
           + '<div class="news-title"><a href="' + a.link + '" target="_blank" rel="noopener">' + a.title + '</a></div>'
           + (a.summary ? '<div class="news-summary">' + a.summary + '</div>' : '')
           + '</div>';
@@ -5082,6 +5084,16 @@ function loadTickerNews() {
 
 var allArticles  = [];
 var activeSource = 'all';
+
+function fmtDate(ts) {
+  if (!ts) return '';
+  var d = new Date(ts * 1000);
+  var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  var h = d.getHours() % 12 || 12;
+  var m = d.getMinutes().toString().padStart(2, '0');
+  var ampm = d.getHours() < 12 ? 'AM' : 'PM';
+  return months[d.getMonth()] + ' ' + d.getDate() + ', ' + d.getFullYear() + ' \u00b7 ' + h + ':' + m + ' ' + ampm;
+}
 var currentPage  = 1;
 var PAGE_SIZE    = 20;
 
@@ -5123,7 +5135,7 @@ function renderPage() {
       var a = page[i];
       html += '<div class="news-card">'
         + '<div class="news-meta"><span class="source-tag">' + a.source + '</span>'
-        + '<span class="news-time">' + (a.published || '') + '</span></div>'
+        + '<span class="news-time">' + (a.ts ? fmtDate(a.ts) : (a.published || '')) + '</span></div>'
         + '<div class="news-title"><a href="' + a.link + '" target="_blank" rel="noopener">' + a.title + '</a></div>'
         + (a.summary ? '<div class="news-summary">' + a.summary + '...</div>' : '')
         + '</div>';
