@@ -1784,97 +1784,6 @@ def profile():
         badges=badges, stats=stats)
 
 
-PROFILE_HTML = """<!DOCTYPE html>
-<html data-theme="dark">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">""" + _META + """
-  <title>Profile · ChartEdge</title>
-  <style>
-    :root[data-theme="dark"]  { --bg:#0d1117; --bg2:#161b22; --bg3:#21262d; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --green:#3fb950; --red:#f85149; }
-    :root[data-theme="light"] { --bg:#ffffff; --bg2:#f6f8fa; --bg3:#eaeef2; --border:#d0d7de; --text:#1f2328; --muted:#636c76; --accent:#0969da; --green:#1a7f37; --red:#cf222e; }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: -apple-system, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
-    nav { background: var(--bg2); border-bottom: 1px solid var(--border); padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; }
-    .logo { font-size: 1.1rem; font-weight: bold; text-decoration: none; }
-    """ + _NAV_CSS + """
-    .container { max-width: 720px; margin: 0 auto; padding: 36px 24px; }
-    .profile-header { display: flex; align-items: center; gap: 20px; margin-bottom: 32px; padding: 28px; background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; }
-    .avatar { width: 72px; height: 72px; border-radius: 50%; background: var(--accent); display: flex; align-items: center; justify-content: center; font-size: 2rem; font-weight: 700; color: #fff; flex-shrink: 0; }
-    .profile-info h1 { font-size: 1.4rem; margin-bottom: 4px; }
-    .profile-info .meta { color: var(--muted); font-size: .85rem; }
-    .plan-pill { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: .75rem; font-weight: 700; text-transform: uppercase; margin-left: 8px; }
-    .section { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 22px; margin-bottom: 20px; }
-    .section-title { font-size: .75rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .07em; margin-bottom: 16px; }
-    .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 12px; }
-    .stat-box { background: var(--bg3); border-radius: 8px; padding: 14px; text-align: center; }
-    .stat-num { font-size: 1.6rem; font-weight: 700; color: var(--accent); }
-    .stat-lbl { font-size: .72rem; color: var(--muted); margin-top: 4px; text-transform: uppercase; letter-spacing: .05em; }
-    .badges-grid { display: flex; flex-wrap: wrap; gap: 10px; }
-    .badge-card { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 8px; border: 1px solid var(--border); min-width: 160px; }
-    .badge-icon { font-size: 1.4rem; }
-    .badge-label { font-size: .82rem; font-weight: 600; }
-    .no-badges { color: var(--muted); font-size: .85rem; }
-    footer { text-align: center; padding: 32px 24px; color: var(--muted); font-size: .8rem; border-top: 1px solid var(--border); margin-top: 20px; }
-  </style>
-</head>
-<body>
-<nav>
-  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span></a>
-  <button class="hamburger" onclick="toggleMobileNav(event)">☰</button>
-  <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
-</nav>
-
-<div class="container">
-  <div class="profile-header">
-    <div class="avatar">{{ username[0].upper() }}</div>
-    <div class="profile-info">
-      <h1>{{ username }}
-        <span class="plan-pill" style="background:{{ {'free':'#21262d','basic':'#0d1a2d','pro':'#2a2000'}[plan] }};color:{{ {'free':'#8b949e','basic':'#58a6ff','pro':'#e3b341'}[plan] }};">{{ plan.upper() }}</span>
-      </h1>
-      <div class="meta">Member since {{ member_since }}</div>
-    </div>
-  </div>
-
-  <div class="section">
-    <div class="section-title">Stats</div>
-    <div class="stats-grid">
-      <div class="stat-box"><div class="stat-num">{{ stats.copies }}</div><div class="stat-lbl">Indicators Copied</div></div>
-      <div class="stat-box"><div class="stat-num">{{ stats.favorites }}</div><div class="stat-lbl">Favorites</div></div>
-      <div class="stat-box"><div class="stat-num">{{ stats.watchlist }}</div><div class="stat-lbl">Watchlist</div></div>
-      <div class="stat-box"><div class="stat-num">{{ stats.referrals }}</div><div class="stat-lbl">Referrals</div></div>
-    </div>
-  </div>
-
-  <div class="section">
-    <div class="section-title">Badges</div>
-    {% if badges %}
-    <div class="badges-grid">
-      {% for b in badges %}
-      <div class="badge-card" style="background:{{ b.bg }};border-color:{{ b.color }}30;">
-        <span class="badge-icon">{{ b.icon }}</span>
-        <span class="badge-label" style="color:{{ b.color }};">{{ b.label }}</span>
-      </div>
-      {% endfor %}
-    </div>
-    {% else %}
-    <div class="no-badges">No badges yet — start copying indicators to earn some!</div>
-    {% endif %}
-  </div>
-
-  <div style="display:flex;gap:12px;flex-wrap:wrap;">
-    <a href="/billing" style="color:var(--accent);font-size:.85rem;">Manage Plan</a>
-    <a href="/refer"   style="color:var(--accent);font-size:.85rem;">Refer a Friend</a>
-    <a href="/favorites" style="color:var(--accent);font-size:.85rem;">My Favorites</a>
-  </div>
-</div>
-
-<footer>© 2026 ChartEdge</footer>
-<script>""" + _THEME_JS + """</script>
-</body>
-</html>"""
-
-
 ADMIN_LOGIN_HTML = """<!DOCTYPE html>
 <html data-theme="dark">
 <head><meta charset="UTF-8"><title>Admin · ChartEdge</title>
@@ -2760,6 +2669,96 @@ function toggleTheme() {
   });
 })();
 """
+
+PROFILE_HTML = """<!DOCTYPE html>
+<html data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">""" + _META + """
+  <title>Profile · ChartEdge</title>
+  <style>
+    :root[data-theme="dark"]  { --bg:#0d1117; --bg2:#161b22; --bg3:#21262d; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --green:#3fb950; --red:#f85149; }
+    :root[data-theme="light"] { --bg:#ffffff; --bg2:#f6f8fa; --bg3:#eaeef2; --border:#d0d7de; --text:#1f2328; --muted:#636c76; --accent:#0969da; --green:#1a7f37; --red:#cf222e; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+    nav { background: var(--bg2); border-bottom: 1px solid var(--border); padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; }
+    .logo { font-size: 1.1rem; font-weight: bold; text-decoration: none; }
+    """ + _NAV_CSS + """
+    .container { max-width: 720px; margin: 0 auto; padding: 36px 24px; }
+    .profile-header { display: flex; align-items: center; gap: 20px; margin-bottom: 32px; padding: 28px; background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; }
+    .avatar { width: 72px; height: 72px; border-radius: 50%; background: var(--accent); display: flex; align-items: center; justify-content: center; font-size: 2rem; font-weight: 700; color: #fff; flex-shrink: 0; }
+    .profile-info h1 { font-size: 1.4rem; margin-bottom: 4px; }
+    .profile-info .meta { color: var(--muted); font-size: .85rem; }
+    .plan-pill { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: .75rem; font-weight: 700; text-transform: uppercase; margin-left: 8px; }
+    .section { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 22px; margin-bottom: 20px; }
+    .section-title { font-size: .75rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .07em; margin-bottom: 16px; }
+    .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 12px; }
+    .stat-box { background: var(--bg3); border-radius: 8px; padding: 14px; text-align: center; }
+    .stat-num { font-size: 1.6rem; font-weight: 700; color: var(--accent); }
+    .stat-lbl { font-size: .72rem; color: var(--muted); margin-top: 4px; text-transform: uppercase; letter-spacing: .05em; }
+    .badges-grid { display: flex; flex-wrap: wrap; gap: 10px; }
+    .badge-card { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 8px; border: 1px solid var(--border); min-width: 160px; }
+    .badge-icon { font-size: 1.4rem; }
+    .badge-label { font-size: .82rem; font-weight: 600; }
+    .no-badges { color: var(--muted); font-size: .85rem; }
+    footer { text-align: center; padding: 32px 24px; color: var(--muted); font-size: .8rem; border-top: 1px solid var(--border); margin-top: 20px; }
+  </style>
+</head>
+<body>
+<nav>
+  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span></a>
+  <button class="hamburger" onclick="toggleMobileNav(event)">☰</button>
+  <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
+</nav>
+
+<div class="container">
+  <div class="profile-header">
+    <div class="avatar">{{ username[0].upper() }}</div>
+    <div class="profile-info">
+      <h1>{{ username }}
+        <span class="plan-pill" style="background:{{ {'free':'#21262d','basic':'#0d1a2d','pro':'#2a2000'}[plan] }};color:{{ {'free':'#8b949e','basic':'#58a6ff','pro':'#e3b341'}[plan] }};">{{ plan.upper() }}</span>
+      </h1>
+      <div class="meta">Member since {{ member_since }}</div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Stats</div>
+    <div class="stats-grid">
+      <div class="stat-box"><div class="stat-num">{{ stats.copies }}</div><div class="stat-lbl">Indicators Copied</div></div>
+      <div class="stat-box"><div class="stat-num">{{ stats.favorites }}</div><div class="stat-lbl">Favorites</div></div>
+      <div class="stat-box"><div class="stat-num">{{ stats.watchlist }}</div><div class="stat-lbl">Watchlist</div></div>
+      <div class="stat-box"><div class="stat-num">{{ stats.referrals }}</div><div class="stat-lbl">Referrals</div></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Badges</div>
+    {% if badges %}
+    <div class="badges-grid">
+      {% for b in badges %}
+      <div class="badge-card" style="background:{{ b.bg }};border-color:{{ b.color }}30;">
+        <span class="badge-icon">{{ b.icon }}</span>
+        <span class="badge-label" style="color:{{ b.color }};">{{ b.label }}</span>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="no-badges">No badges yet — start copying indicators to earn some!</div>
+    {% endif %}
+  </div>
+
+  <div style="display:flex;gap:12px;flex-wrap:wrap;">
+    <a href="/billing" style="color:var(--accent);font-size:.85rem;">Manage Plan</a>
+    <a href="/refer"   style="color:var(--accent);font-size:.85rem;">Refer a Friend</a>
+    <a href="/favorites" style="color:var(--accent);font-size:.85rem;">My Favorites</a>
+  </div>
+</div>
+
+<footer>© 2026 ChartEdge</footer>
+<script>""" + _THEME_JS + """</script>
+</body>
+</html>"""
 
 # ── Pricing / Billing / Redeem HTML ──────────────────────────────────────────
 
