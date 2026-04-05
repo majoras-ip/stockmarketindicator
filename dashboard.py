@@ -4856,7 +4856,7 @@ def api_insider():
                 break
 
         entries.sort(key=lambda x: x["date"], reverse=True)
-        top = entries[:15]
+        top = entries[:60]
 
         # Build base results
         base = {}
@@ -5015,16 +5015,23 @@ INSIDER_HTML = """<!DOCTYPE html>
 <footer>© 2026 ChartEdge · Data via SEC EDGAR · Not financial advice</footer>
 <script>""" + _THEME_JS + """
 var allFilings = [];
+var currentPage = 1;
+var PAGE_SIZE = 15;
 
 function renderTable(filings, title) {
   if (!filings.length) {
     document.getElementById('content').innerHTML = '<p style="color:var(--muted);padding:20px 0;">No filings found.</p>';
     return;
   }
+  var totalPages = Math.ceil(filings.length / PAGE_SIZE);
+  if (currentPage > totalPages) currentPage = totalPages;
+  var start = (currentPage - 1) * PAGE_SIZE;
+  var page  = filings.slice(start, start + PAGE_SIZE);
+
   var html = title ? '<h2 style="font-size:1rem;margin-bottom:14px;color:var(--muted);">' + title + '</h2>' : '';
   html += '<table class="filing-table"><thead><tr><th>Insider / Issuer</th><th>Date</th><th>Shares</th><th>Value</th><th>Link</th></tr></thead><tbody>';
-  for (var i = 0; i < filings.length; i++) {
-    var f = filings[i];
+  for (var i = 0; i < page.length; i++) {
+    var f = page[i];
     var txnColor = f.txn === 'A' ? 'var(--green)' : f.txn === 'D' ? 'var(--red)' : 'var(--muted)';
     var txnLabel = f.txn === 'A' ? '▲ Buy' : f.txn === 'D' ? '▼ Sell' : '';
     var sharesStr = f.shares != null ? (f.shares).toLocaleString() + (txnLabel ? ' <span style="color:' + txnColor + ';font-size:.75rem">' + txnLabel + '</span>' : '') : '—';
@@ -5036,7 +5043,17 @@ function renderTable(filings, title) {
     html += '<td><a class="filing-link" href="' + (f.link || '#') + '" target="_blank" rel="noopener">View →</a></td></tr>';
   }
   html += '</tbody></table>';
+  html += '<div style="display:flex;align-items:center;gap:12px;margin-top:16px;font-size:.85rem;">';
+  html += '<button onclick="changePage(-1)" style="background:var(--bg2);border:1px solid var(--border);color:var(--text);padding:6px 14px;border-radius:6px;cursor:pointer;" ' + (currentPage <= 1 ? 'disabled style="opacity:.4;cursor:default;background:var(--bg2);border:1px solid var(--border);color:var(--muted);padding:6px 14px;border-radius:6px;"' : '') + '>← Prev</button>';
+  html += '<span style="color:var(--muted)">Page ' + currentPage + ' of ' + totalPages + '</span>';
+  html += '<button onclick="changePage(1)" style="background:var(--bg2);border:1px solid var(--border);color:var(--text);padding:6px 14px;border-radius:6px;cursor:pointer;" ' + (currentPage >= totalPages ? 'disabled style="opacity:.4;cursor:default;background:var(--bg2);border:1px solid var(--border);color:var(--muted);padding:6px 14px;border-radius:6px;"' : '') + '>Next →</button>';
+  html += '</div>';
   document.getElementById('content').innerHTML = html;
+}
+
+function changePage(dir) {
+  currentPage += dir;
+  renderTable(allFilings);
 }
 
 async function loadAll() {
