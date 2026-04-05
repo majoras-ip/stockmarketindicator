@@ -5301,7 +5301,7 @@ FLOW_HTML = """<!DOCTYPE html>
            onkeydown="if(event.key==='Enter'){event.preventDefault();loadFlow();}">
     <button type="button" onclick="loadFlow()">Search</button>
   </div>
-  <div id="flow-content" style="min-height:60px;text-align:center;padding:32px;color:var(--muted);">Loading SPY options data…</div>
+  <div id="flow-content" style="min-height:60px;text-align:center;padding:32px;color:var(--muted);">JavaScript did not run — check browser console</div>
 </div>
 <footer>© 2026 ChartEdge · Options data via yfinance · Not financial advice</footer>
 <script>
@@ -5341,67 +5341,69 @@ function loadFlow(exp) {
 }
 
 function renderFlow(d) {
-  const pcrColor = d.put_call_ratio > 1.2 ? 'put-val' : d.put_call_ratio < 0.8 ? 'call-val' : 'neutral';
+  var pcrColor = d.put_call_ratio > 1.2 ? 'put-val' : d.put_call_ratio < 0.8 ? 'call-val' : 'neutral';
 
   // Expiry tabs
-  const tabs = d.expirations.map(e =>
-    '<span class="exp-tab' + (e === d.expiry ? ' active' : '') + '" onclick="loadFlowExp(this,\'' + e + '\')">' + e + '</span>'
-  ).join('');
+  var tabs = '';
+  for (var i = 0; i < d.expirations.length; i++) {
+    var e = d.expirations[i];
+    var active = e === d.expiry ? ' active' : '';
+    tabs += '<span class="exp-tab' + active + '" data-exp="' + e + '" onclick="loadFlowExp(this)">' + e + '</span>';
+  }
 
   // Summary cards
-  const summary = `
-    <div class="summary-grid">
-      <div class="summary-card"><div class="val call-val">${fmt(d.call_volume)}</div><div class="lbl">Call Volume</div></div>
-      <div class="summary-card"><div class="val put-val">${fmt(d.put_volume)}</div><div class="lbl">Put Volume</div></div>
-      <div class="summary-card"><div class="val call-val">${fmt(d.call_oi)}</div><div class="lbl">Call OI</div></div>
-      <div class="summary-card"><div class="val put-val">${fmt(d.put_oi)}</div><div class="lbl">Put OI</div></div>
-      <div class="summary-card"><div class="val ${pcrColor}">${d.put_call_ratio}</div><div class="lbl">Put/Call Ratio</div></div>
-    </div>`;
+  var summary = '<div class="summary-grid">'
+    + '<div class="summary-card"><div class="val call-val">' + fmt(d.call_volume) + '</div><div class="lbl">Call Volume</div></div>'
+    + '<div class="summary-card"><div class="val put-val">'  + fmt(d.put_volume)  + '</div><div class="lbl">Put Volume</div></div>'
+    + '<div class="summary-card"><div class="val call-val">' + fmt(d.call_oi)     + '</div><div class="lbl">Call OI</div></div>'
+    + '<div class="summary-card"><div class="val put-val">'  + fmt(d.put_oi)      + '</div><div class="lbl">Put OI</div></div>'
+    + '<div class="summary-card"><div class="val ' + pcrColor + '">' + d.put_call_ratio + '</div><div class="lbl">Put/Call Ratio</div></div>'
+    + '</div>';
 
   // Volume bar
-  const bar = `
-    <div class="bar-section">
-      <h3>Volume Sentiment</h3>
-      <div class="flow-bar">
-        <div class="call-seg" style="width:${d.call_pct}%">${d.call_pct > 10 ? d.call_pct + '%' : ''}</div>
-        <div class="put-seg"  style="width:${d.put_pct}%">${d.put_pct > 10 ? d.put_pct + '%' : ''}</div>
-      </div>
-      <div class="bar-legend">
-        <span><span class="dot" style="background:var(--green)"></span>Calls ${d.call_pct}%</span>
-        <span><span class="dot" style="background:var(--red)"></span>Puts ${d.put_pct}%</span>
-      </div>
-    </div>`;
+  var callLabel = d.call_pct > 10 ? d.call_pct + '%' : '';
+  var putLabel  = d.put_pct  > 10 ? d.put_pct  + '%' : '';
+  var bar = '<div class="bar-section">'
+    + '<h3>Volume Sentiment</h3>'
+    + '<div class="flow-bar">'
+    + '<div class="call-seg" style="width:' + d.call_pct + '%">' + callLabel + '</div>'
+    + '<div class="put-seg"  style="width:' + d.put_pct  + '%">' + putLabel  + '</div>'
+    + '</div>'
+    + '<div class="bar-legend">'
+    + '<span><span class="dot" style="background:var(--green)"></span>Calls ' + d.call_pct + '%</span>'
+    + '<span><span class="dot" style="background:var(--red)"></span>Puts '   + d.put_pct  + '%</span>'
+    + '</div></div>';
 
   // Top contracts table
-  const rows = d.top_contracts.map(c => `
-    <tr>
-      <td><span class="badge-${c.type}">${c.type.toUpperCase()}</span></td>
-      <td>$${c.strike}</td>
-      <td>${c.expiry}</td>
-      <td>${fmt(c.volume)}</td>
-      <td>${fmt(c.openInterest)}</td>
-      <td>${c.iv}%</td>
-      <td>$${c.lastPrice}</td>
-      <td><span class="${c.inTheMoney ? 'itm' : 'otm'}">${c.inTheMoney ? 'ITM' : 'OTM'}</span></td>
-    </tr>`).join('');
-
-  const table = `
-    <div class="table-section">
-      <h3>Top Contracts by Volume — ${d.ticker} · ${d.expiry}</h3>
-      <table>
-        <thead><tr><th>Type</th><th>Strike</th><th>Expiry</th><th>Volume</th><th>OI</th><th>IV</th><th>Last</th><th></th></tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
-    </div>`;
+  var rows = '';
+  for (var j = 0; j < d.top_contracts.length; j++) {
+    var c = d.top_contracts[j];
+    var itmClass = c.inTheMoney ? 'itm' : 'otm';
+    var itmText  = c.inTheMoney ? 'ITM' : 'OTM';
+    rows += '<tr>'
+      + '<td><span class="badge-' + c.type + '">' + c.type.toUpperCase() + '</span></td>'
+      + '<td>$' + c.strike + '</td>'
+      + '<td>' + c.expiry + '</td>'
+      + '<td>' + fmt(c.volume) + '</td>'
+      + '<td>' + fmt(c.openInterest) + '</td>'
+      + '<td>' + c.iv + '%</td>'
+      + '<td>$' + c.lastPrice + '</td>'
+      + '<td><span class="' + itmClass + '">' + itmText + '</span></td>'
+      + '</tr>';
+  }
+  var table = '<div class="table-section">'
+    + '<h3>Top Contracts by Volume \u2014 ' + d.ticker + ' \u00b7 ' + d.expiry + '</h3>'
+    + '<table><thead><tr><th>Type</th><th>Strike</th><th>Expiry</th><th>Volume</th><th>OI</th><th>IV</th><th>Last</th><th></th></tr></thead>'
+    + '<tbody>' + rows + '</tbody></table></div>';
 
   document.getElementById('flow-content').innerHTML =
     '<div class="expiry-tabs">' + tabs + '</div>' + summary + bar + table;
 }
 
-function loadFlowExp(el, exp) {
+function loadFlowExp(el) {
   document.querySelectorAll('.exp-tab').forEach(t => t.classList.remove('active'));
   el.classList.add('active');
-  loadFlow(exp);
+  loadFlow(el.getAttribute('data-exp'));
 }
 
 function fmt(n) { return n >= 1000 ? (n/1000).toFixed(1) + 'K' : String(n); }
