@@ -4802,9 +4802,15 @@ NEWS_FEEDS = [
     ("Seeking Alpha",  "https://seekingalpha.com/market_currents.xml"),
     ("CNBC",           "https://www.cnbc.com/id/100003114/device/rss/rss.html"),
     ("Benzinga",       "https://www.benzinga.com/feed"),
+    ("Investopedia",   "https://www.investopedia.com/feedbuilder/feed/getfeed?feedName=rss_headline"),
+    ("Bloomberg",      "https://feeds.bloomberg.com/markets/news.rss"),
+    ("Forbes Finance", "https://www.forbes.com/investing/feed/"),
+    ("Motley Fool",    "https://www.fool.com/feeds/index.aspx"),
+    ("WSJ Markets",    "https://feeds.a.dj.com/rss/RSSMarketsMain.xml"),
+    ("FT Markets",     "https://www.ft.com/rss/home/uk"),
 ]
 
-def _fetch_news(max_per_feed: int = 8) -> list[dict]:
+def _fetch_news(max_per_feed: int = 15) -> list[dict]:
     import feedparser, re, calendar
     articles = []
     for source, url in NEWS_FEEDS:
@@ -4999,10 +5005,13 @@ NEWS_HTML = """<!DOCTYPE html>
   <div class="filter-bar">
     <input id="search" placeholder="Search news…" oninput="filterNews()">
     <button class="src-btn active" onclick="filterSource(this, 'all')">All</button>
-    <button class="src-btn" onclick="filterSource(this, 'Yahoo Finance')">Yahoo Finance</button>
+    <button class="src-btn" onclick="filterSource(this, 'Yahoo Finance')">Yahoo</button>
     <button class="src-btn" onclick="filterSource(this, 'Reuters')">Reuters</button>
+    <button class="src-btn" onclick="filterSource(this, 'CNBC')">CNBC</button>
     <button class="src-btn" onclick="filterSource(this, 'MarketWatch')">MarketWatch</button>
-    <button class="refresh-btn" onclick="loadNews()">↻ Refresh</button>
+    <button class="src-btn" onclick="filterSource(this, 'Benzinga')">Benzinga</button>
+    <button class="src-btn" onclick="filterSource(this, 'WSJ Markets')">WSJ</button>
+    <button class="refresh-btn" onclick="loadNews()">&#8635; Refresh</button>
   </div>
 
   <div class="news-list" id="news-list">
