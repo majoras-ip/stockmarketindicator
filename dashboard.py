@@ -4810,6 +4810,16 @@ NEWS_FEEDS = [
     ("FT Markets",     "https://www.ft.com/rss/home/uk"),
 ]
 
+_MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
+
+def _fmt_ts(ts: float) -> str:
+    """Format a UTC unix timestamp as 'Apr 4, 2026 · 2:30 PM'."""
+    from datetime import datetime, timezone
+    dt = datetime.fromtimestamp(ts, tz=timezone.utc)
+    hour = dt.hour % 12 or 12
+    ampm = "AM" if dt.hour < 12 else "PM"
+    return f"{_MONTHS[dt.month-1]} {dt.day}, {dt.year} \u00b7 {hour}:{dt.minute:02d} {ampm}"
+
 def _fetch_news(max_per_feed: int = 15) -> list[dict]:
     import feedparser, re, calendar
     articles = []
@@ -4820,11 +4830,8 @@ def _fetch_news(max_per_feed: int = 15) -> list[dict]:
                 ts = 0
                 published = ""
                 if hasattr(entry, "published_parsed") and entry.published_parsed:
-                    t = entry.published_parsed
-                    ts = calendar.timegm(t)
-                    hour = t.tm_hour % 12 or 12
-                    ampm = "AM" if t.tm_hour < 12 else "PM"
-                    published = f"{t.tm_mon}/{t.tm_mday} {hour}:{t.tm_min:02d} {ampm}"
+                    ts = calendar.timegm(entry.published_parsed)
+                    published = _fmt_ts(ts)
                 summary = re.sub(r"<[^>]+>", "", getattr(entry, "summary", "") or "")[:200]
                 articles.append({
                     "source":    source,
@@ -4876,9 +4883,7 @@ def api_news_ticker():
             pub     = content.get("provider", {}).get("displayName", "") or item.get("publisher", "")
             ts      = content.get("pubDate", "") or item.get("providerPublishTime", 0)
             if isinstance(ts, (int, float)) and ts:
-                import datetime
-                dt = datetime.datetime.fromtimestamp(ts)
-                published = dt.strftime("%-m/%-d %I:%M %p")
+                published = _fmt_ts(float(ts))
             elif isinstance(ts, str) and ts:
                 published = ts[:16]
             else:
