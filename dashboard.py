@@ -2061,7 +2061,7 @@ def flow_api():
         return jsonify({
             "ticker":      ticker,
             "expiry":      exp,
-            "expirations": list(expirations[:8]),
+            "expirations": list(expirations[:20]),
             "call_volume": call_vol,
             "put_volume":  put_vol,
             "call_oi":     call_oi,
