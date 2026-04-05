@@ -5401,8 +5401,7 @@ function loadFlowExp(el) {
 function fmt(n) { return n >= 1000 ? (n/1000).toFixed(1) + 'K' : String(n); }
 
 document.addEventListener('DOMContentLoaded', function() {
-  document.getElementById('ticker-input').value = 'SPY';
-  loadFlow();
+  setContent('<div style="text-align:center;padding:48px;color:var(--muted);">Enter a ticker above and click Search.</div>');
 });
 """ + _THEME_JS + """
 </script>
