@@ -2579,6 +2579,7 @@ _NAV_LINKS = """
         <a href="/volume">Unusual Volume</a>
         <a href="/news">News</a>
         <a href="/insider">Insider Trading</a>
+        <a href="/premarket">Pre-Market Scanner</a>
       </div>
     </div>
     <div class="dropdown">
@@ -2974,7 +2975,7 @@ PRICING_HTML = """<!DOCTYPE html>
       <div class="plan-desc">Get started with no commitment.</div>
       <ul class="plan-features">
         <li>3 copies per day</li><li>All indicators visible</li>
-        <li>Unusual volume</li><li>Market news</li><li class="no">Ticker news</li><li class="no">Earnings calendar</li><li class="no">Gamma exposure</li><li class="no">LSTM forecast</li><li class="no">Options flow</li><li class="no">Insider trading</li>
+        <li>Unusual volume</li><li>Market news</li><li class="no">Ticker news</li><li class="no">Earnings calendar</li><li class="no">Gamma exposure</li><li class="no">LSTM forecast</li><li class="no">Options flow</li><li class="no">Insider trading</li><li class="no">Pre-market scanner</li>
       </ul>
       <a href="/indicators" class="btn-plan btn-free">Start Free</a>
     </div>
@@ -2984,7 +2985,7 @@ PRICING_HTML = """<!DOCTYPE html>
       <div class="plan-desc">For active traders who copy often.</div>
       <ul class="plan-features">
         <li>10 copies per day</li><li>All indicators visible</li>
-        <li>Unusual volume</li><li>Market news</li><li>Ticker news</li><li>Earnings calendar</li><li>Gamma exposure</li><li class="no">LSTM forecast</li><li class="no">Options flow</li><li class="no">Insider trading</li>
+        <li>Unusual volume</li><li>Market news</li><li>Ticker news</li><li>Earnings calendar</li><li>Gamma exposure</li><li class="no">LSTM forecast</li><li class="no">Options flow</li><li class="no">Insider trading</li><li class="no">Pre-market scanner</li>
 
       </ul>
       {% if current_user %}
@@ -3000,7 +3001,7 @@ PRICING_HTML = """<!DOCTYPE html>
       <div class="plan-desc">Unlimited access for power users.</div>
       <ul class="plan-features">
         <li>Unlimited copies</li><li>All indicators visible</li>
-        <li>Unusual volume</li><li>Market news</li><li>Ticker news</li><li>Earnings calendar</li><li>Gamma exposure</li><li>LSTM forecast</li><li>Options flow</li><li>Insider trading</li>
+        <li>Unusual volume</li><li>Market news</li><li>Ticker news</li><li>Earnings calendar</li><li>Gamma exposure</li><li>LSTM forecast</li><li>Options flow</li><li>Insider trading</li><li>Pre-market scanner</li>
       </ul>
       {% if current_user %}
       <a href="/subscribe/pro" class="btn-plan btn-pro" id="btn-pro">Get Pro</a>
@@ -4981,6 +4982,200 @@ function showAll() {
 }
 
 loadAll();
+</script>
+</body>
+</html>"""
+
+
+# ── Pre/After Market Scanner ──────────────────────────────────────────────────
+
+_premarket_cache = {"data": [], "ts": 0}
+
+@app.route("/premarket")
+@login_required
+def premarket_page():
+    plan = _get_user_plan(session.get("user_id"))
+    if plan != "pro":
+        return redirect("/pricing?upgrade=premarket")
+    return render_template_string(PREMARKET_HTML, current_user=current_user())
+
+@app.route("/api/premarket")
+@login_required
+def api_premarket():
+    import time, yfinance as yf
+    plan = _get_user_plan(session.get("user_id"))
+    if plan != "pro":
+        return jsonify({"error": "Pro required"}), 403
+
+    now = time.time()
+    if now - _premarket_cache["ts"] < 300 and _premarket_cache["data"]:
+        return jsonify(_premarket_cache["data"])
+
+    results = []
+    try:
+        tickers = _VOLUME_TICKERS
+        raw = yf.download(tickers, period="2d", interval="1d", progress=False, auto_adjust=True)
+        if isinstance(raw.columns, __import__('pandas').MultiIndex):
+            closes = raw["Close"]
+        else:
+            closes = raw[["Close"]]
+
+        for ticker in tickers:
+            try:
+                t     = yf.Ticker(ticker)
+                fi    = t.fast_info
+                price = float(fi.last_price or 0)
+                prev  = float(closes[ticker].dropna().iloc[-1]) if ticker in closes.columns else float(fi.previous_close or 0)
+                if not prev or not price:
+                    continue
+                chg     = round(price - prev, 2)
+                chg_pct = round((chg / prev) * 100, 2)
+                results.append({
+                    "ticker":   ticker,
+                    "price":    round(price, 2),
+                    "prev":     round(prev, 2),
+                    "change":   chg,
+                    "change_pct": chg_pct,
+                })
+            except Exception:
+                continue
+        results.sort(key=lambda x: abs(x["change_pct"]), reverse=True)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+    _premarket_cache["data"] = results
+    _premarket_cache["ts"]   = now
+    return jsonify(results)
+
+
+PREMARKET_HTML = """<!DOCTYPE html>
+<html data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">""" + _META + """
+  <title>Pre/After Market · ChartEdge</title>
+  <style>
+    :root[data-theme="dark"]  { --bg:#0d1117; --bg2:#161b22; --bg3:#21262d; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --green:#3fb950; --red:#f85149; }
+    :root[data-theme="light"] { --bg:#ffffff; --bg2:#f6f8fa; --bg3:#eaeef2; --border:#d0d7de; --text:#1f2328; --muted:#636c76; --accent:#0969da; --green:#1a7f37; --red:#cf222e; }
+    * { box-sizing:border-box; margin:0; padding:0; }
+    body { font-family:-apple-system,sans-serif; background:var(--bg); color:var(--text); min-height:100vh; }
+    nav { background:var(--bg2); border-bottom:1px solid var(--border); padding:14px 24px; display:flex; align-items:center; justify-content:space-between; }
+    .logo { font-size:1.1rem; font-weight:bold; text-decoration:none; }
+    """ + _NAV_CSS + """
+    .page { max-width:960px; margin:0 auto; padding:36px 24px; }
+    h1 { font-size:1.6rem; margin-bottom:6px; } h1 span { color:var(--accent); }
+    .sub { color:var(--muted); font-size:.85rem; margin-bottom:8px; }
+    .filter-row { display:flex; gap:8px; margin-bottom:20px; flex-wrap:wrap; align-items:center; }
+    .filter-btn { background:var(--bg2); border:1px solid var(--border); border-radius:6px; padding:6px 14px; color:var(--muted); font-size:.82rem; cursor:pointer; }
+    .filter-btn.active { background:var(--accent); border-color:var(--accent); color:#fff; }
+    .refresh-btn { background:none; border:1px solid var(--border); border-radius:6px; padding:6px 14px; color:var(--muted); font-size:.82rem; cursor:pointer; margin-left:auto; }
+    .refresh-btn:hover { border-color:var(--accent); color:var(--accent); }
+    .scanner-table { width:100%; border-collapse:collapse; }
+    .scanner-table th { text-align:left; font-size:.72rem; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; padding:8px 12px; border-bottom:1px solid var(--border); cursor:pointer; user-select:none; }
+    .scanner-table th:hover { color:var(--accent); }
+    .scanner-table td { padding:10px 12px; border-bottom:1px solid var(--border); font-size:.88rem; }
+    .scanner-table tr:hover td { background:var(--bg2); }
+    .up { color:var(--green); font-weight:600; }
+    .dn { color:var(--red);   font-weight:600; }
+    .neutral { color:var(--muted); }
+    .loading { color:var(--muted); padding:40px; text-align:center; }
+    .pro-badge { display:inline-block; background:#2a2000; color:#e3b341; border:1px solid #e3b34140; border-radius:4px; font-size:.7rem; font-weight:700; padding:2px 8px; margin-left:8px; vertical-align:middle; }
+    .last-updated { color:var(--muted); font-size:.75rem; margin-left:8px; }
+    footer { text-align:center; padding:32px 24px; color:var(--muted); font-size:.8rem; border-top:1px solid var(--border); margin-top:20px; }
+  </style>
+</head>
+<body>
+<nav>
+  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span></a>
+  <button class="hamburger" onclick="toggleMobileNav(event)">☰</button>
+  <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
+</nav>
+
+<div class="page">
+  <h1>Pre / After-Hours <span>Scanner</span> <span class="pro-badge">PRO</span></h1>
+  <p class="sub">Biggest movers sorted by % change from previous close · Refreshes every 5 min</p>
+
+  <div class="filter-row">
+    <button class="filter-btn active" onclick="setFilter('all', this)">All</button>
+    <button class="filter-btn" onclick="setFilter('up', this)">Gainers</button>
+    <button class="filter-btn" onclick="setFilter('down', this)">Losers</button>
+    <span class="last-updated" id="updated-label"></span>
+    <button class="refresh-btn" onclick="loadData(true)">↻ Refresh</button>
+  </div>
+
+  <div id="content" class="loading">Loading scanner…</div>
+</div>
+
+<footer>© 2026 ChartEdge · Data via yfinance · Not financial advice</footer>
+<script>""" + _THEME_JS + """
+var allData = [];
+var currentFilter = 'all';
+var sortCol = 'change_pct';
+var sortDir = -1;
+
+function setFilter(f, btn) {
+  currentFilter = f;
+  document.querySelectorAll('.filter-btn').forEach(function(b) { b.classList.remove('active'); });
+  btn.classList.add('active');
+  renderTable();
+}
+
+function renderTable() {
+  var data = allData.filter(function(r) {
+    if (currentFilter === 'up')   return r.change_pct > 0;
+    if (currentFilter === 'down') return r.change_pct < 0;
+    return true;
+  });
+  data.sort(function(a, b) { return (a[sortCol] > b[sortCol] ? 1 : -1) * sortDir; });
+
+  if (!data.length) {
+    document.getElementById('content').innerHTML = '<p style="color:var(--muted);padding:20px 0;">No data.</p>';
+    return;
+  }
+  var html = '<table class="scanner-table"><thead><tr>';
+  html += '<th onclick="sort(\'ticker\')">Ticker</th>';
+  html += '<th onclick="sort(\'price\')">Price</th>';
+  html += '<th onclick="sort(\'change\')">Change</th>';
+  html += '<th onclick="sort(\'change_pct\')">% Change</th>';
+  html += '<th onclick="sort(\'prev\')">Prev Close</th>';
+  html += '</tr></thead><tbody>';
+  for (var i = 0; i < data.length; i++) {
+    var r = data[i];
+    var cls = r.change_pct > 0 ? 'up' : r.change_pct < 0 ? 'dn' : 'neutral';
+    var arrow = r.change_pct > 0 ? '▲' : r.change_pct < 0 ? '▼' : '—';
+    html += '<tr>';
+    html += '<td><strong>' + r.ticker + '</strong></td>';
+    html += '<td>$' + r.price.toFixed(2) + '</td>';
+    html += '<td class="' + cls + '">' + arrow + ' $' + Math.abs(r.change).toFixed(2) + '</td>';
+    html += '<td class="' + cls + '">' + arrow + ' ' + Math.abs(r.change_pct).toFixed(2) + '%</td>';
+    html += '<td style="color:var(--muted)">$' + r.prev.toFixed(2) + '</td>';
+    html += '</tr>';
+  }
+  html += '</tbody></table>';
+  document.getElementById('content').innerHTML = html;
+}
+
+function sort(col) {
+  if (sortCol === col) { sortDir *= -1; } else { sortCol = col; sortDir = -1; }
+  renderTable();
+}
+
+async function loadData(force) {
+  if (!force) document.getElementById('content').innerHTML = '<div class="loading">Loading scanner…</div>';
+  try {
+    var res  = await fetch('/api/premarket');
+    var data = await res.json();
+    if (data.error) { document.getElementById('content').innerHTML = '<p style="color:var(--red)">Error: ' + data.error + '</p>'; return; }
+    allData = data;
+    var now = new Date();
+    document.getElementById('updated-label').textContent = 'Updated ' + now.toLocaleTimeString();
+    renderTable();
+  } catch(e) {
+    document.getElementById('content').innerHTML = '<p style="color:var(--red)">Failed to load.</p>';
+  }
+}
+
+loadData(false);
 </script>
 </body>
 </html>"""
