@@ -5026,6 +5026,13 @@ NEWS_HTML = """<!DOCTYPE html>
 <footer>© 2026 ChartEdge · News sourced from public RSS feeds · Not financial advice · <a href="/privacy" style="color:inherit">Privacy</a> · <a href="/terms" style="color:inherit">Terms</a></footer>
 
 <script>
+function closeTickerNews() {
+  var box = document.getElementById('ticker-results');
+  box.style.display = 'none';
+  box.innerHTML = '';
+  document.getElementById('ticker-news-input').value = '';
+}
+
 function loadTickerNews() {
   var input  = document.getElementById('ticker-news-input');
   if (!input) return;
@@ -5046,7 +5053,10 @@ function loadTickerNews() {
         box.innerHTML = '<div style="color:var(--muted);font-size:.85rem;">No news found for ' + ticker + '.</div>';
         return;
       }
-      var html = '<div style="font-size:.78rem;color:var(--muted);margin-bottom:10px;">' + data.articles.length + ' articles for ' + data.ticker + '</div>';
+      var html = '<div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">'
+        + '<button onclick="closeTickerNews()" style="background:none;border:none;color:var(--accent);cursor:pointer;font-size:1rem;padding:0;font-family:monospace;">\u2190 All news</button>'
+        + '<span style="font-size:.78rem;color:var(--muted);">' + data.articles.length + ' articles for ' + data.ticker + '</span>'
+        + '</div>';
       for (var i = 0; i < data.articles.length; i++) {
         var a = data.articles[i];
         html += '<div class="news-card" style="margin-bottom:10px;">'
