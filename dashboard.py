@@ -1746,6 +1746,8 @@ def profile():
 
     # Build badge list
     badges = []
+    # Username badge
+    badges.append({"icon": "👤", "label": username, "color": "#e6edf3", "bg": "#21262d"})
     # Plan badge
     plan_colors = {"free": ("#8b949e","#21262d"), "basic": ("#58a6ff","#0d1a2d"), "pro": ("#e3b341","#2a2000")}
     pc, pbg = plan_colors.get(plan, plan_colors["free"])
