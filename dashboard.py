@@ -2224,32 +2224,22 @@ def volume_api():
     if plan == "free":
         return jsonify({"error": "upgrade_required"}), 403
 
-    custom_raw = request.args.get("tickers", "").strip()
-    if custom_raw:
-        scan_list = [t.strip().upper() for t in custom_raw.replace(",", " ").split() if t.strip()][:50]
-        use_cache = False
-    else:
-        scan_list = _VOLUME_TICKERS
-        use_cache = True
-
     now = time.time()
-    if use_cache and now - _volume_cache["ts"] < _VOLUME_CACHE_SECS and _volume_cache["data"]:
+    if now - _volume_cache["ts"] < _VOLUME_CACHE_SECS and _volume_cache["data"]:
         return jsonify({"results": _volume_cache["data"], "cached": True,
                         "age_min": int((now - _volume_cache["ts"]) / 60)})
 
     try:
-        def _parse_row(t, raw, scan_list):
-            if isinstance(raw.columns, pd.MultiIndex):
-                return raw[t] if t in raw.columns.get_level_values(0) else None
-            return raw if len(scan_list) == 1 else None
-
-        raw = yf.download(" ".join(scan_list), period="32d", interval="1d",
+        raw = yf.download(" ".join(_VOLUME_TICKERS), period="32d", interval="1d",
                           group_by="ticker", auto_adjust=True, progress=False)
 
         results = []
-        for t in scan_list:
+        for t in _VOLUME_TICKERS:
             try:
-                df = _parse_row(t, raw, scan_list)
+                if isinstance(raw.columns, pd.MultiIndex):
+                    df = raw[t] if t in raw.columns.get_level_values(0) else None
+                else:
+                    df = raw
                 if df is None or len(df) < 5:
                     continue
                 df = df.dropna(subset=["Volume"])
@@ -2257,7 +2247,7 @@ def volume_api():
                     continue
                 today_vol  = int(df["Volume"].iloc[-1])
                 avg_vol    = int(df["Volume"].iloc[-31:-1].mean())
-                if avg_vol == 0 or today_vol == 0:
+                if avg_vol < 100_000 or today_vol == 0:
                     continue
                 ratio      = round(today_vol / avg_vol, 2)
                 price      = round(float(df["Close"].iloc[-1]), 2)
@@ -2275,9 +2265,8 @@ def volume_api():
                 continue
 
         results.sort(key=lambda x: x["ratio"], reverse=True)
-        if use_cache:
-            _volume_cache["ts"]   = time.time()
-            _volume_cache["data"] = results
+        _volume_cache["ts"]   = time.time()
+        _volume_cache["data"] = results
         return jsonify({"results": results, "cached": False, "age_min": 0})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -5451,12 +5440,6 @@ VOLUME_HTML = """<!DOCTYPE html>
     <button onclick="lookupTicker()">Look Up</button>
   </div>
   <div class="lookup-card" id="lookup-card"></div>
-  <div style="margin-bottom:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
-    <input id="custom-tickers" placeholder="Custom scan: AAPL, NVDA, TSLA … (or leave blank for top 100)"
-           style="flex:1;min-width:260px;background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:9px 14px;color:var(--text);font-size:.85rem;font-family:monospace;text-transform:uppercase;outline:none;"
-           onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border)'"
-           onkeydown="if(event.key==='Enter'){event.preventDefault();runScan();}">
-  </div>
   <div class="toolbar">
     <button class="filter-btn active" data-min="1"  onclick="setFilter(this)">All</button>
     <button class="filter-btn"        data-min="2"  onclick="setFilter(this)">2x+</button>
@@ -5551,16 +5534,13 @@ function renderTable(data) {
 }
 
 function runScan() {
-  var btn    = document.getElementById('scan-btn');
-  var custom = (document.getElementById('custom-tickers').value || '').trim().toUpperCase();
-  var url    = '/api/volume' + (custom ? '?tickers=' + encodeURIComponent(custom) : '');
-  var label  = custom ? 'custom tickers' : """ + str(len(_VOLUME_TICKERS)) + """ + ' tickers';
+  var btn = document.getElementById('scan-btn');
   btn.disabled = true;
   btn.textContent = 'Scanning...';
-  document.getElementById('vol-content').innerHTML = '<div class="loading-msg">Scanning ' + label + ' \u2014 this takes ~15 seconds...</div>';
+  document.getElementById('vol-content').innerHTML = '<div class="loading-msg">Scanning """ + str(len(_VOLUME_TICKERS)) + """ tickers \u2014 this takes ~15 seconds...</div>';
   document.getElementById('status').textContent = '';
 
-  fetch(url)
+  fetch('/api/volume')
     .then(function(r) { return r.json(); })
     .then(function(data) {
       btn.disabled = false;
