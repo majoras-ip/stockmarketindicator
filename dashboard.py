@@ -1804,8 +1804,6 @@ def profile():
         badges.append({"icon":"❤️","label":"Collector","color":"#f85149","bg":"#2d1515"})
     if fav_count >= 10:
         badges.append({"icon":"💫","label":"Indicator Fan","color":"#bc8cff","bg":"#1a0d2d"})
-    if watch_count >= 3:
-        badges.append({"icon":"👀","label":"Market Watcher","color":"#58a6ff","bg":"#0d1a2d"})
     if referrals >= 1:
         badges.append({"icon":"🤝","label":"Referrer","color":"#3fb950","bg":"#1a2d1a"})
     if referrals >= 3:
