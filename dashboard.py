@@ -4832,9 +4832,9 @@ def api_insider():
     try:
         import requests as _req
         headers = {"User-Agent": "ChartEdge ayden.j.folkerts@gmail.com", "Accept-Encoding": "gzip, deflate"}
-        # Use EDGAR full-text search JSON API — returns recent Form 4 filings sorted newest first
+        # Use EDGAR full-text search JSON API — returns recent Form 4 filings
         resp = _req.get(
-            "https://efts.sec.gov/LATEST/search-index?q=%22form+4%22&forms=4&hits.hits.total.value=true&dateRange=custom&startdt=2024-01-01&_source=entity_name,file_date,period_of_report,display_names,entity_id&sort[file_date][order]=desc",
+            "https://efts.sec.gov/LATEST/search-index?q=%22form+4%22&forms=4&dateRange=custom&startdt=2026-01-01",
             headers=headers, timeout=15
         )
         resp.raise_for_status()
