@@ -4841,27 +4841,42 @@ def api_insider():
         resp.raise_for_status()
         hits = resp.json().get("hits", {}).get("hits", [])[:15]
 
-        def _fetch_txn(hit):
-            try:
-                src   = hit.get("_source", {})
-                accno = hit.get("_id", "")                       # e.g. 0001234567-26-000001
-                accno_clean = accno.replace("-", "")             # 000123456726000001
-                cik = str(int(accno.split("-")[0]))              # strip leading zeros
+        # Build base results from EFTS metadata first
+        base = {}
+        for hit in hits:
+            src   = hit.get("_source", {})
+            accno = hit.get("_id", "")
+            accno_clean = accno.replace("-", "")
+            names = src.get("display_names", [])
+            first = names[0] if names else None
+            entity = (first.get("name", first) if isinstance(first, dict) else first) if first else src.get("entity_name", "Unknown")
+            cik = str(int(accno.split("-")[0])) if "-" in accno else ""
+            base[accno] = {
+                "title":   entity,
+                "link":    f"https://www.sec.gov/Archives/edgar/data/{cik}/{accno_clean}/",
+                "date":    src.get("file_date", ""),
+                "summary": f"Period: {src.get('period_of_report', '')}",
+                "shares":  None,
+                "value":   None,
+                "txn":     None,
+            }
 
-                # Fetch filing index to get primary document name
+        def _enrich(accno):
+            try:
+                accno_clean = accno.replace("-", "")
+                cik = str(int(accno.split("-")[0]))
                 idx = _req.get(
                     f"https://www.sec.gov/Archives/edgar/data/{cik}/{accno_clean}/{accno_clean}-index.json",
                     headers=headers, timeout=8
                 ).json()
-                xml_file = idx.get("primaryDocument", accno_clean + ".xml")
-
-                # Fetch Form 4 XML
+                xml_file = idx.get("primaryDocument", "")
+                if not xml_file or not xml_file.endswith(".xml"):
+                    return accno, None, None, None
                 xml_resp = _req.get(
                     f"https://www.sec.gov/Archives/edgar/data/{cik}/{accno_clean}/{xml_file}",
                     headers=headers, timeout=8
                 )
                 root = ET.fromstring(xml_resp.text)
-
                 shares_total = 0.0
                 value_total  = 0.0
                 txn_code     = None
@@ -4876,28 +4891,17 @@ def api_insider():
                             value_total += s * float(pr.text)
                         if txn_code is None and cd is not None:
                             txn_code = cd.text
-
-                names = src.get("display_names", [])
-                first = names[0] if names else None
-                entity = (first.get("name", first) if isinstance(first, dict) else first) if first else src.get("entity_name", "Unknown")
-                return {
-                    "title":   entity,
-                    "link":    f"https://www.sec.gov/Archives/edgar/data/{cik}/{accno_clean}/{xml_file}",
-                    "date":    src.get("file_date", ""),
-                    "summary": f"Period: {src.get('period_of_report', '')}",
-                    "shares":  int(shares_total) if shares_total else None,
-                    "value":   round(value_total) if value_total else None,
-                    "txn":     txn_code,
-                }
+                return accno, int(shares_total) or None, round(value_total) or None, txn_code
             except Exception:
-                return None
+                return accno, None, None, None
 
         with ThreadPoolExecutor(max_workers=5) as pool:
-            futures = {pool.submit(_fetch_txn, h): h for h in hits}
-            for fut in as_completed(futures):
-                r = fut.result()
-                if r:
-                    results.append(r)
+            for accno, shares, value, txn in pool.map(_enrich, list(base.keys())):
+                base[accno]["shares"] = shares
+                base[accno]["value"]  = value
+                base[accno]["txn"]    = txn
+
+        results = list(base.values())
 
         results.sort(key=lambda x: x["date"], reverse=True)
     except Exception as e:
