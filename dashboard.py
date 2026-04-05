@@ -2215,9 +2215,6 @@ _VOLUME_CACHE_SECS = 1200  # 20 min
 @app.route("/volume")
 @login_required
 def volume_page():
-    plan = _get_user_plan(session.get("user_id"))
-    if plan == "free":
-        return redirect("/pricing?upgrade=volume")
     return render_template_string(VOLUME_HTML, current_user=current_user())
 
 
@@ -2226,10 +2223,6 @@ def volume_page():
 def volume_api():
     import time, yfinance as yf
     import pandas as pd
-    plan = _get_user_plan(session.get("user_id"))
-    if plan == "free":
-        return jsonify({"error": "upgrade_required"}), 403
-
     now = time.time()
     if now - _volume_cache["ts"] < _VOLUME_CACHE_SECS and _volume_cache["data"]:
         return jsonify({"results": _volume_cache["data"], "cached": True,
@@ -2791,7 +2784,7 @@ PRICING_HTML = """<!DOCTYPE html>
       <div class="plan-desc">Get started with no commitment.</div>
       <ul class="plan-features">
         <li>3 copies per day</li><li>All indicators visible</li>
-        <li>Watchlist</li><li class="no">Earnings calendar</li><li class="no">Gamma exposure</li><li class="no">LSTM forecast</li><li class="no">Options flow</li>
+        <li>Watchlist</li><li>Unusual volume</li><li class="no">Earnings calendar</li><li class="no">Gamma exposure</li><li class="no">LSTM forecast</li><li class="no">Options flow</li>
       </ul>
       <a href="/indicators" class="btn-plan btn-free">Start Free</a>
     </div>
@@ -2801,7 +2794,7 @@ PRICING_HTML = """<!DOCTYPE html>
       <div class="plan-desc">For active traders who copy often.</div>
       <ul class="plan-features">
         <li>10 copies per day</li><li>All indicators visible</li>
-        <li>Watchlist</li><li>Earnings calendar</li><li>Gamma exposure</li><li class="no">LSTM forecast</li><li class="no">Options flow</li>
+        <li>Watchlist</li><li>Unusual volume</li><li>Earnings calendar</li><li>Gamma exposure</li><li class="no">LSTM forecast</li><li class="no">Options flow</li>
 
       </ul>
       {% if current_user %}
@@ -2817,7 +2810,7 @@ PRICING_HTML = """<!DOCTYPE html>
       <div class="plan-desc">Unlimited access for power users.</div>
       <ul class="plan-features">
         <li>Unlimited copies</li><li>All indicators visible</li>
-        <li>Watchlist</li><li>Earnings calendar</li><li>Gamma exposure</li><li>LSTM forecast</li><li>Options flow</li>
+        <li>Watchlist</li><li>Unusual volume</li><li>Earnings calendar</li><li>Gamma exposure</li><li>LSTM forecast</li><li>Options flow</li>
       </ul>
       {% if current_user %}
       <a href="/subscribe/pro" class="btn-plan btn-pro" id="btn-pro">Get Pro</a>
