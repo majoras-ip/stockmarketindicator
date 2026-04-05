@@ -2592,7 +2592,6 @@ _NAV_LINKS = """
         <a href="/news">News</a>
         <a href="/insider">Insider Trading</a>
         <a href="/premarket">Pre-Market Scanner</a>
-        <a href="/priority">⚡ Priority Service</a>
       </div>
     </div>
     <div class="dropdown">
