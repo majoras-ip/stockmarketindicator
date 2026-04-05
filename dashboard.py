@@ -2273,6 +2273,44 @@ def volume_api():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/volume/ticker")
+@login_required
+def volume_ticker_api():
+    import yfinance as yf
+    plan = _get_user_plan(session.get("user_id"))
+    if plan == "free":
+        return jsonify({"error": "upgrade_required"}), 403
+    ticker = request.args.get("t", "").upper().strip()[:10]
+    if not ticker:
+        return jsonify({"error": "No ticker provided"}), 400
+    try:
+        df = yf.download(ticker, period="32d", interval="1d",
+                         auto_adjust=True, progress=False)
+        if df is None or len(df) < 5:
+            return jsonify({"error": "No data for " + ticker}), 404
+        df = df.dropna(subset=["Volume"])
+        if len(df) < 5:
+            return jsonify({"error": "Not enough history for " + ticker}), 404
+        today_vol  = int(df["Volume"].iloc[-1])
+        avg_vol    = int(df["Volume"].iloc[-31:-1].mean())
+        if avg_vol == 0:
+            return jsonify({"error": "No volume data for " + ticker}), 404
+        ratio      = round(today_vol / avg_vol, 2)
+        price      = round(float(df["Close"].iloc[-1]), 2)
+        prev_close = float(df["Close"].iloc[-2])
+        chg_pct    = round((price - prev_close) / prev_close * 100, 2)
+        return jsonify({
+            "ticker":  ticker,
+            "price":   price,
+            "chg_pct": chg_pct,
+            "volume":  today_vol,
+            "avg_vol": avg_vol,
+            "ratio":   ratio,
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 # ── FAQ ───────────────────────────────────────────────────────────────────────
 
 @app.route("/faq")
@@ -5369,6 +5407,16 @@ VOLUME_HTML = """<!DOCTYPE html>
     .ratio-5  { background: #2a2a10; color: #e3b341; }
     .ratio-10 { background: #2d1f1f; color: var(--red); }
     .section { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+    .search-row { display: flex; gap: 10px; margin-bottom: 20px; }
+    .search-row input { flex: 1; max-width: 280px; background: var(--bg2); border: 1px solid var(--border); border-radius: 6px; padding: 9px 14px; color: var(--text); font-size: .9rem; font-family: monospace; text-transform: uppercase; outline: none; }
+    .search-row input:focus { border-color: var(--accent); }
+    .search-row button { background: var(--bg2); border: 1px solid var(--border); border-radius: 6px; padding: 9px 16px; color: var(--text); font-size: .85rem; cursor: pointer; font-family: monospace; }
+    .search-row button:hover { border-color: var(--accent); color: var(--accent); }
+    .lookup-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 18px 22px; margin-bottom: 20px; display: none; }
+    .lookup-card .sym { font-size: 1.3rem; font-weight: 700; color: var(--accent); margin-bottom: 10px; }
+    .lookup-grid { display: flex; gap: 24px; flex-wrap: wrap; }
+    .lookup-item .lbl { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+    .lookup-item .val { font-size: 1.1rem; font-weight: 700; margin-top: 2px; }
     .loading-msg { text-align: center; padding: 60px; color: var(--muted); }
     footer { text-align: center; padding: 32px 24px; color: var(--muted); font-size: .8rem; border-top: 1px solid var(--border); margin-top: 20px; }
   </style>
@@ -5384,6 +5432,12 @@ VOLUME_HTML = """<!DOCTYPE html>
   <p>Stocks trading significantly above their 30-day average volume</p>
 </div>
 <div class="container">
+  <div class="search-row">
+    <input id="lookup-input" placeholder="Any ticker (e.g. MSFT)" maxlength="10"
+           onkeydown="if(event.key==='Enter'){event.preventDefault();lookupTicker();}">
+    <button onclick="lookupTicker()">Look Up</button>
+  </div>
+  <div class="lookup-card" id="lookup-card"></div>
   <div class="toolbar">
     <button class="filter-btn active" data-min="1"  onclick="setFilter(this)">All</button>
     <button class="filter-btn"        data-min="2"  onclick="setFilter(this)">2x+</button>
@@ -5400,6 +5454,36 @@ VOLUME_HTML = """<!DOCTYPE html>
 <script>
 var allResults = [];
 var minRatio   = 1;
+
+function lookupTicker() {
+  var ticker = (document.getElementById('lookup-input').value || '').trim().toUpperCase();
+  if (!ticker) return;
+  document.getElementById('lookup-input').value = ticker;
+  var card = document.getElementById('lookup-card');
+  card.style.display = 'block';
+  card.innerHTML = '<div style="color:var(--muted);font-size:.85rem;">Looking up ' + ticker + '...</div>';
+  fetch('/api/volume/ticker?t=' + encodeURIComponent(ticker))
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (d.error) {
+        card.innerHTML = '<div style="color:var(--red);">\u26a0 ' + d.error + '</div>';
+        return;
+      }
+      var chgClass = d.chg_pct >= 0 ? 'up' : 'dn';
+      var chgSign  = d.chg_pct >= 0 ? '+' : '';
+      card.innerHTML = '<div class="sym">' + d.ticker + '</div>'
+        + '<div class="lookup-grid">'
+        + '<div class="lookup-item"><div class="lbl">Price</div><div class="val">$' + d.price.toFixed(2) + '</div></div>'
+        + '<div class="lookup-item"><div class="lbl">Change</div><div class="val ' + chgClass + '">' + chgSign + d.chg_pct.toFixed(2) + '%</div></div>'
+        + '<div class="lookup-item"><div class="lbl">Today Vol</div><div class="val">' + fmtVol(d.volume) + '</div></div>'
+        + '<div class="lookup-item"><div class="lbl">Avg Vol (30d)</div><div class="val">' + fmtVol(d.avg_vol) + '</div></div>'
+        + '<div class="lookup-item"><div class="lbl">Ratio</div><div class="val"><span class="ratio-badge ' + ratioClass(d.ratio) + '">' + d.ratio.toFixed(1) + 'x</span></div></div>'
+        + '</div>';
+    })
+    .catch(function() {
+      card.innerHTML = '<div style="color:var(--red);">\u26a0 Lookup failed.</div>';
+    });
+}
 
 function setFilter(btn) {
   document.querySelectorAll('.filter-btn').forEach(function(b) { b.classList.remove('active'); });
