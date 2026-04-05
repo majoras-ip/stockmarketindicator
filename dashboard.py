@@ -4612,10 +4612,20 @@ async function addTicker() {
       document.getElementById('empty-msg') && document.getElementById('empty-msg').remove();
       const grid = document.getElementById('ticker-grid');
       if (!document.getElementById('card-' + ticker)) {
-        const card = document.createElement('div');
+        var card = document.createElement('div');
         card.className = 'ticker-card';
         card.id = 'card-' + ticker;
-        card.innerHTML = '<div class="ticker-left"><span class="ticker-sym">' + ticker + '</span><span class="ticker-price" id="price-' + ticker + '"><span class="spin"></span></span><span class="ticker-chg" id="chg-' + ticker + '"></span></div><button class="btn-remove" onclick="removeTicker(\'' + ticker + '\')">✕ Remove</button>';
+        var left = document.createElement('div');
+        left.className = 'ticker-left';
+        left.innerHTML = '<span class="ticker-sym">' + ticker + '</span>'
+          + '<span class="ticker-price" id="price-' + ticker + '"><span class="spin"></span></span>'
+          + '<span class="ticker-chg" id="chg-' + ticker + '"></span>';
+        var btn = document.createElement('button');
+        btn.className = 'btn-remove';
+        btn.textContent = '\u2715 Remove';
+        btn.onclick = (function(t) { return function() { removeTicker(t); }; })(ticker);
+        card.appendChild(left);
+        card.appendChild(btn);
         grid.appendChild(card);
         loadPrices();
       }
