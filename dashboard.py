@@ -4832,20 +4832,27 @@ def api_insider():
     try:
         import requests as _req
         headers = {"User-Agent": "ChartEdge ayden.j.folkerts@gmail.com", "Accept-Encoding": "gzip, deflate"}
+        # Use EDGAR full-text search JSON API — returns recent Form 4 filings
         resp = _req.get(
-            "https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&type=4&dateb=&owner=include&count=40&output=atom",
+            "https://efts.sec.gov/LATEST/search-index?q=%22form+4%22&forms=4&hits.hits.total.value=true",
             headers=headers, timeout=15
         )
-        import feedparser
-        rss = feedparser.parse(resp.text)
-        for entry in rss.entries[:40]:
-            title   = entry.get("title", "")
-            link    = entry.get("link", "")
-            updated = entry.get("updated", "")[:10] if entry.get("updated") else ""
-            summary = entry.get("summary", "")
-            results.append({"title": title, "link": link, "date": updated, "summary": summary})
-        if not results:
-            return jsonify({"error": "SEC EDGAR returned no filings. Try again shortly."}), 503
+        resp.raise_for_status()
+        payload = resp.json()
+        hits = payload.get("hits", {}).get("hits", [])
+        for hit in hits[:40]:
+            src   = hit.get("_source", {})
+            names = src.get("display_names", [])
+            entity = names[0].get("name", "") if names else src.get("entity_name", "")
+            filed  = src.get("file_date", "")
+            accn   = hit.get("_id", "").replace("-", "")
+            link   = f"https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK={src.get('entity_id','')}&type=4&dateb=&owner=include&count=5" if src.get("entity_id") else "https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&type=4"
+            results.append({
+                "title":   entity or "Unknown",
+                "link":    link,
+                "date":    filed,
+                "summary": f"Period: {src.get('period_of_report', '')}",
+            })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
