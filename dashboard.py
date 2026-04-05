@@ -4856,25 +4856,26 @@ def api_insider():
                 break
 
         entries.sort(key=lambda x: x["date"], reverse=True)
-        top = entries[:60]
+        top = entries[:150]
 
-        # Build base results
+        # Build base results — extract CIK from filename path for reliability
         base = {}
         for e in top:
-            accno_txt = e["fname"].split("/")[-1]                # 0001234567-26-000001.txt
+            parts     = e["fname"].split("/")           # ['edgar','data','66740','0000066740-26-000001.txt']
+            path_cik  = parts[2] if len(parts) >= 4 else e["cik"]
+            accno_txt = parts[-1]
             accno     = accno_txt[:-4] if accno_txt.endswith(".txt") else accno_txt
             accno_clean = accno.replace("-", "")
-            cik = e["cik"]
             key = accno
             base[key] = {
                 "title":      e["company"],
-                "link":       f"https://www.sec.gov/Archives/edgar/data/{cik}/{accno_clean}/",
+                "link":       f"https://www.sec.gov/Archives/edgar/data/{path_cik}/{accno_clean}/",
                 "date":       e["date"],
                 "summary":    "",
                 "shares":     None,
                 "value":      None,
                 "txn":        None,
-                "_cik":       cik,
+                "_cik":       path_cik,
                 "_accno_clean": accno_clean,
             }
 
@@ -4882,17 +4883,30 @@ def api_insider():
             r = base[key]
             try:
                 cik, ac = r["_cik"], r["_accno_clean"]
-                idx = _req.get(
-                    f"https://www.sec.gov/Archives/edgar/data/{cik}/{ac}/{ac}-index.json",
+                # Use data.sec.gov submissions to find the primary XML document
+                cik_padded = cik.zfill(10)
+                subs = _req.get(
+                    f"https://data.sec.gov/submissions/CIK{cik_padded}.json",
                     headers=headers, timeout=8
                 ).json()
-                xml_file = idx.get("primaryDocument", "")
-                if not xml_file or not xml_file.endswith(".xml"):
+                recent = subs.get("filings", {}).get("recent", {})
+                accnos   = recent.get("accessionNumber", [])
+                prim_docs = recent.get("primaryDocument", [])
+                xml_file = None
+                for i, a in enumerate(accnos):
+                    if a.replace("-", "") == ac:
+                        xml_file = prim_docs[i]
+                        break
+                # Fallback: try form4.xml directly
+                if not xml_file:
+                    xml_file = "form4.xml"
+                if not xml_file.endswith(".xml"):
                     return
-                root = ET.fromstring(_req.get(
+                xml_text = _req.get(
                     f"https://www.sec.gov/Archives/edgar/data/{cik}/{ac}/{xml_file}",
                     headers=headers, timeout=8
-                ).text)
+                ).text
+                root = ET.fromstring(xml_text)
                 sh_tot, val_tot, txn_code = 0.0, 0.0, None
                 for txn in root.findall(".//nonDerivativeTransaction"):
                     sh = txn.find(".//transactionShares/value")
@@ -4911,8 +4925,10 @@ def api_insider():
             except Exception:
                 pass
 
+        # Only enrich the first page (15) to keep load time fast
+        first_page_keys = list(base.keys())[:15]
         with ThreadPoolExecutor(max_workers=5) as pool:
-            list(pool.map(_enrich, list(base.keys())))
+            list(pool.map(_enrich, first_page_keys))
 
         results = [{k: v for k, v in r.items() if not k.startswith("_")} for r in base.values()]
         results.sort(key=lambda x: x["date"], reverse=True)
