@@ -224,7 +224,7 @@ def init_db():
         conn.close()
 
 def _migrate_pg():
-    for col in ["plan_expires TIMESTAMP", "trial_used INTEGER DEFAULT 0"]:
+    for col in ["plan_expires TIMESTAMP", "trial_used INTEGER DEFAULT 0", "profile_pic TEXT"]:
         try:
             _run(f"ALTER TABLE users ADD COLUMN {col}")
         except Exception:
@@ -1693,13 +1693,44 @@ def refer():
         referral_count=referral_count, current_user=current_user())
 
 
+@app.route("/profile/update", methods=["POST"])
+@login_required
+def profile_update():
+    import base64
+    user_id = session["user_id"]
+    error = None
+
+    new_username = request.form.get("username", "").strip()
+    if new_username and new_username != session.get("username", ""):
+        existing = _one("SELECT id FROM users WHERE username=%s AND id!=%s", (new_username, user_id))
+        if existing:
+            error = "Username already taken."
+        elif len(new_username) < 3 or len(new_username) > 30:
+            error = "Username must be 3–30 characters."
+        else:
+            _run("UPDATE users SET username=%s WHERE id=%s", (new_username, user_id))
+            session["username"] = new_username
+
+    pic_file = request.files.get("profile_pic")
+    if pic_file and pic_file.filename:
+        data = pic_file.read(2 * 1024 * 1024)  # max 2MB
+        mime = pic_file.content_type or "image/jpeg"
+        b64 = base64.b64encode(data).decode()
+        data_url = f"data:{mime};base64,{b64}"
+        _run("UPDATE users SET profile_pic=%s WHERE id=%s", (data_url, user_id))
+
+    if error:
+        session["profile_error"] = error
+    return redirect("/profile")
+
+
 @app.route("/profile")
 @login_required
 def profile():
     from datetime import datetime, timezone
     user_id  = session["user_id"]
     username = session.get("username", "")
-    row = _one("SELECT created, plan, referral_code, email FROM users WHERE id=%s", (user_id,))
+    row = _one("SELECT created, plan, referral_code, email, profile_pic FROM users WHERE id=%s", (user_id,))
     plan      = _get_user_plan(user_id)
     created   = row["created"] if row else None
     ref_code  = row["referral_code"] or ""
@@ -1781,10 +1812,13 @@ def profile():
     if days <= 30 and days >= 0:
         badges.append({"icon":"🎉","label":"Early Adopter","color":"#bc8cff","bg":"#1a0d2d"})
 
+    profile_pic = row["profile_pic"] if row else None
+    profile_error = session.pop("profile_error", None)
+
     stats = {"copies": copies, "favorites": fav_count, "watchlist": watch_count, "referrals": referrals}
     return render_template_string(PROFILE_HTML, current_user=username, username=username,
         plan=plan, member_since=member_since, duration_label=duration_label,
-        badges=badges, stats=stats)
+        badges=badges, stats=stats, profile_pic=profile_pic, profile_error=profile_error)
 
 
 ADMIN_LOGIN_HTML = """<!DOCTYPE html>
@@ -2705,6 +2739,14 @@ PROFILE_HTML = """<!DOCTYPE html>
     .badge-label { font-size: .82rem; font-weight: 600; }
     .no-badges { color: var(--muted); font-size: .85rem; }
     footer { text-align: center; padding: 32px 24px; color: var(--muted); font-size: .8rem; border-top: 1px solid var(--border); margin-top: 20px; }
+    .avatar img { width: 72px; height: 72px; border-radius: 50%; object-fit: cover; }
+    .edit-form { display: flex; flex-direction: column; gap: 14px; }
+    .edit-row { display: flex; flex-direction: column; gap: 6px; }
+    .edit-row label { font-size: .78rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+    .edit-row input[type=text], .edit-row input[type=file] { background: var(--bg3); border: 1px solid var(--border); border-radius: 6px; padding: 8px 12px; color: var(--text); font-size: .9rem; width: 100%; }
+    .btn-save { background: var(--accent); color: #fff; border: none; border-radius: 6px; padding: 9px 22px; font-size: .9rem; font-weight: 600; cursor: pointer; align-self: flex-start; }
+    .btn-save:hover { opacity: .85; }
+    .error-msg { background: #2d1515; border: 1px solid var(--red); color: var(--red); border-radius: 6px; padding: 10px 14px; font-size: .85rem; }
   </style>
 </head>
 <body>
@@ -2716,7 +2758,7 @@ PROFILE_HTML = """<!DOCTYPE html>
 
 <div class="container">
   <div class="profile-header">
-    <div class="avatar">{{ username[0].upper() }}</div>
+    <div class="avatar">{% if profile_pic %}<img src="{{ profile_pic }}" alt="avatar">{% else %}{{ username[0].upper() }}{% endif %}</div>
     <div class="profile-info">
       <h1>{{ username }}
         <span class="plan-pill" style="background:{{ {'free':'#21262d','basic':'#0d1a2d','pro':'#2a2000'}[plan] }};color:{{ {'free':'#8b949e','basic':'#58a6ff','pro':'#e3b341'}[plan] }};">{{ plan.upper() }}</span>
@@ -2749,6 +2791,22 @@ PROFILE_HTML = """<!DOCTYPE html>
     {% else %}
     <div class="no-badges">No badges yet — start copying indicators to earn some!</div>
     {% endif %}
+  </div>
+
+  <div class="section">
+    <div class="section-title">Edit Profile</div>
+    {% if profile_error %}<div class="error-msg">{{ profile_error }}</div>{% endif %}
+    <form class="edit-form" method="POST" action="/profile/update" enctype="multipart/form-data">
+      <div class="edit-row">
+        <label>Username</label>
+        <input type="text" name="username" value="{{ username }}" maxlength="30" placeholder="New username">
+      </div>
+      <div class="edit-row">
+        <label>Profile Picture</label>
+        <input type="file" name="profile_pic" accept="image/*">
+      </div>
+      <button class="btn-save" type="submit">Save Changes</button>
+    </form>
   </div>
 
   <div style="display:flex;gap:12px;flex-wrap:wrap;">
