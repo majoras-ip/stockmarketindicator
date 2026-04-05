@@ -2784,7 +2784,7 @@ PRICING_HTML = """<!DOCTYPE html>
       <div class="plan-desc">Get started with no commitment.</div>
       <ul class="plan-features">
         <li>3 copies per day</li><li>All indicators visible</li>
-        <li>Watchlist</li><li>Unusual volume</li><li class="no">Earnings calendar</li><li class="no">Gamma exposure</li><li class="no">LSTM forecast</li><li class="no">Options flow</li>
+        <li>Watchlist</li><li>Unusual volume</li><li>Market news</li><li class="no">Ticker news</li><li class="no">Earnings calendar</li><li class="no">Gamma exposure</li><li class="no">LSTM forecast</li><li class="no">Options flow</li>
       </ul>
       <a href="/indicators" class="btn-plan btn-free">Start Free</a>
     </div>
@@ -2794,7 +2794,7 @@ PRICING_HTML = """<!DOCTYPE html>
       <div class="plan-desc">For active traders who copy often.</div>
       <ul class="plan-features">
         <li>10 copies per day</li><li>All indicators visible</li>
-        <li>Watchlist</li><li>Unusual volume</li><li>Earnings calendar</li><li>Gamma exposure</li><li class="no">LSTM forecast</li><li class="no">Options flow</li>
+        <li>Watchlist</li><li>Unusual volume</li><li>Market news</li><li>Ticker news</li><li>Earnings calendar</li><li>Gamma exposure</li><li class="no">LSTM forecast</li><li class="no">Options flow</li>
 
       </ul>
       {% if current_user %}
@@ -2810,7 +2810,7 @@ PRICING_HTML = """<!DOCTYPE html>
       <div class="plan-desc">Unlimited access for power users.</div>
       <ul class="plan-features">
         <li>Unlimited copies</li><li>All indicators visible</li>
-        <li>Watchlist</li><li>Unusual volume</li><li>Earnings calendar</li><li>Gamma exposure</li><li>LSTM forecast</li><li>Options flow</li>
+        <li>Watchlist</li><li>Unusual volume</li><li>Market news</li><li>Ticker news</li><li>Earnings calendar</li><li>Gamma exposure</li><li>LSTM forecast</li><li>Options flow</li>
       </ul>
       {% if current_user %}
       <a href="/subscribe/pro" class="btn-plan btn-pro" id="btn-pro">Get Pro</a>
@@ -4840,12 +4840,51 @@ def _fetch_news(max_per_feed: int = 8) -> list[dict]:
 @app.route("/news")
 def news_page():
     articles = _fetch_news()
-    return render_template_string(NEWS_HTML, articles=articles)
+    plan = _get_user_plan(session.get("user_id")) if "user_id" in session else "free"
+    return render_template_string(NEWS_HTML, articles=articles, current_user=current_user(), plan=plan)
 
 
 @app.route("/api/news")
 def api_news():
     return jsonify(_fetch_news())
+
+
+@app.route("/api/news/ticker")
+@login_required
+def api_news_ticker():
+    plan = _get_user_plan(session.get("user_id"))
+    if plan == "free":
+        return jsonify({"error": "upgrade_required"}), 403
+    import yfinance as yf, time as _time
+    ticker = request.args.get("t", "").upper().strip()[:10]
+    if not ticker:
+        return jsonify({"error": "No ticker"}), 400
+    try:
+        raw = yf.Ticker(ticker).news or []
+        articles = []
+        for item in raw[:20]:
+            # Handle both old and new yfinance news structure
+            content = item.get("content", item)
+            title   = content.get("title", item.get("title", ""))
+            link    = content.get("canonicalUrl", {}).get("url", "") or item.get("link", "")
+            pub     = content.get("provider", {}).get("displayName", "") or item.get("publisher", "")
+            ts      = content.get("pubDate", "") or item.get("providerPublishTime", 0)
+            if isinstance(ts, (int, float)) and ts:
+                import datetime
+                dt = datetime.datetime.fromtimestamp(ts)
+                published = dt.strftime("%-m/%-d %I:%M %p")
+            elif isinstance(ts, str) and ts:
+                published = ts[:16]
+            else:
+                published = ""
+            summary = content.get("summary", item.get("summary", ""))
+            if not title:
+                continue
+            articles.append({"title": title, "link": link, "source": pub,
+                              "published": published, "summary": summary[:200]})
+        return jsonify({"ticker": ticker, "articles": articles})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 NEWS_HTML = """<!DOCTYPE html>
@@ -4914,7 +4953,16 @@ NEWS_HTML = """<!DOCTYPE html>
     .news-summary { color: var(--muted); font-size: 0.8rem; line-height: 1.55; }
     .no-news { color: var(--muted); text-align: center; padding: 40px; }
     #status { color: var(--muted); font-size: 0.78rem; margin-top: 16px; text-align: center; }
-
+    .ticker-search { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 18px 20px; margin-bottom: 24px; }
+    .ticker-search h3 { font-size: .8rem; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 12px; }
+    .ticker-search .row { display: flex; gap: 10px; }
+    .ticker-search input { flex: 1; max-width: 200px; background: var(--bg3); border: 1px solid var(--border); border-radius: 6px; padding: 8px 12px; color: var(--text); font-family: monospace; font-size: .9rem; text-transform: uppercase; outline: none; }
+    .ticker-search input:focus { border-color: var(--accent); }
+    .ticker-search button { background: var(--accent); color: #fff; border: none; border-radius: 6px; padding: 8px 18px; font-family: monospace; font-size: .85rem; cursor: pointer; font-weight: 700; }
+    .ticker-search button:hover { opacity: .88; }
+    .ticker-results { margin-top: 14px; display: none; }
+    .upgrade-hint { color: var(--muted); font-size: .82rem; }
+    .upgrade-hint a { color: var(--accent); }
     footer { text-align: center; padding: 32px 24px; color: var(--muted); font-size: 0.8rem; border-top: 1px solid var(--border); margin-top: 40px; }
   </style>
 </head>
@@ -4932,6 +4980,22 @@ NEWS_HTML = """<!DOCTYPE html>
 </div>
 
 <div class="container">
+  {% if plan in ('basic', 'pro') %}
+  <div class="ticker-search">
+    <h3>Ticker News — Basic &amp; Pro</h3>
+    <div class="row">
+      <input id="ticker-news-input" placeholder="e.g. NVDA" maxlength="10"
+             onkeydown="if(event.key==='Enter'){event.preventDefault();loadTickerNews();}">
+      <button onclick="loadTickerNews()">Search</button>
+    </div>
+    <div class="ticker-results" id="ticker-results"></div>
+  </div>
+  {% else %}
+  <div class="ticker-search">
+    <h3>Ticker News</h3>
+    <p class="upgrade-hint">Search for news on any specific stock — available on <a href="/pricing">Basic &amp; Pro</a>.</p>
+  </div>
+  {% endif %}
   <div class="filter-bar">
     <input id="search" placeholder="Search news…" oninput="filterNews()">
     <button class="src-btn active" onclick="filterSource(this, 'all')">All</button>
@@ -4962,6 +5026,43 @@ NEWS_HTML = """<!DOCTYPE html>
 <footer>© 2026 ChartEdge · News sourced from public RSS feeds · Not financial advice · <a href="/privacy" style="color:inherit">Privacy</a> · <a href="/terms" style="color:inherit">Terms</a></footer>
 
 <script>
+function loadTickerNews() {
+  var input  = document.getElementById('ticker-news-input');
+  if (!input) return;
+  var ticker = input.value.trim().toUpperCase();
+  if (!ticker) return;
+  input.value = ticker;
+  var box = document.getElementById('ticker-results');
+  box.style.display = 'block';
+  box.innerHTML = '<div style="color:var(--muted);font-size:.85rem;padding:8px 0;">Loading ' + ticker + ' news...</div>';
+  fetch('/api/news/ticker?t=' + encodeURIComponent(ticker))
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.error) {
+        box.innerHTML = '<div style="color:var(--red);font-size:.85rem;">\u26a0 ' + data.error + '</div>';
+        return;
+      }
+      if (!data.articles || data.articles.length === 0) {
+        box.innerHTML = '<div style="color:var(--muted);font-size:.85rem;">No news found for ' + ticker + '.</div>';
+        return;
+      }
+      var html = '<div style="font-size:.78rem;color:var(--muted);margin-bottom:10px;">' + data.articles.length + ' articles for ' + data.ticker + '</div>';
+      for (var i = 0; i < data.articles.length; i++) {
+        var a = data.articles[i];
+        html += '<div class="news-card" style="margin-bottom:10px;">'
+          + '<div class="news-meta"><span class="source-tag">' + (a.source || 'News') + '</span>'
+          + '<span class="news-time">' + (a.published || '') + '</span></div>'
+          + '<div class="news-title"><a href="' + a.link + '" target="_blank" rel="noopener">' + a.title + '</a></div>'
+          + (a.summary ? '<div class="news-summary">' + a.summary + '</div>' : '')
+          + '</div>';
+      }
+      box.innerHTML = html;
+    })
+    .catch(function() {
+      box.innerHTML = '<div style="color:var(--red);font-size:.85rem;">\u26a0 Failed to load ticker news.</div>';
+    });
+}
+
 let activeSource = 'all';
 
 function filterSource(btn, source) {
