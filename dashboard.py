@@ -1693,6 +1693,188 @@ def refer():
         referral_count=referral_count, current_user=current_user())
 
 
+@app.route("/profile")
+@login_required
+def profile():
+    from datetime import datetime, timezone
+    user_id  = session["user_id"]
+    username = session.get("username", "")
+    row = _one("SELECT created, plan, referral_code, email FROM users WHERE id=%s", (user_id,))
+    plan      = _get_user_plan(user_id)
+    created   = row["created"] if row else None
+    ref_code  = row["referral_code"] or ""
+
+    # Stats
+    copies     = _scalar("SELECT COUNT(*) FROM copy_log WHERE user_id=%s", (user_id,)) or 0
+    fav_count  = _scalar("SELECT COUNT(*) FROM favorites WHERE user_id=%s", (user_id,)) or 0
+    watch_count= _scalar("SELECT COUNT(*) FROM watchlist WHERE user_id=%s", (user_id,)) or 0
+    referrals  = _scalar("SELECT COUNT(*) FROM users WHERE referred_by=%s", (ref_code,)) or 0 if ref_code else 0
+
+    # Member duration
+    now = datetime.now(timezone.utc)
+    if created:
+        created_aware = created.replace(tzinfo=timezone.utc) if created.tzinfo is None else created
+        delta = now - created_aware
+        days  = delta.days
+        member_since = created_aware.strftime("%b %d, %Y")
+        if days < 7:
+            duration_label = "New Member"
+            duration_color = "#8b949e"
+        elif days < 30:
+            duration_label = f"{days} Days"
+            duration_color = "#58a6ff"
+        elif days < 90:
+            months = days // 30
+            duration_label = f"{months} Month{'s' if months > 1 else ''}"
+            duration_color = "#3fb950"
+        elif days < 365:
+            months = days // 30
+            duration_label = f"{months} Months"
+            duration_color = "#e3b341"
+        elif days < 730:
+            duration_label = "1 Year"
+            duration_color = "#f0883e"
+        else:
+            years = days // 365
+            duration_label = f"{years} Years"
+            duration_color = "#bc8cff"
+    else:
+        days = 0
+        member_since = "Unknown"
+        duration_label = "Member"
+        duration_color = "#8b949e"
+
+    # Build badge list
+    badges = []
+    # Plan badge
+    plan_colors = {"free": ("#8b949e","#21262d"), "basic": ("#58a6ff","#0d1a2d"), "pro": ("#e3b341","#2a2000")}
+    pc, pbg = plan_colors.get(plan, plan_colors["free"])
+    badges.append({"icon": "💎" if plan=="pro" else ("⭐" if plan=="basic" else "🆓"),
+                   "label": plan.capitalize() + " Plan", "color": pc, "bg": pbg})
+    # Duration badge
+    dur_icons = {0:"🌱", 7:"🌿", 30:"🏅", 90:"🥈", 365:"🥇", 730:"👑"}
+    dur_icon = "🌱"
+    for threshold, icon in sorted(dur_icons.items()):
+        if days >= threshold: dur_icon = icon
+    badges.append({"icon": dur_icon, "label": duration_label + " Member",
+                   "color": duration_color, "bg": "#0d1117"})
+    # Activity badges
+    if copies >= 1:
+        badges.append({"icon":"📋","label":"First Copy","color":"#3fb950","bg":"#1a2d1a"})
+    if copies >= 10:
+        badges.append({"icon":"⚡","label":"Power User","color":"#e3b341","bg":"#2a2000"})
+    if copies >= 50:
+        badges.append({"icon":"🚀","label":"Super Trader","color":"#f0883e","bg":"#2d1a0d"})
+    if fav_count >= 3:
+        badges.append({"icon":"❤️","label":"Collector","color":"#f85149","bg":"#2d1515"})
+    if fav_count >= 10:
+        badges.append({"icon":"💫","label":"Indicator Fan","color":"#bc8cff","bg":"#1a0d2d"})
+    if watch_count >= 3:
+        badges.append({"icon":"👀","label":"Market Watcher","color":"#58a6ff","bg":"#0d1a2d"})
+    if referrals >= 1:
+        badges.append({"icon":"🤝","label":"Referrer","color":"#3fb950","bg":"#1a2d1a"})
+    if referrals >= 3:
+        badges.append({"icon":"🌟","label":"Ambassador","color":"#e3b341","bg":"#2a2000"})
+    if days <= 30 and days >= 0:
+        badges.append({"icon":"🎉","label":"Early Adopter","color":"#bc8cff","bg":"#1a0d2d"})
+
+    stats = {"copies": copies, "favorites": fav_count, "watchlist": watch_count, "referrals": referrals}
+    return render_template_string(PROFILE_HTML, current_user=username, username=username,
+        plan=plan, member_since=member_since, duration_label=duration_label,
+        badges=badges, stats=stats)
+
+
+PROFILE_HTML = """<!DOCTYPE html>
+<html data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">""" + _META + """
+  <title>Profile · ChartEdge</title>
+  <style>
+    :root[data-theme="dark"]  { --bg:#0d1117; --bg2:#161b22; --bg3:#21262d; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --green:#3fb950; --red:#f85149; }
+    :root[data-theme="light"] { --bg:#ffffff; --bg2:#f6f8fa; --bg3:#eaeef2; --border:#d0d7de; --text:#1f2328; --muted:#636c76; --accent:#0969da; --green:#1a7f37; --red:#cf222e; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+    nav { background: var(--bg2); border-bottom: 1px solid var(--border); padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; }
+    .logo { font-size: 1.1rem; font-weight: bold; text-decoration: none; }
+    """ + _NAV_CSS + """
+    .container { max-width: 720px; margin: 0 auto; padding: 36px 24px; }
+    .profile-header { display: flex; align-items: center; gap: 20px; margin-bottom: 32px; padding: 28px; background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; }
+    .avatar { width: 72px; height: 72px; border-radius: 50%; background: var(--accent); display: flex; align-items: center; justify-content: center; font-size: 2rem; font-weight: 700; color: #fff; flex-shrink: 0; }
+    .profile-info h1 { font-size: 1.4rem; margin-bottom: 4px; }
+    .profile-info .meta { color: var(--muted); font-size: .85rem; }
+    .plan-pill { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: .75rem; font-weight: 700; text-transform: uppercase; margin-left: 8px; }
+    .section { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 22px; margin-bottom: 20px; }
+    .section-title { font-size: .75rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .07em; margin-bottom: 16px; }
+    .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 12px; }
+    .stat-box { background: var(--bg3); border-radius: 8px; padding: 14px; text-align: center; }
+    .stat-num { font-size: 1.6rem; font-weight: 700; color: var(--accent); }
+    .stat-lbl { font-size: .72rem; color: var(--muted); margin-top: 4px; text-transform: uppercase; letter-spacing: .05em; }
+    .badges-grid { display: flex; flex-wrap: wrap; gap: 10px; }
+    .badge-card { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 8px; border: 1px solid var(--border); min-width: 160px; }
+    .badge-icon { font-size: 1.4rem; }
+    .badge-label { font-size: .82rem; font-weight: 600; }
+    .no-badges { color: var(--muted); font-size: .85rem; }
+    footer { text-align: center; padding: 32px 24px; color: var(--muted); font-size: .8rem; border-top: 1px solid var(--border); margin-top: 20px; }
+  </style>
+</head>
+<body>
+<nav>
+  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span></a>
+  <button class="hamburger" onclick="toggleMobileNav(event)">☰</button>
+  <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
+</nav>
+
+<div class="container">
+  <div class="profile-header">
+    <div class="avatar">{{ username[0].upper() }}</div>
+    <div class="profile-info">
+      <h1>{{ username }}
+        <span class="plan-pill" style="background:{{ {'free':'#21262d','basic':'#0d1a2d','pro':'#2a2000'}[plan] }};color:{{ {'free':'#8b949e','basic':'#58a6ff','pro':'#e3b341'}[plan] }};">{{ plan.upper() }}</span>
+      </h1>
+      <div class="meta">Member since {{ member_since }}</div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Stats</div>
+    <div class="stats-grid">
+      <div class="stat-box"><div class="stat-num">{{ stats.copies }}</div><div class="stat-lbl">Indicators Copied</div></div>
+      <div class="stat-box"><div class="stat-num">{{ stats.favorites }}</div><div class="stat-lbl">Favorites</div></div>
+      <div class="stat-box"><div class="stat-num">{{ stats.watchlist }}</div><div class="stat-lbl">Watchlist</div></div>
+      <div class="stat-box"><div class="stat-num">{{ stats.referrals }}</div><div class="stat-lbl">Referrals</div></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Badges</div>
+    {% if badges %}
+    <div class="badges-grid">
+      {% for b in badges %}
+      <div class="badge-card" style="background:{{ b.bg }};border-color:{{ b.color }}30;">
+        <span class="badge-icon">{{ b.icon }}</span>
+        <span class="badge-label" style="color:{{ b.color }};">{{ b.label }}</span>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="no-badges">No badges yet — start copying indicators to earn some!</div>
+    {% endif %}
+  </div>
+
+  <div style="display:flex;gap:12px;flex-wrap:wrap;">
+    <a href="/billing" style="color:var(--accent);font-size:.85rem;">Manage Plan</a>
+    <a href="/refer"   style="color:var(--accent);font-size:.85rem;">Refer a Friend</a>
+    <a href="/favorites" style="color:var(--accent);font-size:.85rem;">My Favorites</a>
+  </div>
+</div>
+
+<footer>© 2026 ChartEdge</footer>
+<script>""" + _THEME_JS + """</script>
+</body>
+</html>"""
+
+
 ADMIN_LOGIN_HTML = """<!DOCTYPE html>
 <html data-theme="dark">
 <head><meta charset="UTF-8"><title>Admin · ChartEdge</title>
@@ -2522,6 +2704,7 @@ _NAV_LINKS = """
       {% if current_user %}
       <button class="drop-btn" onclick="toggleDrop(this, event)">{{ current_user }} ▾</button>
       <div class="drop-menu">
+        <a href="/profile">👤 Profile</a>
         <a href="/favorites">♥ Favorites</a>
         <a href="/billing">Billing</a>
         <a href="/redeem">Redeem Code</a>
