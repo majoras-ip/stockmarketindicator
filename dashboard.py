@@ -4959,6 +4959,12 @@ NEWS_HTML = """<!DOCTYPE html>
     .news-summary { color: var(--muted); font-size: 0.8rem; line-height: 1.55; }
     .no-news { color: var(--muted); text-align: center; padding: 40px; }
     #status { color: var(--muted); font-size: 0.78rem; margin-top: 16px; text-align: center; }
+    .pagination { display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 24px; flex-wrap: wrap; }
+    .pg-btn { background: var(--bg2); border: 1px solid var(--border); border-radius: 6px; padding: 6px 14px; color: var(--muted); cursor: pointer; font-family: monospace; font-size: .85rem; }
+    .pg-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .pg-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; cursor: default; }
+    .pg-btn:disabled { opacity: .4; cursor: not-allowed; }
+    .pg-info { color: var(--muted); font-size: .8rem; }
     .ticker-search { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 18px 20px; margin-bottom: 24px; }
     .ticker-search h3 { font-size: .8rem; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 12px; }
     .ticker-search .row { display: flex; gap: 10px; }
@@ -5014,21 +5020,8 @@ NEWS_HTML = """<!DOCTYPE html>
     <button class="refresh-btn" onclick="loadNews()">&#8635; Refresh</button>
   </div>
 
-  <div class="news-list" id="news-list">
-    {% for a in articles %}
-    <div class="news-card" data-source="{{ a.source }}" data-title="{{ a.title.lower() }}" data-summary="{{ a.summary.lower() }}">
-      <div class="news-meta">
-        <span class="source-tag">{{ a.source }}</span>
-        <span class="news-time">{{ a.published }}</span>
-      </div>
-      <div class="news-title"><a href="{{ a.link }}" target="_blank" rel="noopener">{{ a.title }}</a></div>
-      {% if a.summary %}<div class="news-summary">{{ a.summary }}…</div>{% endif %}
-    </div>
-    {% endfor %}
-    {% if not articles %}
-    <div class="no-news">No news available right now. Try refreshing.</div>
-    {% endif %}
-  </div>
+  <div class="news-list" id="news-list"></div>
+  <div class="pagination" id="pagination"></div>
   <div id="status"></div>
 </div>
 
@@ -5082,50 +5075,97 @@ function loadTickerNews() {
     });
 }
 
-let activeSource = 'all';
+var allArticles  = [];
+var activeSource = 'all';
+var currentPage  = 1;
+var PAGE_SIZE    = 20;
 
-function filterSource(btn, source) {
-  activeSource = source;
-  document.querySelectorAll('.src-btn').forEach(b => b.classList.remove('active'));
+function filterSource(btn, src) {
+  activeSource = src;
+  currentPage  = 1;
+  document.querySelectorAll('.src-btn').forEach(function(b) { b.classList.remove('active'); });
   btn.classList.add('active');
-  filterNews();
+  renderPage();
 }
 
 function filterNews() {
-  const q = document.getElementById('search').value.toLowerCase();
-  document.querySelectorAll('.news-card').forEach(card => {
-    const srcMatch  = activeSource === 'all' || card.dataset.source === activeSource;
-    const textMatch = !q || card.dataset.title.includes(q) || card.dataset.summary.includes(q);
-    card.style.display = srcMatch && textMatch ? '' : 'none';
+  currentPage = 1;
+  renderPage();
+}
+
+function filteredArticles() {
+  var q = (document.getElementById('search').value || '').toLowerCase();
+  return allArticles.filter(function(a) {
+    var srcMatch  = activeSource === 'all' || a.source === activeSource;
+    var textMatch = !q || a.title.toLowerCase().includes(q) || (a.summary || '').toLowerCase().includes(q);
+    return srcMatch && textMatch;
   });
 }
 
-async function loadNews() {
-  document.getElementById('status').textContent = 'Refreshing…';
-  try {
-    const res  = await fetch('/api/news');
-    const data = await res.json();
-    const list = document.getElementById('news-list');
-    list.innerHTML = data.length === 0
-      ? '<div class="no-news">No news available right now.</div>'
-      : data.map(a => `
-        <div class="news-card" data-source="${a.source}" data-title="${a.title.toLowerCase()}" data-summary="${(a.summary||'').toLowerCase()}">
-          <div class="news-meta">
-            <span class="source-tag">${a.source}</span>
-            <span class="news-time">${a.published}</span>
-          </div>
-          <div class="news-title"><a href="${a.link}" target="_blank" rel="noopener">${a.title}</a></div>
-          ${a.summary ? `<div class="news-summary">${a.summary}…</div>` : ''}
-        </div>`).join('');
-    document.getElementById('status').textContent = 'Updated ' + new Date().toLocaleTimeString();
-    filterNews();
-  } catch(e) {
-    document.getElementById('status').textContent = 'Error fetching news: ' + e.message;
+function renderPage() {
+  var items     = filteredArticles();
+  var totalPages = Math.max(1, Math.ceil(items.length / PAGE_SIZE));
+  if (currentPage > totalPages) currentPage = totalPages;
+  var start = (currentPage - 1) * PAGE_SIZE;
+  var page  = items.slice(start, start + PAGE_SIZE);
+
+  var list = document.getElementById('news-list');
+  if (page.length === 0) {
+    list.innerHTML = '<div class="no-news">No articles match.</div>';
+  } else {
+    var html = '';
+    for (var i = 0; i < page.length; i++) {
+      var a = page[i];
+      html += '<div class="news-card">'
+        + '<div class="news-meta"><span class="source-tag">' + a.source + '</span>'
+        + '<span class="news-time">' + (a.published || '') + '</span></div>'
+        + '<div class="news-title"><a href="' + a.link + '" target="_blank" rel="noopener">' + a.title + '</a></div>'
+        + (a.summary ? '<div class="news-summary">' + a.summary + '...</div>' : '')
+        + '</div>';
+    }
+    list.innerHTML = html;
   }
+
+  // Pagination bar
+  var pg = document.getElementById('pagination');
+  if (totalPages <= 1) { pg.innerHTML = ''; return; }
+  var pgHtml = '<button class="pg-btn" onclick="goPage(' + (currentPage - 1) + ')" ' + (currentPage === 1 ? 'disabled' : '') + '>\u2190 Prev</button>';
+  var lo = Math.max(1, currentPage - 2);
+  var hi = Math.min(totalPages, currentPage + 2);
+  if (lo > 1)          pgHtml += '<span class="pg-info">1 \u2026</span>';
+  for (var p = lo; p <= hi; p++) {
+    pgHtml += '<button class="pg-btn' + (p === currentPage ? ' active' : '') + '" onclick="goPage(' + p + ')">' + p + '</button>';
+  }
+  if (hi < totalPages) pgHtml += '<span class="pg-info">\u2026 ' + totalPages + '</span>';
+  pgHtml += '<button class="pg-btn" onclick="goPage(' + (currentPage + 1) + ')" ' + (currentPage === totalPages ? 'disabled' : '') + '>Next \u2192</button>';
+  pgHtml += '<span class="pg-info">' + items.length + ' articles</span>';
+  pg.innerHTML = pgHtml;
+}
+
+function goPage(n) {
+  currentPage = n;
+  renderPage();
+  window.scrollTo(0, 0);
+}
+
+function loadNews() {
+  document.getElementById('status').textContent = 'Refreshing...';
+  fetch('/api/news')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      allArticles = data;
+      currentPage = 1;
+      renderPage();
+      document.getElementById('status').textContent = 'Updated ' + new Date().toLocaleTimeString();
+    })
+    .catch(function(e) {
+      document.getElementById('status').textContent = 'Error: ' + e.message;
+    });
 }
 
 // Auto-refresh every 5 min
 setInterval(loadNews, 5 * 60 * 1000);
+loadNews();
 
 // Theme
 """ + _THEME_JS + """
