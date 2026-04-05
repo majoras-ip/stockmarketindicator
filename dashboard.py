@@ -2793,7 +2793,6 @@ PROFILE_HTML = """<!DOCTYPE html>
     <div class="stats-grid">
       <div class="stat-box"><div class="stat-num">{{ stats.copies }}</div><div class="stat-lbl">Indicators Copied</div></div>
       <div class="stat-box"><div class="stat-num">{{ stats.favorites }}</div><div class="stat-lbl">Favorites</div></div>
-      <div class="stat-box"><div class="stat-num">{{ stats.watchlist }}</div><div class="stat-lbl">Watchlist</div></div>
       <div class="stat-box"><div class="stat-num">{{ stats.referrals }}</div><div class="stat-lbl">Referrals</div></div>
     </div>
   </div>
