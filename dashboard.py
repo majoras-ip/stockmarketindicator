@@ -4835,11 +4835,15 @@ def api_insider():
         headers = {"User-Agent": "ChartEdge ayden.j.folkerts@gmail.com", "Accept-Encoding": "gzip, deflate"}
 
         resp = _req.get(
-            "https://efts.sec.gov/LATEST/search-index?q=%22form+4%22&forms=4&dateRange=custom&startdt=2026-01-01",
+            "https://efts.sec.gov/LATEST/search-index?q=*&forms=4&dateRange=custom&startdt=2025-01-01&enddt=2026-12-31",
             headers=headers, timeout=15
         )
         resp.raise_for_status()
-        hits = resp.json().get("hits", {}).get("hits", [])[:15]
+        all_hits = resp.json().get("hits", {}).get("hits", [])
+        # Filter and sort by date in Python since EFTS may ignore dateRange
+        all_hits = [h for h in all_hits if h.get("_source", {}).get("file_date", "") >= "2025-01-01"]
+        all_hits.sort(key=lambda h: h.get("_source", {}).get("file_date", ""), reverse=True)
+        hits = all_hits[:15]
 
         # Build base results from EFTS metadata first
         base = {}
