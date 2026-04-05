@@ -4830,84 +4830,91 @@ def api_insider():
 
     results = []
     try:
-        import requests as _req, xml.etree.ElementTree as ET
-        from concurrent.futures import ThreadPoolExecutor, as_completed
-        headers = {"User-Agent": "ChartEdge ayden.j.folkerts@gmail.com", "Accept-Encoding": "gzip, deflate"}
+        import re as _re, requests as _req, xml.etree.ElementTree as ET
+        from concurrent.futures import ThreadPoolExecutor
+        headers = {"User-Agent": "ChartEdge ayden.j.folkerts@gmail.com"}
 
-        resp = _req.get(
-            "https://efts.sec.gov/LATEST/search-index?q=%22form+4%22&forms=4",
-            headers=headers, timeout=15
-        )
-        resp.raise_for_status()
-        all_hits = resp.json().get("hits", {}).get("hits", [])
-        # Sort by file_date newest-first in Python
-        all_hits.sort(key=lambda h: h.get("_source", {}).get("file_date", ""), reverse=True)
-        hits = all_hits[:15]
+        # Use SEC EDGAR quarterly full-index (reliable, always up-to-date)
+        today_d = date.today()
+        q = (today_d.month - 1) // 3 + 1
+        entries = []
+        for qtr, yr in [(q, today_d.year), (q - 1 if q > 1 else 4, today_d.year if q > 1 else today_d.year - 1)]:
+            try:
+                idx_resp = _req.get(
+                    f"https://www.sec.gov/Archives/edgar/full-index/{yr}/QTR{qtr}/form.idx",
+                    headers=headers, timeout=20
+                )
+                for line in idx_resp.text.split("\n"):
+                    m = _re.match(r'^4\s{2,}(.+?)\s{2,}(\d+)\s+(\d{4}-\d{2}-\d{2})\s+(edgar/\S+)', line)
+                    if m:
+                        company, cik, filed, fname = m.groups()
+                        entries.append({"company": company.strip(), "cik": cik.lstrip("0") or "0",
+                                        "date": filed, "fname": fname})
+            except Exception:
+                pass
+            if entries:
+                break
 
-        # Build base results from EFTS metadata first
+        entries.sort(key=lambda x: x["date"], reverse=True)
+        top = entries[:15]
+
+        # Build base results
         base = {}
-        for hit in hits:
-            src   = hit.get("_source", {})
-            accno = hit.get("_id", "")
+        for e in top:
+            accno_txt = e["fname"].split("/")[-1]                # 0001234567-26-000001.txt
+            accno     = accno_txt[:-4] if accno_txt.endswith(".txt") else accno_txt
             accno_clean = accno.replace("-", "")
-            import re as _re
-            names = src.get("display_names", [])
-            first = names[0] if names else None
-            raw   = (first.get("name", first) if isinstance(first, dict) else first) if first else src.get("entity_name", "Unknown")
-            entity = _re.sub(r"\s*\(CIK\s*[\d]+\)", "", str(raw)).strip()
-            cik = str(int(accno.split("-")[0])) if "-" in accno else ""
-            base[accno] = {
-                "title":   entity,
-                "link":    f"https://www.sec.gov/Archives/edgar/data/{cik}/{accno_clean}/",
-                "date":    src.get("file_date", ""),
-                "summary": f"Period: {src.get('period_of_report', '')}",
-                "shares":  None,
-                "value":   None,
-                "txn":     None,
+            cik = e["cik"]
+            key = accno
+            base[key] = {
+                "title":      e["company"],
+                "link":       f"https://www.sec.gov/Archives/edgar/data/{cik}/{accno_clean}/",
+                "date":       e["date"],
+                "summary":    "",
+                "shares":     None,
+                "value":      None,
+                "txn":        None,
+                "_cik":       cik,
+                "_accno_clean": accno_clean,
             }
 
-        def _enrich(accno):
+        def _enrich(key):
+            r = base[key]
             try:
-                accno_clean = accno.replace("-", "")
-                cik = str(int(accno.split("-")[0]))
+                cik, ac = r["_cik"], r["_accno_clean"]
                 idx = _req.get(
-                    f"https://www.sec.gov/Archives/edgar/data/{cik}/{accno_clean}/{accno_clean}-index.json",
+                    f"https://www.sec.gov/Archives/edgar/data/{cik}/{ac}/{ac}-index.json",
                     headers=headers, timeout=8
                 ).json()
                 xml_file = idx.get("primaryDocument", "")
                 if not xml_file or not xml_file.endswith(".xml"):
-                    return accno, None, None, None
-                xml_resp = _req.get(
-                    f"https://www.sec.gov/Archives/edgar/data/{cik}/{accno_clean}/{xml_file}",
+                    return
+                root = ET.fromstring(_req.get(
+                    f"https://www.sec.gov/Archives/edgar/data/{cik}/{ac}/{xml_file}",
                     headers=headers, timeout=8
-                )
-                root = ET.fromstring(xml_resp.text)
-                shares_total = 0.0
-                value_total  = 0.0
-                txn_code     = None
+                ).text)
+                sh_tot, val_tot, txn_code = 0.0, 0.0, None
                 for txn in root.findall(".//nonDerivativeTransaction"):
                     sh = txn.find(".//transactionShares/value")
                     pr = txn.find(".//transactionPricePerShare/value")
                     cd = txn.find(".//transactionAcquiredDisposedCode/value")
                     if sh is not None and sh.text:
                         s = float(sh.text)
-                        shares_total += s
+                        sh_tot += s
                         if pr is not None and pr.text:
-                            value_total += s * float(pr.text)
+                            val_tot += s * float(pr.text)
                         if txn_code is None and cd is not None:
                             txn_code = cd.text
-                return accno, int(shares_total) or None, round(value_total) or None, txn_code
+                r["shares"] = int(sh_tot) if sh_tot else None
+                r["value"]  = round(val_tot) if val_tot else None
+                r["txn"]    = txn_code
             except Exception:
-                return accno, None, None, None
+                pass
 
         with ThreadPoolExecutor(max_workers=5) as pool:
-            for accno, shares, value, txn in pool.map(_enrich, list(base.keys())):
-                base[accno]["shares"] = shares
-                base[accno]["value"]  = value
-                base[accno]["txn"]    = txn
+            list(pool.map(_enrich, list(base.keys())))
 
-        results = list(base.values())
-
+        results = [{k: v for k, v in r.items() if not k.startswith("_")} for r in base.values()]
         results.sort(key=lambda x: x["date"], reverse=True)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
