@@ -2175,16 +2175,16 @@ def gamma_api():
 
         return jsonify({
             "ticker":       ticker,
-            "spot":         spot,
+            "spot":         float(spot),
             "expiry":       exp,
             "expirations":  list(expirations[:20]),
-            "strikes":      strikes,
-            "gex":          gex,
-            "flip_strike":  flip_strike,
-            "max_call_gex": max_call_gex,
-            "max_put_gex":  max_put_gex,
-            "total_gex":    total_gex,
-            "positive_gamma": total_gex >= 0,
+            "strikes":      [float(s) for s in strikes],
+            "gex":          [float(v) for v in gex],
+            "flip_strike":  float(flip_strike) if flip_strike is not None else None,
+            "max_call_gex": float(max_call_gex),
+            "max_put_gex":  float(max_put_gex),
+            "total_gex":    float(total_gex),
+            "positive_gamma": bool(total_gex >= 0),
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
