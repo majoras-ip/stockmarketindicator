@@ -1737,7 +1737,7 @@ def profile():
     ref_code  = row["referral_code"] or ""
 
     # Stats
-    copies     = _scalar("SELECT COUNT(*) FROM copy_log WHERE user_id=%s", (user_id,)) or 0
+    copies     = _scalar("SELECT COALESCE(SUM(count), 0) FROM copy_log WHERE user_id=%s", (user_id,)) or 0
     fav_count  = _scalar("SELECT COUNT(*) FROM favorites WHERE user_id=%s", (user_id,)) or 0
 
     referrals  = _scalar("SELECT COUNT(*) FROM users WHERE referred_by=%s", (ref_code,)) or 0 if ref_code else 0
