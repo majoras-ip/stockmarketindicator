@@ -4843,7 +4843,8 @@ def api_insider():
         for hit in hits[:40]:
             src   = hit.get("_source", {})
             names = src.get("display_names", [])
-            entity = names[0].get("name", "") if names else src.get("entity_name", "")
+            first = names[0] if names else None
+            entity = (first.get("name", first) if isinstance(first, dict) else first) if first else src.get("entity_name", "")
             filed  = src.get("file_date", "")
             accn   = hit.get("_id", "").replace("-", "")
             link   = f"https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK={src.get('entity_id','')}&type=4&dateb=&owner=include&count=5" if src.get("entity_id") else "https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&type=4"
