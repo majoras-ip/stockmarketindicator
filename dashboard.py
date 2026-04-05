@@ -4830,30 +4830,75 @@ def api_insider():
 
     results = []
     try:
-        import requests as _req
+        import requests as _req, xml.etree.ElementTree as ET
+        from concurrent.futures import ThreadPoolExecutor, as_completed
         headers = {"User-Agent": "ChartEdge ayden.j.folkerts@gmail.com", "Accept-Encoding": "gzip, deflate"}
-        # Use EDGAR full-text search JSON API — returns recent Form 4 filings
+
         resp = _req.get(
             "https://efts.sec.gov/LATEST/search-index?q=%22form+4%22&forms=4&dateRange=custom&startdt=2026-01-01",
             headers=headers, timeout=15
         )
         resp.raise_for_status()
-        payload = resp.json()
-        hits = payload.get("hits", {}).get("hits", [])
-        for hit in hits[:40]:
-            src   = hit.get("_source", {})
-            names = src.get("display_names", [])
-            first = names[0] if names else None
-            entity = (first.get("name", first) if isinstance(first, dict) else first) if first else src.get("entity_name", "")
-            filed  = src.get("file_date", "")
-            accn   = hit.get("_id", "").replace("-", "")
-            link   = f"https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK={src.get('entity_id','')}&type=4&dateb=&owner=include&count=5" if src.get("entity_id") else "https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&type=4"
-            results.append({
-                "title":   entity or "Unknown",
-                "link":    link,
-                "date":    filed,
-                "summary": f"Period: {src.get('period_of_report', '')}",
-            })
+        hits = resp.json().get("hits", {}).get("hits", [])[:15]
+
+        def _fetch_txn(hit):
+            try:
+                src   = hit.get("_source", {})
+                accno = hit.get("_id", "")                       # e.g. 0001234567-26-000001
+                accno_clean = accno.replace("-", "")             # 000123456726000001
+                cik = str(int(accno.split("-")[0]))              # strip leading zeros
+
+                # Fetch filing index to get primary document name
+                idx = _req.get(
+                    f"https://www.sec.gov/Archives/edgar/data/{cik}/{accno_clean}/{accno_clean}-index.json",
+                    headers=headers, timeout=8
+                ).json()
+                xml_file = idx.get("primaryDocument", accno_clean + ".xml")
+
+                # Fetch Form 4 XML
+                xml_resp = _req.get(
+                    f"https://www.sec.gov/Archives/edgar/data/{cik}/{accno_clean}/{xml_file}",
+                    headers=headers, timeout=8
+                )
+                root = ET.fromstring(xml_resp.text)
+
+                shares_total = 0.0
+                value_total  = 0.0
+                txn_code     = None
+                for txn in root.findall(".//nonDerivativeTransaction"):
+                    sh = txn.find(".//transactionShares/value")
+                    pr = txn.find(".//transactionPricePerShare/value")
+                    cd = txn.find(".//transactionAcquiredDisposedCode/value")
+                    if sh is not None and sh.text:
+                        s = float(sh.text)
+                        shares_total += s
+                        if pr is not None and pr.text:
+                            value_total += s * float(pr.text)
+                        if txn_code is None and cd is not None:
+                            txn_code = cd.text
+
+                names = src.get("display_names", [])
+                first = names[0] if names else None
+                entity = (first.get("name", first) if isinstance(first, dict) else first) if first else src.get("entity_name", "Unknown")
+                return {
+                    "title":   entity,
+                    "link":    f"https://www.sec.gov/Archives/edgar/data/{cik}/{accno_clean}/{xml_file}",
+                    "date":    src.get("file_date", ""),
+                    "summary": f"Period: {src.get('period_of_report', '')}",
+                    "shares":  int(shares_total) if shares_total else None,
+                    "value":   round(value_total) if value_total else None,
+                    "txn":     txn_code,
+                }
+            except Exception:
+                return None
+
+        with ThreadPoolExecutor(max_workers=5) as pool:
+            futures = {pool.submit(_fetch_txn, h): h for h in hits}
+            for fut in as_completed(futures):
+                r = fut.result()
+                if r:
+                    results.append(r)
+
         results.sort(key=lambda x: x["date"], reverse=True)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -4922,6 +4967,7 @@ INSIDER_HTML = """<!DOCTYPE html>
     .filing-link { color:var(--accent); text-decoration:none; font-size:.8rem; }
     .filing-link:hover { text-decoration:underline; }
     .date-badge { color:var(--muted); font-size:.78rem; white-space:nowrap; }
+    .filing-table td:nth-child(3), .filing-table td:nth-child(4) { white-space:nowrap; }
     .loading { color:var(--muted); padding:40px; text-align:center; }
     .pro-badge { display:inline-block; background:#2a2000; color:#e3b341; border:1px solid #e3b34140; border-radius:4px; font-size:.7rem; font-weight:700; padding:2px 8px; margin-left:8px; vertical-align:middle; }
     footer { text-align:center; padding:32px 24px; color:var(--muted); font-size:.8rem; border-top:1px solid var(--border); margin-top:20px; }
@@ -4960,11 +5006,17 @@ function renderTable(filings, title) {
     return;
   }
   var html = title ? '<h2 style="font-size:1rem;margin-bottom:14px;color:var(--muted);">' + title + '</h2>' : '';
-  html += '<table class="filing-table"><thead><tr><th>Filing</th><th>Date</th><th>Link</th></tr></thead><tbody>';
+  html += '<table class="filing-table"><thead><tr><th>Insider / Issuer</th><th>Date</th><th>Shares</th><th>Value</th><th>Link</th></tr></thead><tbody>';
   for (var i = 0; i < filings.length; i++) {
     var f = filings[i];
+    var txnColor = f.txn === 'A' ? 'var(--green)' : f.txn === 'D' ? 'var(--red)' : 'var(--muted)';
+    var txnLabel = f.txn === 'A' ? '▲ Buy' : f.txn === 'D' ? '▼ Sell' : '';
+    var sharesStr = f.shares != null ? (f.shares).toLocaleString() + (txnLabel ? ' <span style="color:' + txnColor + ';font-size:.75rem">' + txnLabel + '</span>' : '') : '—';
+    var valueStr  = f.value  != null ? '$' + Number(f.value).toLocaleString() : '—';
     html += '<tr><td>' + (f.title || '—') + '</td>';
     html += '<td class="date-badge">' + (f.date || '—') + '</td>';
+    html += '<td style="font-weight:600;color:' + txnColor + '">' + sharesStr + '</td>';
+    html += '<td style="color:' + txnColor + '">' + valueStr + '</td>';
     html += '<td><a class="filing-link" href="' + (f.link || '#') + '" target="_blank" rel="noopener">View →</a></td></tr>';
   }
   html += '</tbody></table>';
