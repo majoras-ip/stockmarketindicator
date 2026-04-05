@@ -4835,13 +4835,12 @@ def api_insider():
         headers = {"User-Agent": "ChartEdge ayden.j.folkerts@gmail.com", "Accept-Encoding": "gzip, deflate"}
 
         resp = _req.get(
-            "https://efts.sec.gov/LATEST/search-index?q=*&forms=4&dateRange=custom&startdt=2025-01-01&enddt=2026-12-31",
+            "https://efts.sec.gov/LATEST/search-index?q=%22form+4%22&forms=4",
             headers=headers, timeout=15
         )
         resp.raise_for_status()
         all_hits = resp.json().get("hits", {}).get("hits", [])
-        # Filter and sort by date in Python since EFTS may ignore dateRange
-        all_hits = [h for h in all_hits if h.get("_source", {}).get("file_date", "") >= "2025-01-01"]
+        # Sort by file_date newest-first in Python
         all_hits.sort(key=lambda h: h.get("_source", {}).get("file_date", ""), reverse=True)
         hits = all_hits[:15]
 
@@ -4851,9 +4850,11 @@ def api_insider():
             src   = hit.get("_source", {})
             accno = hit.get("_id", "")
             accno_clean = accno.replace("-", "")
+            import re as _re
             names = src.get("display_names", [])
             first = names[0] if names else None
-            entity = (first.get("name", first) if isinstance(first, dict) else first) if first else src.get("entity_name", "Unknown")
+            raw   = (first.get("name", first) if isinstance(first, dict) else first) if first else src.get("entity_name", "Unknown")
+            entity = _re.sub(r"\s*\(CIK\s*[\d]+\)", "", str(raw)).strip()
             cik = str(int(accno.split("-")[0])) if "-" in accno else ""
             base[accno] = {
                 "title":   entity,
