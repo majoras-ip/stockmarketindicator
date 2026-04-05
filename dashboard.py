@@ -1753,13 +1753,14 @@ def profile():
     pc, pbg = plan_colors.get(plan, plan_colors["free"])
     badges.append({"icon": "💎" if plan=="pro" else ("⭐" if plan=="basic" else "🆓"),
                    "label": plan.capitalize() + " Plan", "color": pc, "bg": pbg})
-    # Duration badge
-    dur_icons = {0:"🌱", 7:"🌿", 30:"🏅", 90:"🥈", 365:"🥇", 730:"👑"}
-    dur_icon = "🌱"
-    for threshold, icon in sorted(dur_icons.items()):
-        if days >= threshold: dur_icon = icon
-    badges.append({"icon": dur_icon, "label": duration_label + " Member",
-                   "color": duration_color, "bg": "#0d1117"})
+    # Duration badge (only show once past 7 days)
+    if days >= 7:
+        dur_icons = {7:"🌿", 30:"🏅", 90:"🥈", 365:"🥇", 730:"👑"}
+        dur_icon = "🌿"
+        for threshold, icon in sorted(dur_icons.items()):
+            if days >= threshold: dur_icon = icon
+        badges.append({"icon": dur_icon, "label": duration_label + " Member",
+                       "color": duration_color, "bg": "#0d1117"})
     # Activity badges
     if copies >= 1:
         badges.append({"icon":"📋","label":"First Copy","color":"#3fb950","bg":"#1a2d1a"})
