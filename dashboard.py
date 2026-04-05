@@ -2747,6 +2747,8 @@ PROFILE_HTML = """<!DOCTYPE html>
     .btn-save { background: var(--accent); color: #fff; border: none; border-radius: 6px; padding: 9px 22px; font-size: .9rem; font-weight: 600; cursor: pointer; align-self: flex-start; }
     .btn-save:hover { opacity: .85; }
     .error-msg { background: #2d1515; border: 1px solid var(--red); color: var(--red); border-radius: 6px; padding: 10px 14px; font-size: .85rem; }
+    .pencil-btn { background: none; border: none; cursor: pointer; font-size: .85rem; color: var(--muted); padding: 2px 5px; border-radius: 4px; vertical-align: middle; margin-left: 6px; }
+    .pencil-btn:hover { color: var(--accent); background: var(--bg3); }
   </style>
 </head>
 <body>
@@ -2762,8 +2764,27 @@ PROFILE_HTML = """<!DOCTYPE html>
     <div class="profile-info">
       <h1>{{ username }}
         <span class="plan-pill" style="background:{{ {'free':'#21262d','basic':'#0d1a2d','pro':'#2a2000'}[plan] }};color:{{ {'free':'#8b949e','basic':'#58a6ff','pro':'#e3b341'}[plan] }};">{{ plan.upper() }}</span>
+        <button class="pencil-btn" onclick="document.getElementById('edit-section').style.display=document.getElementById('edit-section').style.display==='none'?'block':'none'" title="Edit profile">✏️</button>
       </h1>
       <div class="meta">Member since {{ member_since }}</div>
+    </div>
+  </div>
+
+  <div id="edit-section" style="display:{% if profile_error %}block{% else %}none{% endif %}">
+    <div class="section">
+      <div class="section-title">Edit Profile</div>
+      {% if profile_error %}<div class="error-msg" style="margin-bottom:14px;">{{ profile_error }}</div>{% endif %}
+      <form class="edit-form" method="POST" action="/profile/update" enctype="multipart/form-data">
+        <div class="edit-row">
+          <label>Username</label>
+          <input type="text" name="username" value="{{ username }}" maxlength="30" placeholder="New username">
+        </div>
+        <div class="edit-row">
+          <label>Profile Picture</label>
+          <input type="file" name="profile_pic" accept="image/*">
+        </div>
+        <button class="btn-save" type="submit">Save Changes</button>
+      </form>
     </div>
   </div>
 
@@ -2791,22 +2812,6 @@ PROFILE_HTML = """<!DOCTYPE html>
     {% else %}
     <div class="no-badges">No badges yet — start copying indicators to earn some!</div>
     {% endif %}
-  </div>
-
-  <div class="section">
-    <div class="section-title">Edit Profile</div>
-    {% if profile_error %}<div class="error-msg">{{ profile_error }}</div>{% endif %}
-    <form class="edit-form" method="POST" action="/profile/update" enctype="multipart/form-data">
-      <div class="edit-row">
-        <label>Username</label>
-        <input type="text" name="username" value="{{ username }}" maxlength="30" placeholder="New username">
-      </div>
-      <div class="edit-row">
-        <label>Profile Picture</label>
-        <input type="file" name="profile_pic" accept="image/*">
-      </div>
-      <button class="btn-save" type="submit">Save Changes</button>
-    </form>
   </div>
 
   <div style="display:flex;gap:12px;flex-wrap:wrap;">
