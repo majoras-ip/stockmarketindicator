@@ -4959,44 +4959,35 @@ def api_insider():
     except Exception:
         pass
 
-    # ── Part 2: Congressional trades (Senate + House STOCK Act disclosures) ──
-    congress_urls = [
-        "https://senate-stock-watcher-data.s3-us-west-2.amazonaws.com/aggregate/all_transactions.json",
-        "https://house-stock-watcher-data.s3-us-west-2.amazonaws.com/data/all_transactions.json",
-    ]
-    for congress_url in congress_urls:
-        try:
-            cr = _req.get(congress_url, timeout=30)
-            if cr.status_code != 200:
-                continue
+    # ── Part 2: Congressional trades via QuiverQuant ──
+    try:
+        cr = _req.get("https://api.quiverquant.com/beta/live/congresstrading", timeout=15)
+        if cr.status_code == 200:
             congress_data = cr.json()
-            if not isinstance(congress_data, list):
-                continue
-            congress_data.sort(key=lambda x: x.get("transaction_date", "") or x.get("transactionDate", ""), reverse=True)
+            congress_data.sort(key=lambda x: x.get("TransactionDate", ""), reverse=True)
             for h in congress_data[:60]:
-                ticker = (h.get("ticker") or h.get("asset_ticker") or "").replace("--", "").strip().upper()
+                ticker = (h.get("Ticker") or "").strip().upper()
                 if not ticker or ticker in ("", "N/A", "NONE"):
                     continue
-                txn_type = h.get("type", "") or h.get("transaction_type", "")
+                txn_type = h.get("Transaction", "")
                 txn_code = "A" if "purchase" in txn_type.lower() else ("D" if "sale" in txn_type.lower() else None)
-                name = h.get("representative") or h.get("first_name", "") + " " + h.get("last_name", "")
-                role = "U.S. Senator" if "senate" in congress_url else "U.S. Representative"
+                house = h.get("House", "")
+                role = "U.S. Senator" if house == "Senate" else "U.S. Representative"
                 results.append({
-                    "company": h.get("asset_description") or h.get("asset_name") or ticker,
-                    "insider": name.strip(),
+                    "company": h.get("Description") or ticker,
+                    "insider": h.get("Representative", ""),
                     "role":    role,
                     "ticker":  ticker,
-                    "link":    h.get("disclosure_url") or h.get("link") or "",
-                    "date":    ((h.get("transaction_date") or h.get("transactionDate") or ""))[:10],
+                    "link":    "",
+                    "date":    (h.get("TransactionDate") or "")[:10],
                     "shares":  None,
                     "value":   None,
-                    "amount":  h.get("amount", ""),
+                    "amount":  h.get("Range", ""),
                     "txn":     txn_code,
                     "source":  "congress",
                 })
-            break  # Stop after first successful source
-        except Exception:
-            continue
+    except Exception:
+        pass
 
     if not results:
         return jsonify({"error": "No data available — SEC or congressional sources may be temporarily unavailable."}), 503
