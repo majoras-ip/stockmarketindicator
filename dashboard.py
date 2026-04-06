@@ -5251,16 +5251,19 @@ def _premarket_fetch_bg():
     def _fetch_one(ticker):
         try:
             r = _req.get(
-                f"https://query2.finance.yahoo.com/v8/finance/chart/{ticker}?interval=1d&range=5d",
+                f"https://query2.finance.yahoo.com/v8/finance/chart/{ticker}?interval=1d&range=2d",
                 headers=headers, timeout=6
             )
-            meta = r.json()["chart"]["result"][0]["meta"]
-            price = meta.get("regularMarketPrice")
-            prev  = meta.get("chartPreviousClose")
-            if price is None or prev is None:
+            result = r.json()["chart"]["result"][0]
+            meta   = result["meta"]
+            closes = result.get("indicators", {}).get("quote", [{}])[0].get("close", [])
+            price  = meta.get("regularMarketPrice")
+            # Use second-to-last close as previous day, fall back to chartPreviousClose
+            prev = closes[-2] if len(closes) >= 2 else meta.get("chartPreviousClose")
+            if price is None or not prev:
                 return None
             chg     = round(float(price) - float(prev), 2)
-            chg_pct = round((chg / float(prev)) * 100, 2) if prev else 0
+            chg_pct = round((chg / float(prev)) * 100, 2)
             return {"ticker": ticker, "price": round(float(price), 2),
                     "prev": round(float(prev), 2), "change": chg, "change_pct": chg_pct}
         except Exception:
