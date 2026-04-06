@@ -32,6 +32,21 @@ based on Liao, Chen & Cai (2024).
 
 ---
 
+## Changes (2026-04-06)
+
+### Basic plan copy limit
+- Changed from 10 → 8 copies/day in `STRIPE_PLAN_LIMITS` (line ~48)
+- Updated all UI references: plan status badge, pricing cards, CTA button
+
+### Insider Trading revamp
+- Added `_SP500_MAJOR` set (~80 tickers) to filter SEC filings to big companies only
+- Rewrote `api_insider` to extract **insider name**, **company**, **ticker**, and **role** from Form 4 XML
+- Added congressional trades from House STOCK Act disclosures via `house-stock-watcher-data.s3-us-west-2.amazonaws.com`
+- Updated table columns: Insider · Company · Role · Action · Value · Date · Link
+- CONGRESS badge (blue) for political trades, SEC badge (green) for corporate filings
+
+---
+
 ## Known open items (as of 2026-03-30)
 
 ### 1. GRU never fully validated
