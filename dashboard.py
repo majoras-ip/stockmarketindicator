@@ -4868,7 +4868,7 @@ def api_insider():
                 break
 
         entries.sort(key=lambda x: x["date"], reverse=True)
-        top = entries[:300]
+        top = entries[:100]
 
         base = {}
         for e in top:
@@ -4896,27 +4896,21 @@ def api_insider():
             r = base[key]
             try:
                 cik, ac = r["_cik"], r["_accno_clean"]
-                cik_padded = cik.zfill(10)
-                subs = _req.get(
-                    f"https://data.sec.gov/submissions/CIK{cik_padded}.json",
-                    headers=headers, timeout=8
-                ).json()
-                recent    = subs.get("filings", {}).get("recent", {})
-                accnos    = recent.get("accessionNumber", [])
-                prim_docs = recent.get("primaryDocument", [])
-                xml_file  = None
-                for i, a in enumerate(accnos):
-                    if a.replace("-", "") == ac:
-                        xml_file = prim_docs[i]
-                        break
-                if not xml_file:
-                    xml_file = "form4.xml"
-                if not xml_file.endswith(".xml"):
+                # Try common Form 4 XML filenames directly — avoids extra submissions API call
+                xml_text = None
+                for candidate in ("form4.xml", f"{ac}.xml"):
+                    try:
+                        resp = _req.get(
+                            f"https://www.sec.gov/Archives/edgar/data/{cik}/{ac}/{candidate}",
+                            headers=headers, timeout=6
+                        )
+                        if resp.status_code == 200 and "<ownershipDocument" in resp.text:
+                            xml_text = resp.text
+                            break
+                    except Exception:
+                        pass
+                if not xml_text:
                     return
-                xml_text = _req.get(
-                    f"https://www.sec.gov/Archives/edgar/data/{cik}/{ac}/{xml_file}",
-                    headers=headers, timeout=8
-                ).text
                 root = ET.fromstring(xml_text)
 
                 # Filter to major companies only
@@ -4956,7 +4950,7 @@ def api_insider():
             except Exception:
                 pass
 
-        with ThreadPoolExecutor(max_workers=8) as pool:
+        with ThreadPoolExecutor(max_workers=5) as pool:
             list(pool.map(_enrich, list(base.keys())))
 
         results = [
@@ -4969,7 +4963,7 @@ def api_insider():
         try:
             house_resp = _req.get(
                 "https://house-stock-watcher-data.s3-us-west-2.amazonaws.com/data/all_transactions.json",
-                timeout=15
+                timeout=30
             )
             house_data = house_resp.json()
             house_data.sort(key=lambda x: x.get("transaction_date", ""), reverse=True)
