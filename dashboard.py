@@ -5381,11 +5381,11 @@ function renderTable() {
     return;
   }
   var html = '<table class="scanner-table"><thead><tr>';
-  html += '<th onclick="sort(\'ticker\')">Ticker</th>';
-  html += '<th onclick="sort(\'price\')">Price</th>';
-  html += '<th onclick="sort(\'change\')">Change</th>';
-  html += '<th onclick="sort(\'change_pct\')">% Change</th>';
-  html += '<th onclick="sort(\'prev\')">Prev Close</th>';
+  html += '<th onclick="sort(&quot;ticker&quot;)">Ticker</th>';
+  html += '<th onclick="sort(&quot;price&quot;)">Price</th>';
+  html += '<th onclick="sort(&quot;change&quot;)">Change</th>';
+  html += '<th onclick="sort(&quot;change_pct&quot;)">% Change</th>';
+  html += '<th onclick="sort(&quot;prev&quot;)">Prev Close</th>';
   html += '</tr></thead><tbody>';
   for (var i = 0; i < data.length; i++) {
     var r = data[i];
