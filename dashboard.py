@@ -5041,21 +5041,28 @@ def api_insider_debug():
             out["aapl_form4"] = "none found"
     except Exception as e:
         out["submissions_error"] = str(e)
-    # Test 3: congressional data
-    for curl in [
-        "https://senate-stock-watcher-data.s3-us-west-2.amazonaws.com/aggregate/all_transactions.json",
-        "https://house-stock-watcher-data.s3-us-west-2.amazonaws.com/data/all_transactions.json",
-    ]:
-        try:
-            r3 = _req.get(curl, timeout=30)
-            out[f"congress_{curl.split('/')[2].split('.')[0]}_status"] = r3.status_code
-            if r3.status_code == 200:
-                data3 = r3.json()
-                out["congress_count"] = len(data3)
-                out["congress_sample"] = data3[0] if data3 else None
-                break
-        except Exception as e:
-            out[f"congress_{curl.split('/')[2].split('.')[0]}_error"] = str(e)
+    # Test 3: AAPL XML fetch
+    try:
+        accno = out.get("aapl_form4_accno", "0001140361-26-013192")
+        ac = accno.replace("-", "")
+        cik_str = str(out.get("aapl_cik", 320193))
+        xml_url = f"https://www.sec.gov/Archives/edgar/data/{cik_str}/{ac}/form4.xml"
+        out["xml_url_tested"] = xml_url
+        r4 = _req.get(xml_url, headers=headers, timeout=8)
+        out["xml_status"] = r4.status_code
+        out["xml_preview"] = r4.text[:300] if r4.status_code == 200 else r4.text[:200]
+    except Exception as e:
+        out["xml_error"] = str(e)
+    # Test 4: congressional — QuiverQuant free endpoint
+    try:
+        r5 = _req.get("https://api.quiverquant.com/beta/live/congresstrading", timeout=10)
+        out["quiver_status"] = r5.status_code
+        if r5.status_code == 200:
+            d = r5.json()
+            out["quiver_count"] = len(d)
+            out["quiver_sample"] = d[0] if d else None
+    except Exception as e:
+        out["quiver_error"] = str(e)
     return jsonify(out)
 
 @app.route("/api/insider/ticker")
