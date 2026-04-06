@@ -45,7 +45,7 @@ STRIPE_PRO_PRICE           = "price_1TIXWRBcm3kIFrAZg8gflpnz"
 STRIPE_BASIC_PRICE_YEARLY  = "price_1TIXYWBcm3kIFrAZ2xsrdS1q"
 STRIPE_PRO_PRICE_YEARLY    = "price_1TIXZ5Bcm3kIFrAZe9m5pxzV"
 STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
-STRIPE_PLAN_LIMITS    = {"free": 3, "basic": 10, "pro": -1}  # -1 = unlimited
+STRIPE_PLAN_LIMITS    = {"free": 3, "basic": 8, "pro": -1}  # -1 = unlimited
 APP_URL               = "https://chartedge.trade"
 
 # ── Resend email ──────────────────────────────────────────────────────────────
@@ -2890,7 +2890,7 @@ BILLING_HTML = """<!DOCTYPE html>
     <h3 style="margin-bottom:8px;">Current plan</h3>
     <p style="color:var(--muted);font-size:.9rem;margin-bottom:{% if plan_expires %}12px{% else %}20px{% endif %};">
       {% if plan == 'free' %}3 copies/day · Free forever
-      {% elif plan == 'basic' %}10 copies/day · $9.99/month
+      {% elif plan == 'basic' %}8 copies/day · $9.99/month
       {% else %}Unlimited copies · $15.99/month{% endif %}
     </p>
     {% if plan_expires and plan != 'free' %}
@@ -2995,7 +2995,7 @@ PRICING_HTML = """<!DOCTYPE html>
       <div class="plan-price" id="basic-price">$9.99<span>/mo</span></div>
       <div class="plan-desc">For active traders who copy often.</div>
       <ul class="plan-features">
-        <li>10 copies per day</li><li>All indicators visible</li>
+        <li>8 copies per day</li><li>All indicators visible</li>
         <li>Unusual volume</li><li>Market news</li><li>Ticker news</li><li>Earnings calendar</li><li>Gamma exposure</li><li class="no">LSTM forecast</li><li class="no">Options flow</li><li class="no">Insider trading</li><li class="no">Pre-market scanner</li>
       </ul>
       {% if current_user %}
@@ -3591,7 +3591,7 @@ INDICATORS_HTML = """<!DOCTYPE html>
     <h2 style="margin-bottom:8px">Daily limit reached</h2>
     <p style="color:var(--muted);margin-bottom:24px">Upgrade to copy more indicators every day.</p>
     <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;">
-      <a href="/pricing" class="plan-cta basic-cta">Basic — $9.99/mo<br><small>10 copies/day</small></a>
+      <a href="/pricing" class="plan-cta basic-cta">Basic — $9.99/mo<br><small>8 copies/day</small></a>
       <a href="/pricing" class="plan-cta pro-cta">Pro — $15.99/mo<br><small>Unlimited copies</small></a>
     </div>
     <button onclick="document.getElementById('upgrade-modal').style.display='none'"
