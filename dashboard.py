@@ -4880,13 +4880,19 @@ def api_insider():
                 prim_docs = recent.get("primaryDocument", [])
                 out = []
                 for i, form in enumerate(forms):
-                    if form == "4" and (prim_docs[i] or "").endswith(".xml"):
+                    if form == "4":
+                        doc = prim_docs[i] or ""
+                        # Strip XSLT prefix e.g. "xslF345X06/form4.xml" → "form4.xml"
+                        if "/" in doc:
+                            doc = doc.split("/")[-1]
+                        if not doc.endswith(".xml"):
+                            doc = "form4.xml"
                         out.append({
                             "ticker":   ticker,
                             "date":     dates[i],
                             "cik":      cik,
                             "ac":       accnos[i].replace("-", ""),
-                            "xml_file": prim_docs[i],
+                            "xml_file": doc,
                         })
                         if len(out) >= 3:
                             break
@@ -4953,35 +4959,44 @@ def api_insider():
     except Exception:
         pass
 
-    # ── Part 2: Congressional trades (House STOCK Act disclosures) ──
-    try:
-        house_resp = _req.get(
-            "https://house-stock-watcher-data.s3-us-west-2.amazonaws.com/data/all_transactions.json",
-            timeout=30
-        )
-        house_data = house_resp.json()
-        house_data.sort(key=lambda x: x.get("transaction_date", ""), reverse=True)
-        for h in house_data[:60]:
-            ticker = (h.get("ticker") or "").replace("--", "").strip().upper()
-            if not ticker or ticker in ("", "N/A", "NONE"):
+    # ── Part 2: Congressional trades (Senate + House STOCK Act disclosures) ──
+    congress_urls = [
+        "https://senate-stock-watcher-data.s3-us-west-2.amazonaws.com/aggregate/all_transactions.json",
+        "https://house-stock-watcher-data.s3-us-west-2.amazonaws.com/data/all_transactions.json",
+    ]
+    for congress_url in congress_urls:
+        try:
+            cr = _req.get(congress_url, timeout=30)
+            if cr.status_code != 200:
                 continue
-            txn_type = h.get("type", "")
-            txn_code = "A" if "purchase" in txn_type.lower() else ("D" if "sale" in txn_type.lower() else None)
-            results.append({
-                "company": h.get("asset_description", ticker),
-                "insider": h.get("representative", ""),
-                "role":    "U.S. Representative",
-                "ticker":  ticker,
-                "link":    h.get("disclosure_url", ""),
-                "date":    (h.get("transaction_date") or "")[:10],
-                "shares":  None,
-                "value":   None,
-                "amount":  h.get("amount", ""),
-                "txn":     txn_code,
-                "source":  "congress",
-            })
-    except Exception:
-        pass
+            congress_data = cr.json()
+            if not isinstance(congress_data, list):
+                continue
+            congress_data.sort(key=lambda x: x.get("transaction_date", "") or x.get("transactionDate", ""), reverse=True)
+            for h in congress_data[:60]:
+                ticker = (h.get("ticker") or h.get("asset_ticker") or "").replace("--", "").strip().upper()
+                if not ticker or ticker in ("", "N/A", "NONE"):
+                    continue
+                txn_type = h.get("type", "") or h.get("transaction_type", "")
+                txn_code = "A" if "purchase" in txn_type.lower() else ("D" if "sale" in txn_type.lower() else None)
+                name = h.get("representative") or h.get("first_name", "") + " " + h.get("last_name", "")
+                role = "U.S. Senator" if "senate" in congress_url else "U.S. Representative"
+                results.append({
+                    "company": h.get("asset_description") or h.get("asset_name") or ticker,
+                    "insider": name.strip(),
+                    "role":    role,
+                    "ticker":  ticker,
+                    "link":    h.get("disclosure_url") or h.get("link") or "",
+                    "date":    ((h.get("transaction_date") or h.get("transactionDate") or ""))[:10],
+                    "shares":  None,
+                    "value":   None,
+                    "amount":  h.get("amount", ""),
+                    "txn":     txn_code,
+                    "source":  "congress",
+                })
+            break  # Stop after first successful source
+        except Exception:
+            continue
 
     if not results:
         return jsonify({"error": "No data available — SEC or congressional sources may be temporarily unavailable."}), 503
@@ -5027,17 +5042,20 @@ def api_insider_debug():
     except Exception as e:
         out["submissions_error"] = str(e)
     # Test 3: congressional data
-    try:
-        r3 = _req.get(
-            "https://house-stock-watcher-data.s3-us-west-2.amazonaws.com/data/all_transactions.json",
-            timeout=30
-        )
-        out["congress_status"] = r3.status_code
-        data3 = r3.json()
-        out["congress_count"] = len(data3)
-        out["congress_sample"] = data3[0] if data3 else None
-    except Exception as e:
-        out["congress_error"] = str(e)
+    for curl in [
+        "https://senate-stock-watcher-data.s3-us-west-2.amazonaws.com/aggregate/all_transactions.json",
+        "https://house-stock-watcher-data.s3-us-west-2.amazonaws.com/data/all_transactions.json",
+    ]:
+        try:
+            r3 = _req.get(curl, timeout=30)
+            out[f"congress_{curl.split('/')[2].split('.')[0]}_status"] = r3.status_code
+            if r3.status_code == 200:
+                data3 = r3.json()
+                out["congress_count"] = len(data3)
+                out["congress_sample"] = data3[0] if data3 else None
+                break
+        except Exception as e:
+            out[f"congress_{curl.split('/')[2].split('.')[0]}_error"] = str(e)
     return jsonify(out)
 
 @app.route("/api/insider/ticker")
