@@ -4806,6 +4806,19 @@ TERMS_HTML = """<!DOCTYPE html>
 
 # ── Insider Trading ───────────────────────────────────────────────────────────
 
+_SP500_MAJOR = {
+    "AAPL","MSFT","AMZN","NVDA","GOOGL","GOOG","META","TSLA","BRK.B","BRK.A",
+    "UNH","JPM","JNJ","V","XOM","PG","MA","HD","CVX","MRK","ABBV","LLY",
+    "PEP","KO","AVGO","COST","TMO","MCD","WMT","CSCO","ACN","ABT","CRM","BAC",
+    "DHR","TXN","NEE","PM","LIN","ADBE","NKE","ORCL","AMD","QCOM","HON","UPS",
+    "AMGN","IBM","LOW","SBUX","GS","MS","CAT","RTX","SPGI","BLK","AXP",
+    "ISRG","GILD","MDT","ADP","BKNG","TJX","DE","MMC","SYK","ZTS","CI",
+    "CB","MO","REGN","AON","SO","DUK","CL","BMY","MDLZ","GE","F","GM",
+    "INTC","WFC","C","USB","PNC","TFC","SCHW","COF","BK","STT","DIS","NFLX",
+    "PYPL","UBER","LYFT","SNAP","SPOT","SQ","COIN","HOOD","PLTR","RBLX",
+    "RIVN","LCID","NIO","BIDU","BABA","JD","PDD","TSM","ASML","SAP",
+}
+
 _insider_cache = {"data": [], "ts": 0}
 
 @app.route("/insider")
@@ -4819,7 +4832,8 @@ def insider_page():
 @app.route("/api/insider")
 @login_required
 def api_insider():
-    import time, feedparser, requests as _req
+    import time, re as _re, requests as _req, xml.etree.ElementTree as ET
+    from concurrent.futures import ThreadPoolExecutor
     plan = _get_user_plan(session.get("user_id"))
     if plan != "pro":
         return jsonify({"error": "Pro required"}), 403
@@ -4828,13 +4842,11 @@ def api_insider():
     if now - _insider_cache["ts"] < 600 and _insider_cache["data"]:
         return jsonify(_insider_cache["data"])
 
+    headers = {"User-Agent": "ChartEdge ayden.j.folkerts@gmail.com"}
     results = []
-    try:
-        import re as _re, requests as _req, xml.etree.ElementTree as ET
-        from concurrent.futures import ThreadPoolExecutor
-        headers = {"User-Agent": "ChartEdge ayden.j.folkerts@gmail.com"}
 
-        # Use SEC EDGAR quarterly full-index (reliable, always up-to-date)
+    try:
+        # ── Part 1: SEC Form 4 filings filtered to major S&P 500 companies ──
         today_d = date.today()
         q = (today_d.month - 1) // 3 + 1
         entries = []
@@ -4856,26 +4868,27 @@ def api_insider():
                 break
 
         entries.sort(key=lambda x: x["date"], reverse=True)
-        top = entries[:150]
+        top = entries[:300]
 
-        # Build base results — extract CIK from filename path for reliability
         base = {}
         for e in top:
-            parts     = e["fname"].split("/")           # ['edgar','data','66740','0000066740-26-000001.txt']
-            path_cik  = parts[2] if len(parts) >= 4 else e["cik"]
-            accno_txt = parts[-1]
-            accno     = accno_txt[:-4] if accno_txt.endswith(".txt") else accno_txt
+            parts       = e["fname"].split("/")
+            path_cik    = parts[2] if len(parts) >= 4 else e["cik"]
+            accno_txt   = parts[-1]
+            accno       = accno_txt[:-4] if accno_txt.endswith(".txt") else accno_txt
             accno_clean = accno.replace("-", "")
-            key = accno
-            base[key] = {
-                "title":      e["company"],
-                "link":       f"https://www.sec.gov/Archives/edgar/data/{path_cik}/{accno_clean}/",
-                "date":       e["date"],
-                "summary":    "",
-                "shares":     None,
-                "value":      None,
-                "txn":        None,
-                "_cik":       path_cik,
+            base[accno] = {
+                "company":      e["company"],
+                "insider":      None,
+                "role":         None,
+                "ticker":       None,
+                "link":         f"https://www.sec.gov/Archives/edgar/data/{path_cik}/{accno_clean}/",
+                "date":         e["date"],
+                "shares":       None,
+                "value":        None,
+                "txn":          None,
+                "source":       "corporate",
+                "_cik":         path_cik,
                 "_accno_clean": accno_clean,
             }
 
@@ -4883,21 +4896,19 @@ def api_insider():
             r = base[key]
             try:
                 cik, ac = r["_cik"], r["_accno_clean"]
-                # Use data.sec.gov submissions to find the primary XML document
                 cik_padded = cik.zfill(10)
                 subs = _req.get(
                     f"https://data.sec.gov/submissions/CIK{cik_padded}.json",
                     headers=headers, timeout=8
                 ).json()
-                recent = subs.get("filings", {}).get("recent", {})
-                accnos   = recent.get("accessionNumber", [])
+                recent    = subs.get("filings", {}).get("recent", {})
+                accnos    = recent.get("accessionNumber", [])
                 prim_docs = recent.get("primaryDocument", [])
-                xml_file = None
+                xml_file  = None
                 for i, a in enumerate(accnos):
                     if a.replace("-", "") == ac:
                         xml_file = prim_docs[i]
                         break
-                # Fallback: try form4.xml directly
                 if not xml_file:
                     xml_file = "form4.xml"
                 if not xml_file.endswith(".xml"):
@@ -4907,6 +4918,26 @@ def api_insider():
                     headers=headers, timeout=8
                 ).text
                 root = ET.fromstring(xml_text)
+
+                # Filter to major companies only
+                ticker = (root.findtext(".//issuerTradingSymbol") or "").strip().upper()
+                if ticker not in _SP500_MAJOR:
+                    r["_skip"] = True
+                    return
+
+                r["company"] = root.findtext(".//issuerName") or r["company"]
+                r["ticker"]  = ticker
+                r["insider"] = root.findtext(".//rptOwnerName") or ""
+
+                role_parts = []
+                if root.findtext(".//isDirector") == "1":
+                    role_parts.append("Director")
+                if root.findtext(".//isOfficer") == "1":
+                    role_parts.append(root.findtext(".//officerTitle") or "Officer")
+                if root.findtext(".//isTenPercentOwner") == "1":
+                    role_parts.append("10% Owner")
+                r["role"] = ", ".join(role_parts) or "Insider"
+
                 sh_tot, val_tot, txn_code = 0.0, 0.0, None
                 for txn in root.findall(".//nonDerivativeTransaction"):
                     sh = txn.find(".//transactionShares/value")
@@ -4925,13 +4956,47 @@ def api_insider():
             except Exception:
                 pass
 
-        # Only enrich the first page (15) to keep load time fast
-        first_page_keys = list(base.keys())[:15]
-        with ThreadPoolExecutor(max_workers=5) as pool:
-            list(pool.map(_enrich, first_page_keys))
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            list(pool.map(_enrich, list(base.keys())))
 
-        results = [{k: v for k, v in r.items() if not k.startswith("_")} for r in base.values()]
-        results.sort(key=lambda x: x["date"], reverse=True)
+        results = [
+            {k: v for k, v in r.items() if not k.startswith("_")}
+            for r in base.values()
+            if not r.get("_skip") and r.get("ticker")
+        ]
+
+        # ── Part 2: Congressional trades (House STOCK Act disclosures) ──
+        try:
+            house_resp = _req.get(
+                "https://house-stock-watcher-data.s3-us-west-2.amazonaws.com/data/all_transactions.json",
+                timeout=15
+            )
+            house_data = house_resp.json()
+            house_data.sort(key=lambda x: x.get("transaction_date", ""), reverse=True)
+            for h in house_data[:60]:
+                ticker = (h.get("ticker") or "").replace("--", "").strip().upper()
+                if not ticker or ticker in ("", "N/A", "NONE"):
+                    continue
+                txn_type = h.get("type", "")
+                txn_code = "A" if "purchase" in txn_type.lower() else ("D" if "sale" in txn_type.lower() else None)
+                results.append({
+                    "company": h.get("asset_description", ticker),
+                    "insider": h.get("representative", ""),
+                    "role":    "U.S. Representative",
+                    "ticker":  ticker,
+                    "link":    h.get("disclosure_url", ""),
+                    "date":    (h.get("transaction_date") or "")[:10],
+                    "shares":  None,
+                    "value":   None,
+                    "amount":  h.get("amount", ""),
+                    "txn":     txn_code,
+                    "source":  "congress",
+                })
+        except Exception:
+            pass
+
+        results.sort(key=lambda x: x.get("date", ""), reverse=True)
+
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -5014,7 +5079,7 @@ INSIDER_HTML = """<!DOCTYPE html>
 
 <div class="page">
   <h1>Insider Trading <span>Feed</span> <span class="pro-badge">PRO</span></h1>
-  <p class="sub">SEC Form 4 filings — directors and officers buying or selling shares</p>
+  <p class="sub">SEC Form 4 filings for major companies · U.S. Congressional STOCK Act disclosures</p>
 
   <div class="search-row">
     <input type="text" id="ticker-input" placeholder="Search by ticker (e.g. AAPL)" onkeydown="if(event.key==='Enter')searchTicker()">
@@ -5045,18 +5110,26 @@ function renderTable(filings, title) {
   var page  = filings.slice(start, start + PAGE_SIZE);
 
   var html = title ? '<h2 style="font-size:1rem;margin-bottom:14px;color:var(--muted);">' + title + '</h2>' : '';
-  html += '<table class="filing-table"><thead><tr><th>Insider / Issuer</th><th>Date</th><th>Shares</th><th>Value</th><th>Link</th></tr></thead><tbody>';
+  html += '<table class="filing-table"><thead><tr><th>Insider</th><th>Company</th><th>Role</th><th>Action</th><th>Value</th><th>Date</th><th>Link</th></tr></thead><tbody>';
   for (var i = 0; i < page.length; i++) {
     var f = page[i];
     var txnColor = f.txn === 'A' ? 'var(--green)' : f.txn === 'D' ? 'var(--red)' : 'var(--muted)';
-    var txnLabel = f.txn === 'A' ? '▲ Buy' : f.txn === 'D' ? '▼ Sell' : '';
-    var sharesStr = f.shares != null ? (f.shares).toLocaleString() + (txnLabel ? ' <span style="color:' + txnColor + ';font-size:.75rem">' + txnLabel + '</span>' : '') : '—';
-    var valueStr  = f.value  != null ? '$' + Number(f.value).toLocaleString() : '—';
-    html += '<tr><td>' + (f.title || '—') + '</td>';
-    html += '<td class="date-badge">' + (f.date || '—') + '</td>';
+    var txnLabel = f.txn === 'A' ? '▲ Buy' : f.txn === 'D' ? '▼ Sell' : '—';
+    var sharesStr = f.shares != null ? (f.shares).toLocaleString() + ' shares' : (f.amount || txnLabel);
+    var valueStr  = f.value  != null ? '$' + Number(f.value).toLocaleString() : (f.amount ? f.amount : '—');
+    var sourceBadge = f.source === 'congress'
+      ? '<span style="background:#1a2a4a;color:#58a6ff;border:1px solid #58a6ff40;border-radius:4px;font-size:.68rem;font-weight:700;padding:1px 6px;margin-left:6px;">CONGRESS</span>'
+      : '<span style="background:#1a2a1a;color:#3fb950;border:1px solid #3fb95040;border-radius:4px;font-size:.68rem;font-weight:700;padding:1px 6px;margin-left:6px;">SEC</span>';
+    var companyStr = (f.ticker ? '<strong>' + f.ticker + '</strong> · ' : '') + (f.company || '—');
+    html += '<tr>';
+    html += '<td>' + (f.insider || '—') + sourceBadge + '</td>';
+    html += '<td>' + companyStr + '</td>';
+    html += '<td style="color:var(--muted);font-size:.8rem">' + (f.role || '—') + '</td>';
     html += '<td style="font-weight:600;color:' + txnColor + '">' + sharesStr + '</td>';
     html += '<td style="color:' + txnColor + '">' + valueStr + '</td>';
-    html += '<td><a class="filing-link" href="' + (f.link || '#') + '" target="_blank" rel="noopener">View →</a></td></tr>';
+    html += '<td class="date-badge">' + (f.date || '—') + '</td>';
+    html += '<td><a class="filing-link" href="' + (f.link || '#') + '" target="_blank" rel="noopener">View →</a></td>';
+    html += '</tr>';
   }
   html += '</tbody></table>';
   html += '<div style="display:flex;align-items:center;gap:12px;margin-top:16px;font-size:.85rem;">';
