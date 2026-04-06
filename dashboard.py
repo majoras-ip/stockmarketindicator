@@ -5411,15 +5411,23 @@ function sort(col) {
 async function loadData(force) {
   if (!force) document.getElementById('content').innerHTML = '<div class="loading">Loading scanner…</div>';
   try {
-    var res  = await fetch('/api/premarket');
-    var data = await res.json();
+    var controller = new AbortController();
+    var tid = setTimeout(function() { controller.abort(); }, 20000);
+    var res  = await fetch('/api/premarket', {signal: controller.signal});
+    clearTimeout(tid);
+    var text = await res.text();
+    var data;
+    try { data = JSON.parse(text); } catch(je) {
+      document.getElementById('content').innerHTML = '<p style="color:var(--red)">Bad response (HTTP ' + res.status + '): ' + text.slice(0,200) + '</p>';
+      return;
+    }
     if (data.error) { document.getElementById('content').innerHTML = '<p style="color:var(--red)">Error: ' + data.error + '</p>'; return; }
     allData = data;
     var now = new Date();
     document.getElementById('updated-label').textContent = 'Updated ' + now.toLocaleTimeString();
     renderTable();
   } catch(e) {
-    document.getElementById('content').innerHTML = '<p style="color:var(--red)">Failed to load.</p>';
+    document.getElementById('content').innerHTML = '<p style="color:var(--red)">Request failed: ' + e.message + '</p>';
   }
 }
 
