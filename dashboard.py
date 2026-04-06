@@ -5238,50 +5238,7 @@ loadAll();
 
 # ── Pre/After Market Scanner ──────────────────────────────────────────────────
 
-import threading as _threading
-
-_premarket_cache    = {"data": [], "ts": 0}
-_premarket_fetching = _threading.Event()
-
-def _premarket_background_fetch():
-    import time, yfinance as yf, pandas as pd
-    try:
-        raw = yf.download(" ".join(_VOLUME_TICKERS), period="5d", interval="1d",
-                          group_by="ticker", auto_adjust=True, progress=False)
-        results = []
-        for ticker in _VOLUME_TICKERS:
-            try:
-                if isinstance(raw.columns, pd.MultiIndex):
-                    df = raw[ticker] if ticker in raw.columns.get_level_values(0) else None
-                else:
-                    df = raw
-                if df is None or len(df) < 2:
-                    continue
-                df = df.dropna(subset=["Close"])
-                if len(df) < 2:
-                    continue
-                price = float(df["Close"].iloc[-1])
-                prev  = float(df["Close"].iloc[-2])
-                if not prev or not price:
-                    continue
-                chg     = round(price - prev, 2)
-                chg_pct = round((chg / prev) * 100, 2)
-                results.append({
-                    "ticker":     ticker,
-                    "price":      round(price, 2),
-                    "prev":       round(prev, 2),
-                    "change":     chg,
-                    "change_pct": chg_pct,
-                })
-            except Exception:
-                continue
-        results.sort(key=lambda x: abs(x["change_pct"]), reverse=True)
-        _premarket_cache["data"] = results
-        _premarket_cache["ts"]   = time.time()
-    except Exception:
-        pass
-    finally:
-        _premarket_fetching.clear()
+_premarket_cache = {"data": [], "ts": 0}
 
 @app.route("/premarket")
 @login_required
@@ -5294,7 +5251,8 @@ def premarket_page():
 @app.route("/api/premarket")
 @login_required
 def api_premarket():
-    import time
+    import time, requests as _req
+    from concurrent.futures import ThreadPoolExecutor, as_completed
     plan = _get_user_plan(session.get("user_id"))
     if plan != "pro":
         return jsonify({"error": "Pro required"}), 403
@@ -5303,15 +5261,39 @@ def api_premarket():
     if now - _premarket_cache["ts"] < 300 and _premarket_cache["data"]:
         return jsonify(_premarket_cache["data"])
 
-    # Kick off background fetch if not already running
-    if not _premarket_fetching.is_set():
-        _premarket_fetching.set()
-        _threading.Thread(target=_premarket_background_fetch, daemon=True).start()
-
-    # Return stale cache while fetching, or loading signal if first run
-    if _premarket_cache["data"]:
-        return jsonify(_premarket_cache["data"])
-    return jsonify({"loading": True})
+    # Fetch quotes from Yahoo Finance query API — single HTTP call, no yfinance overhead
+    try:
+        tickers_str = ",".join(_VOLUME_TICKERS)
+        resp = _req.get(
+            f"https://query1.finance.yahoo.com/v7/finance/quote?symbols={tickers_str}&fields=symbol,regularMarketPrice,regularMarketPreviousClose,regularMarketChangePercent,regularMarketChange",
+            headers={"User-Agent": "Mozilla/5.0"},
+            timeout=15,
+        )
+        quotes = resp.json().get("quoteResponse", {}).get("result", [])
+        results = []
+        for q in quotes:
+            try:
+                price    = q.get("regularMarketPrice")
+                prev     = q.get("regularMarketPreviousClose")
+                chg      = q.get("regularMarketChange")
+                chg_pct  = q.get("regularMarketChangePercent")
+                if price is None or prev is None:
+                    continue
+                results.append({
+                    "ticker":     q["symbol"],
+                    "price":      round(float(price), 2),
+                    "prev":       round(float(prev), 2),
+                    "change":     round(float(chg or 0), 2),
+                    "change_pct": round(float(chg_pct or 0), 2),
+                })
+            except Exception:
+                continue
+        results.sort(key=lambda x: abs(x["change_pct"]), reverse=True)
+        _premarket_cache["data"] = results
+        _premarket_cache["ts"]   = now
+        return jsonify(results)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 PREMARKET_HTML = """<!DOCTYPE html>
@@ -5378,7 +5360,6 @@ var allData = [];
 var currentFilter = 'all';
 var sortCol = 'change_pct';
 var sortDir = -1;
-var _TICKER_COUNT = 95;
 
 function setFilter(f, btn) {
   currentFilter = f;
@@ -5432,11 +5413,6 @@ async function loadData(force) {
   try {
     var res  = await fetch('/api/premarket');
     var data = await res.json();
-    if (data.loading) {
-      document.getElementById('content').innerHTML = '<p style="color:var(--muted);padding:20px 0;">Fetching data for ' + String(_TICKER_COUNT) + ' tickers — this takes ~30 seconds on first load. Auto-refreshing…</p>';
-      setTimeout(function() { loadData(true); }, 15000);
-      return;
-    }
     if (data.error) { document.getElementById('content').innerHTML = '<p style="color:var(--red)">Error: ' + data.error + '</p>'; return; }
     allData = data;
     var now = new Date();
