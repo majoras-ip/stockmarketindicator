@@ -5238,34 +5238,17 @@ loadAll();
 
 # ── Pre/After Market Scanner ──────────────────────────────────────────────────
 
-_premarket_cache = {"data": [], "ts": 0}
+import threading as _threading
 
-@app.route("/premarket")
-@login_required
-def premarket_page():
-    plan = _get_user_plan(session.get("user_id"))
-    if plan != "pro":
-        return redirect("/pricing?upgrade=premarket")
-    return render_template_string(PREMARKET_HTML, current_user=current_user())
+_premarket_cache    = {"data": [], "ts": 0}
+_premarket_fetching = _threading.Event()
 
-@app.route("/api/premarket")
-@login_required
-def api_premarket():
-    import time, yfinance as yf
-    plan = _get_user_plan(session.get("user_id"))
-    if plan != "pro":
-        return jsonify({"error": "Pro required"}), 403
-
-    now = time.time()
-    if now - _premarket_cache["ts"] < 300 and _premarket_cache["data"]:
-        return jsonify(_premarket_cache["data"])
-
-    results = []
+def _premarket_background_fetch():
+    import time, yfinance as yf, pandas as pd
     try:
-        import pandas as pd
         raw = yf.download(" ".join(_VOLUME_TICKERS), period="5d", interval="1d",
                           group_by="ticker", auto_adjust=True, progress=False)
-
+        results = []
         for ticker in _VOLUME_TICKERS:
             try:
                 if isinstance(raw.columns, pd.MultiIndex):
@@ -5293,12 +5276,42 @@ def api_premarket():
             except Exception:
                 continue
         results.sort(key=lambda x: abs(x["change_pct"]), reverse=True)
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        _premarket_cache["data"] = results
+        _premarket_cache["ts"]   = time.time()
+    except Exception:
+        pass
+    finally:
+        _premarket_fetching.clear()
 
-    _premarket_cache["data"] = results
-    _premarket_cache["ts"]   = now
-    return jsonify(results)
+@app.route("/premarket")
+@login_required
+def premarket_page():
+    plan = _get_user_plan(session.get("user_id"))
+    if plan != "pro":
+        return redirect("/pricing?upgrade=premarket")
+    return render_template_string(PREMARKET_HTML, current_user=current_user())
+
+@app.route("/api/premarket")
+@login_required
+def api_premarket():
+    import time
+    plan = _get_user_plan(session.get("user_id"))
+    if plan != "pro":
+        return jsonify({"error": "Pro required"}), 403
+
+    now = time.time()
+    if now - _premarket_cache["ts"] < 300 and _premarket_cache["data"]:
+        return jsonify(_premarket_cache["data"])
+
+    # Kick off background fetch if not already running
+    if not _premarket_fetching.is_set():
+        _premarket_fetching.set()
+        _threading.Thread(target=_premarket_background_fetch, daemon=True).start()
+
+    # Return stale cache while fetching, or loading signal if first run
+    if _premarket_cache["data"]:
+        return jsonify(_premarket_cache["data"])
+    return jsonify({"loading": True})
 
 
 PREMARKET_HTML = """<!DOCTYPE html>
@@ -5365,6 +5378,7 @@ var allData = [];
 var currentFilter = 'all';
 var sortCol = 'change_pct';
 var sortDir = -1;
+var _TICKER_COUNT = 95;
 
 function setFilter(f, btn) {
   currentFilter = f;
@@ -5418,6 +5432,11 @@ async function loadData(force) {
   try {
     var res  = await fetch('/api/premarket');
     var data = await res.json();
+    if (data.loading) {
+      document.getElementById('content').innerHTML = '<p style="color:var(--muted);padding:20px 0;">Fetching data for ' + String(_TICKER_COUNT) + ' tickers — this takes ~30 seconds on first load. Auto-refreshing…</p>';
+      setTimeout(function() { loadData(true); }, 15000);
+      return;
+    }
     if (data.error) { document.getElementById('content').innerHTML = '<p style="color:var(--red)">Error: ' + data.error + '</p>'; return; }
     allData = data;
     var now = new Date();
