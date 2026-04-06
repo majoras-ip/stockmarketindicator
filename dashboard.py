@@ -4832,7 +4832,7 @@ def insider_page():
 @app.route("/api/insider")
 @login_required
 def api_insider():
-    import time, re as _re, requests as _req, xml.etree.ElementTree as ET
+    import time, requests as _req, xml.etree.ElementTree as ET
     from concurrent.futures import ThreadPoolExecutor
     plan = _get_user_plan(session.get("user_id"))
     if plan != "pro":
@@ -4845,83 +4845,69 @@ def api_insider():
     headers = {"User-Agent": "ChartEdge ayden.j.folkerts@gmail.com"}
     results = []
 
+    # ── Part 1: SEC Form 4s — look up company CIKs first, then pull their filings ──
     try:
-        # ── Part 1: SEC Form 4 filings filtered to major S&P 500 companies ──
-        today_d = date.today()
-        q = (today_d.month - 1) // 3 + 1
-        entries = []
-        for qtr, yr in [(q, today_d.year), (q - 1 if q > 1 else 4, today_d.year if q > 1 else today_d.year - 1)]:
+        # SEC's official ticker→CIK map (one request, instant lookup after)
+        tickers_data = _req.get(
+            "https://www.sec.gov/files/company_tickers.json",
+            headers=headers, timeout=10
+        ).json()
+        cik_map = {}  # ticker → zero-padded CIK
+        for entry in tickers_data.values():
+            t = (entry.get("ticker") or "").upper()
+            if t in _SP500_MAJOR:
+                cik_map[t] = str(entry["cik_str"]).zfill(10)
+
+        # Query submissions for each target company to find their recent Form 4 filings
+        TARGET_TICKERS = [t for t in [
+            "AAPL","MSFT","NVDA","AMZN","META","GOOGL","TSLA","JPM","BAC","GS",
+            "WFC","MS","V","MA","XOM","CVX","JNJ","LLY","UNH","AMD",
+            "INTC","CSCO","ORCL","DIS","NFLX","COIN","PLTR","GM","F","GE",
+        ] if t in cik_map]
+
+        def _get_recent_form4s(ticker):
+            cik_padded = cik_map[ticker]
+            cik        = cik_padded.lstrip("0") or "0"
             try:
-                idx_resp = _req.get(
-                    f"https://www.sec.gov/Archives/edgar/full-index/{yr}/QTR{qtr}/form.idx",
-                    headers=headers, timeout=20
-                )
-                for line in idx_resp.text.split("\n"):
-                    m = _re.match(r'^4\s{2,}(.+?)\s{2,}(\d+)\s+(\d{4}-\d{2}-\d{2})\s+(edgar/\S+)', line)
-                    if m:
-                        company, cik, filed, fname = m.groups()
-                        entries.append({"company": company.strip(), "cik": cik.lstrip("0") or "0",
-                                        "date": filed, "fname": fname})
-            except Exception:
-                pass
-            if entries:
-                break
-
-        entries.sort(key=lambda x: x["date"], reverse=True)
-        top = entries[:100]
-
-        base = {}
-        for e in top:
-            parts       = e["fname"].split("/")
-            path_cik    = parts[2] if len(parts) >= 4 else e["cik"]
-            accno_txt   = parts[-1]
-            accno       = accno_txt[:-4] if accno_txt.endswith(".txt") else accno_txt
-            accno_clean = accno.replace("-", "")
-            base[accno] = {
-                "company":      e["company"],
-                "insider":      None,
-                "role":         None,
-                "ticker":       None,
-                "link":         f"https://www.sec.gov/Archives/edgar/data/{path_cik}/{accno_clean}/",
-                "date":         e["date"],
-                "shares":       None,
-                "value":        None,
-                "txn":          None,
-                "source":       "corporate",
-                "_cik":         path_cik,
-                "_accno_clean": accno_clean,
-            }
-
-        def _enrich(key):
-            r = base[key]
-            try:
-                cik, ac = r["_cik"], r["_accno_clean"]
-                # Try common Form 4 XML filenames directly — avoids extra submissions API call
-                xml_text = None
-                for candidate in ("form4.xml", f"{ac}.xml"):
-                    try:
-                        resp = _req.get(
-                            f"https://www.sec.gov/Archives/edgar/data/{cik}/{ac}/{candidate}",
-                            headers=headers, timeout=6
-                        )
-                        if resp.status_code == 200 and "<ownershipDocument" in resp.text:
-                            xml_text = resp.text
+                subs = _req.get(
+                    f"https://data.sec.gov/submissions/CIK{cik_padded}.json",
+                    headers=headers, timeout=8
+                ).json()
+                recent    = subs.get("filings", {}).get("recent", {})
+                forms     = recent.get("form", [])
+                accnos    = recent.get("accessionNumber", [])
+                dates     = recent.get("filingDate", [])
+                prim_docs = recent.get("primaryDocument", [])
+                out = []
+                for i, form in enumerate(forms):
+                    if form == "4" and (prim_docs[i] or "").endswith(".xml"):
+                        out.append({
+                            "ticker":   ticker,
+                            "date":     dates[i],
+                            "cik":      cik,
+                            "ac":       accnos[i].replace("-", ""),
+                            "xml_file": prim_docs[i],
+                        })
+                        if len(out) >= 3:
                             break
-                    except Exception:
-                        pass
-                if not xml_text:
-                    return
+                return out
+            except Exception:
+                return []
+
+        with ThreadPoolExecutor(max_workers=5) as pool:
+            batches = list(pool.map(_get_recent_form4s, TARGET_TICKERS))
+        all_filings = [f for batch in batches for f in batch]
+
+        def _parse_form4(f):
+            try:
+                xml_text = _req.get(
+                    f"https://www.sec.gov/Archives/edgar/data/{f['cik']}/{f['ac']}/{f['xml_file']}",
+                    headers=headers, timeout=8
+                ).text
                 root = ET.fromstring(xml_text)
 
-                # Filter to major companies only
-                ticker = (root.findtext(".//issuerTradingSymbol") or "").strip().upper()
-                if ticker not in _SP500_MAJOR:
-                    r["_skip"] = True
-                    return
-
-                r["company"] = root.findtext(".//issuerName") or r["company"]
-                r["ticker"]  = ticker
-                r["insider"] = root.findtext(".//rptOwnerName") or ""
+                company = root.findtext(".//issuerName") or f["ticker"]
+                insider = root.findtext(".//rptOwnerName") or ""
 
                 role_parts = []
                 if root.findtext(".//isDirector") == "1":
@@ -4930,7 +4916,7 @@ def api_insider():
                     role_parts.append(root.findtext(".//officerTitle") or "Officer")
                 if root.findtext(".//isTenPercentOwner") == "1":
                     role_parts.append("10% Owner")
-                r["role"] = ", ".join(role_parts) or "Insider"
+                role = ", ".join(role_parts) or "Insider"
 
                 sh_tot, val_tot, txn_code = 0.0, 0.0, None
                 for txn in root.findall(".//nonDerivativeTransaction"):
@@ -4944,56 +4930,63 @@ def api_insider():
                             val_tot += s * float(pr.text)
                         if txn_code is None and cd is not None:
                             txn_code = cd.text
-                r["shares"] = int(sh_tot) if sh_tot else None
-                r["value"]  = round(val_tot) if val_tot else None
-                r["txn"]    = txn_code
+
+                return {
+                    "company": company,
+                    "insider": insider,
+                    "role":    role,
+                    "ticker":  f["ticker"],
+                    "link":    f"https://www.sec.gov/Archives/edgar/data/{f['cik']}/{f['ac']}/",
+                    "date":    f["date"],
+                    "shares":  int(sh_tot) if sh_tot else None,
+                    "value":   round(val_tot) if val_tot else None,
+                    "txn":     txn_code,
+                    "source":  "corporate",
+                }
             except Exception:
-                pass
+                return None
 
         with ThreadPoolExecutor(max_workers=5) as pool:
-            list(pool.map(_enrich, list(base.keys())))
+            parsed = list(pool.map(_parse_form4, all_filings))
+        results = [r for r in parsed if r]
 
-        results = [
-            {k: v for k, v in r.items() if not k.startswith("_")}
-            for r in base.values()
-            if not r.get("_skip") and r.get("ticker")
-        ]
+    except Exception:
+        pass
 
-        # ── Part 2: Congressional trades (House STOCK Act disclosures) ──
-        try:
-            house_resp = _req.get(
-                "https://house-stock-watcher-data.s3-us-west-2.amazonaws.com/data/all_transactions.json",
-                timeout=30
-            )
-            house_data = house_resp.json()
-            house_data.sort(key=lambda x: x.get("transaction_date", ""), reverse=True)
-            for h in house_data[:60]:
-                ticker = (h.get("ticker") or "").replace("--", "").strip().upper()
-                if not ticker or ticker in ("", "N/A", "NONE"):
-                    continue
-                txn_type = h.get("type", "")
-                txn_code = "A" if "purchase" in txn_type.lower() else ("D" if "sale" in txn_type.lower() else None)
-                results.append({
-                    "company": h.get("asset_description", ticker),
-                    "insider": h.get("representative", ""),
-                    "role":    "U.S. Representative",
-                    "ticker":  ticker,
-                    "link":    h.get("disclosure_url", ""),
-                    "date":    (h.get("transaction_date") or "")[:10],
-                    "shares":  None,
-                    "value":   None,
-                    "amount":  h.get("amount", ""),
-                    "txn":     txn_code,
-                    "source":  "congress",
-                })
-        except Exception:
-            pass
+    # ── Part 2: Congressional trades (House STOCK Act disclosures) ──
+    try:
+        house_resp = _req.get(
+            "https://house-stock-watcher-data.s3-us-west-2.amazonaws.com/data/all_transactions.json",
+            timeout=30
+        )
+        house_data = house_resp.json()
+        house_data.sort(key=lambda x: x.get("transaction_date", ""), reverse=True)
+        for h in house_data[:60]:
+            ticker = (h.get("ticker") or "").replace("--", "").strip().upper()
+            if not ticker or ticker in ("", "N/A", "NONE"):
+                continue
+            txn_type = h.get("type", "")
+            txn_code = "A" if "purchase" in txn_type.lower() else ("D" if "sale" in txn_type.lower() else None)
+            results.append({
+                "company": h.get("asset_description", ticker),
+                "insider": h.get("representative", ""),
+                "role":    "U.S. Representative",
+                "ticker":  ticker,
+                "link":    h.get("disclosure_url", ""),
+                "date":    (h.get("transaction_date") or "")[:10],
+                "shares":  None,
+                "value":   None,
+                "amount":  h.get("amount", ""),
+                "txn":     txn_code,
+                "source":  "congress",
+            })
+    except Exception:
+        pass
 
-        results.sort(key=lambda x: x.get("date", ""), reverse=True)
+    if not results:
+        return jsonify({"error": "No data available — SEC or congressional sources may be temporarily unavailable."}), 503
 
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
+    results.sort(key=lambda x: x.get("date", ""), reverse=True)
     _insider_cache["data"] = results
     _insider_cache["ts"]   = now
     return jsonify(results)
