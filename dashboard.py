@@ -4991,6 +4991,55 @@ def api_insider():
     _insider_cache["ts"]   = now
     return jsonify(results)
 
+@app.route("/api/insider/debug")
+@login_required
+def api_insider_debug():
+    import time, requests as _req, xml.etree.ElementTree as ET
+    from concurrent.futures import ThreadPoolExecutor
+    plan = _get_user_plan(session.get("user_id"))
+    if plan != "pro":
+        return jsonify({"error": "Pro required"}), 403
+    headers = {"User-Agent": "ChartEdge ayden.j.folkerts@gmail.com"}
+    out = {}
+    # Test 1: company_tickers.json
+    try:
+        r = _req.get("https://www.sec.gov/files/company_tickers.json", headers=headers, timeout=10)
+        out["tickers_status"] = r.status_code
+        data = r.json()
+        aapl = next((e for e in data.values() if e.get("ticker","").upper() == "AAPL"), None)
+        out["aapl_cik"] = aapl["cik_str"] if aapl else "not found"
+    except Exception as e:
+        out["tickers_error"] = str(e)
+    # Test 2: submissions for AAPL
+    try:
+        cik = str(out.get("aapl_cik", "320193")).zfill(10)
+        r2 = _req.get(f"https://data.sec.gov/submissions/CIK{cik}.json", headers=headers, timeout=8)
+        out["submissions_status"] = r2.status_code
+        recent = r2.json().get("filings", {}).get("recent", {})
+        forms = recent.get("form", [])
+        form4_idx = next((i for i, f in enumerate(forms) if f == "4"), None)
+        if form4_idx is not None:
+            out["aapl_form4_date"] = recent["filingDate"][form4_idx]
+            out["aapl_form4_doc"]  = recent["primaryDocument"][form4_idx]
+            out["aapl_form4_accno"] = recent["accessionNumber"][form4_idx]
+        else:
+            out["aapl_form4"] = "none found"
+    except Exception as e:
+        out["submissions_error"] = str(e)
+    # Test 3: congressional data
+    try:
+        r3 = _req.get(
+            "https://house-stock-watcher-data.s3-us-west-2.amazonaws.com/data/all_transactions.json",
+            timeout=30
+        )
+        out["congress_status"] = r3.status_code
+        data3 = r3.json()
+        out["congress_count"] = len(data3)
+        out["congress_sample"] = data3[0] if data3 else None
+    except Exception as e:
+        out["congress_error"] = str(e)
+    return jsonify(out)
+
 @app.route("/api/insider/ticker")
 @login_required
 def api_insider_ticker():
