@@ -2535,6 +2535,116 @@ def heatmap_api():
     return jsonify({"sectors": _HEATMAP_SECTORS, "stocks": _heatmap_cache["data"], "ts": int(_heatmap_cache["ts"])})
 
 
+# ── Trump Tracker ────────────────────────────────────────────────────────────
+
+_TRUMP_INSTRUMENTS = [
+    {"label": "S&P 500 (SPY)",       "ticker": "SPY"},
+    {"label": "NASDAQ 100 (QQQ)",    "ticker": "QQQ"},
+    {"label": "Dow Jones (DIA)",      "ticker": "DIA"},
+    {"label": "Russell 2000 (IWM)",  "ticker": "IWM"},
+    {"label": "Trump Media (DJT)",   "ticker": "DJT"},
+    {"label": "Bonds 20Y (TLT)",     "ticker": "TLT"},
+    {"label": "Gold (GLD)",           "ticker": "GLD"},
+    {"label": "Oil (USO)",            "ticker": "USO"},
+    {"label": "Energy (XLE)",         "ticker": "XLE"},
+    {"label": "Financials (XLF)",    "ticker": "XLF"},
+    {"label": "Tech (XLK)",           "ticker": "XLK"},
+    {"label": "VIX (UVIX)",           "ticker": "UVIX"},
+    {"label": "Bitcoin (IBIT)",       "ticker": "IBIT"},
+    {"label": "China (FXI)",          "ticker": "FXI"},
+]
+
+def _fetch_trump_news():
+    import feedparser, re, calendar
+    keywords = ["trump", "tariff", "white house", "executive order", "maga", "trade war",
+                "mar-a-lago", "truth social", "federal reserve", "doge", "elon musk"]
+    articles = []
+    for source, url in NEWS_FEEDS:
+        try:
+            feed = feedparser.parse(url)
+            for entry in feed.entries[:30]:
+                title   = entry.get("title", "") or ""
+                summary = re.sub(r"<[^>]+>", "", getattr(entry, "summary", "") or "")[:300]
+                combined = (title + " " + summary).lower()
+                if not any(k in combined for k in keywords):
+                    continue
+                ts = 0
+                published = ""
+                if hasattr(entry, "published_parsed") and entry.published_parsed:
+                    ts = calendar.timegm(entry.published_parsed)
+                    published = _fmt_ts(ts)
+                articles.append({
+                    "source":    source,
+                    "title":     title,
+                    "link":      entry.get("link", "#"),
+                    "published": published,
+                    "summary":   summary[:200],
+                    "ts":        ts,
+                })
+        except Exception:
+            pass
+    articles.sort(key=lambda a: a["ts"], reverse=True)
+    return articles[:40]
+
+
+@app.route("/trump")
+def trump_page():
+    return render_template_string(TRUMP_HTML, current_user=current_user())
+
+
+@app.route("/api/trump/news")
+def trump_news_api():
+    try:
+        return jsonify({"articles": _fetch_trump_news()})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/trump/chart")
+def trump_chart_api():
+    import yfinance as yf
+    import numpy as np
+    ticker = request.args.get("ticker", "SPY").upper()[:10]
+    period = request.args.get("period", "1W")
+
+    period_map  = {"1D": ("1d",  "5m"),  "1W": ("5d",  "30m"),
+                   "1M": ("1mo", "1d"),  "3M": ("3mo", "1d")}
+    yf_period, interval = period_map.get(period, ("5d", "30m"))
+
+    try:
+        raw = yf.download(ticker, period=yf_period, interval=interval,
+                          progress=False, auto_adjust=True)
+        if raw is None or len(raw) < 2:
+            return jsonify({"error": "No data"}), 404
+
+        if isinstance(raw.columns, __import__("pandas").MultiIndex):
+            raw.columns = raw.columns.get_level_values(0)
+
+        closes = raw["Close"].dropna()
+        times  = [int(t.timestamp() * 1000) for t in closes.index]
+        prices = [round(float(v), 4) for v in closes.values]
+
+        price_now  = prices[-1]
+        price_open = prices[0]
+        chg_pct    = round((price_now - price_open) / price_open * 100, 2)
+
+        # Multi-period stats
+        def _pct(n):
+            if len(prices) < n + 1: return None
+            return round((prices[-1] - prices[-(n+1)]) / prices[-(n+1)] * 100, 2)
+
+        return jsonify({
+            "ticker":    ticker,
+            "period":    period,
+            "times":     times,
+            "prices":    prices,
+            "price":     price_now,
+            "chg_pct":   chg_pct,
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 # ── Unusual Volume ────────────────────────────────────────────────────────────
 
 _VOLUME_TICKERS = [
@@ -2842,6 +2952,7 @@ _NAV_LINKS = """
         <a href="/generate">Forecast</a>
         <a href="/dashboard">Live Chart</a>
         <a href="/heatmap">Market Heatmap</a>
+        <a href="/trump">Trump Tracker</a>
         <a href="/earnings">Earnings Calendar</a>
         <a href="/flow">Options Flow</a>
         <a href="/gamma">Gamma Exposure</a>
@@ -7338,6 +7449,195 @@ window.addEventListener('resize', function() {
 
 loadHeatmap();
 setTimeout(function(){ loadHeatmap(); }, 5 * 60 * 1000);
+""" + _THEME_JS + """
+</script>
+</body>
+</html>"""
+
+
+TRUMP_HTML = """<!DOCTYPE html>
+<html data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">""" + _META + """
+  <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+  <title>Trump Tracker · ChartEdge</title>
+  <style>
+    :root[data-theme="dark"]  { --bg:#0d1117; --bg2:#161b22; --bg3:#21262d; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --green:#3fb950; --red:#f85149; }
+    :root[data-theme="light"] { --bg:#ffffff; --bg2:#f6f8fa; --bg3:#eaeef2; --border:#d0d7de; --text:#1f2328; --muted:#636c76; --accent:#0969da; --green:#1a7f37; --red:#cf222e; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, monospace; background: var(--bg); color: var(--text); min-height: 100vh; }
+    nav { background: var(--bg2); border-bottom: 1px solid var(--border); padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; }
+    .logo { color: var(--accent); font-size: 1.1rem; font-weight: bold; text-decoration: none; }
+    """ + _NAV_CSS + """
+    .hero { text-align: center; padding: 28px 24px 16px; border-bottom: 1px solid var(--border); }
+    .hero h1 { font-size: 1.5rem; margin-bottom: 4px; }
+    .hero h1 span { color: #e8543a; }
+    .hero p { color: var(--muted); font-size: .82rem; }
+    .layout { display: grid; grid-template-columns: 1fr 380px; gap: 16px; max-width: 1300px; margin: 0 auto; padding: 16px 14px 40px; }
+    @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+
+    /* Chart panel */
+    .chart-panel { display: flex; flex-direction: column; gap: 12px; }
+    .controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    select.inst-select { background: var(--bg2); border: 1px solid var(--border); color: var(--text); padding: 8px 12px; border-radius: 7px; font-size: .9rem; font-family: monospace; outline: none; cursor: pointer; flex: 1; min-width: 180px; }
+    select.inst-select:focus { border-color: var(--accent); }
+    .period-btns { display: flex; gap: 4px; }
+    .pb { background: var(--bg2); border: 1px solid var(--border); color: var(--muted); padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: .78rem; font-family: monospace; }
+    .pb.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .stats-row { display: flex; gap: 10px; flex-wrap: wrap; }
+    .stat-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; flex: 1; min-width: 100px; }
+    .stat-card .sv { font-size: 1.2rem; font-weight: 800; }
+    .stat-card .sl { font-size: .68rem; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin-top: 2px; }
+    .pos { color: var(--green); } .neg { color: var(--red); }
+    #price-chart { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; min-height: 340px; }
+    .chart-status { color: var(--muted); font-size: .78rem; padding: 4px 2px; }
+
+    /* News panel */
+    .news-panel { display: flex; flex-direction: column; gap: 0; }
+    .news-header { font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); padding: 0 0 8px; }
+    .news-list { display: flex; flex-direction: column; gap: 0; max-height: 700px; overflow-y: auto; background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; }
+    .news-item { padding: 12px 14px; border-bottom: 1px solid var(--border); text-decoration: none; display: block; }
+    .news-item:last-child { border-bottom: none; }
+    .news-item:hover { background: var(--bg3); }
+    .news-src { font-size: .65rem; color: var(--accent); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 4px; }
+    .news-title { font-size: .83rem; color: var(--text); font-weight: 600; line-height: 1.35; margin-bottom: 4px; }
+    .news-time { font-size: .68rem; color: var(--muted); }
+    .news-loading { padding: 40px; text-align: center; color: var(--muted); font-size: .85rem; }
+    .disclaimer { color: var(--muted); font-size: .72rem; margin-top: 8px; }
+    footer { text-align: center; padding: 24px; color: var(--muted); font-size: .78rem; border-top: 1px solid var(--border); margin-top: 8px; }
+  </style>
+</head>
+<body>
+<nav>
+  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span></a>
+  <button class="hamburger" onclick="toggleMobileNav(event)">☰</button>
+  <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
+</nav>
+<div class="hero">
+  <h1>Trump <span>Tracker</span></h1>
+  <p>Market reactions to Trump news, policies &amp; announcements</p>
+</div>
+<div class="layout">
+  <!-- Left: chart -->
+  <div class="chart-panel">
+    <div class="controls">
+      <select class="inst-select" id="inst-select">
+        <option value="SPY">S&amp;P 500 (SPY)</option>
+        <option value="QQQ">NASDAQ 100 (QQQ)</option>
+        <option value="DIA">Dow Jones (DIA)</option>
+        <option value="IWM">Russell 2000 (IWM)</option>
+        <option value="DJT">Trump Media (DJT)</option>
+        <option value="TLT">Bonds 20Y (TLT)</option>
+        <option value="GLD">Gold (GLD)</option>
+        <option value="USO">Oil (USO)</option>
+        <option value="XLE">Energy (XLE)</option>
+        <option value="XLF">Financials (XLF)</option>
+        <option value="XLK">Tech (XLK)</option>
+        <option value="UVIX">VIX (UVIX)</option>
+        <option value="IBIT">Bitcoin (IBIT)</option>
+        <option value="FXI">China (FXI)</option>
+      </select>
+      <div class="period-btns">
+        <button class="pb" data-p="1D" onclick="setPeriod(this)">1D</button>
+        <button class="pb active" data-p="1W" onclick="setPeriod(this)">1W</button>
+        <button class="pb" data-p="1M" onclick="setPeriod(this)">1M</button>
+        <button class="pb" data-p="3M" onclick="setPeriod(this)">3M</button>
+      </div>
+    </div>
+    <div class="stats-row">
+      <div class="stat-card"><div class="sv" id="sc-price">—</div><div class="sl">Price</div></div>
+      <div class="stat-card"><div class="sv" id="sc-chg">—</div><div class="sl">Period Change</div></div>
+    </div>
+    <div id="price-chart"></div>
+    <div class="chart-status" id="chart-status"></div>
+    <p class="disclaimer">Data: Yahoo Finance · Not financial advice</p>
+  </div>
+
+  <!-- Right: news -->
+  <div class="news-panel">
+    <div class="news-header">Trump &amp; Policy News</div>
+    <div class="news-list" id="news-list">
+      <div class="news-loading">Loading news…</div>
+    </div>
+  </div>
+</div>
+<footer>© 2026 ChartEdge · Not financial advice</footer>
+<script>
+var _curPeriod = '1W';
+
+function setPeriod(btn) {
+  _curPeriod = btn.getAttribute('data-p');
+  document.querySelectorAll('.pb').forEach(function(b){ b.classList.remove('active'); });
+  btn.classList.add('active');
+  loadChart();
+}
+
+function loadChart() {
+  var ticker = document.getElementById('inst-select').value;
+  document.getElementById('chart-status').textContent = 'Loading ' + ticker + '…';
+  fetch('/api/trump/chart?ticker=' + encodeURIComponent(ticker) + '&period=' + _curPeriod)
+    .then(function(r){ return r.json(); })
+    .then(function(d) {
+      if (d.error) { document.getElementById('chart-status').textContent = 'Error: ' + d.error; return; }
+      renderChart(d);
+    })
+    .catch(function(){ document.getElementById('chart-status').textContent = 'Failed to load chart.'; });
+}
+
+function renderChart(d) {
+  var sign   = d.chg_pct >= 0 ? '+' : '';
+  var color  = d.chg_pct >= 0 ? '#3fb950' : '#f85149';
+  document.getElementById('sc-price').textContent = '$' + d.price.toFixed(2);
+  document.getElementById('sc-chg').className  = 'sv ' + (d.chg_pct >= 0 ? 'pos' : 'neg');
+  document.getElementById('sc-chg').textContent = sign + d.chg_pct + '%';
+  document.getElementById('chart-status').textContent = '';
+
+  var dates = d.times.map(function(t){ return new Date(t); });
+  Plotly.react('price-chart', [{
+    x: dates, y: d.prices, type: 'scatter', mode: 'lines',
+    line: { color: color, width: 2 },
+    fill: 'tozeroy',
+    fillcolor: d.chg_pct >= 0 ? 'rgba(63,185,80,0.08)' : 'rgba(248,81,73,0.08)',
+    name: d.ticker,
+  }], {
+    paper_bgcolor: '#161b22', plot_bgcolor: '#161b22',
+    font: { color: '#e6edf3', family: 'monospace', size: 11 },
+    xaxis: { gridcolor: '#21262d', tickformat: _curPeriod === '1D' ? '%H:%M' : '%m/%d' },
+    yaxis: { gridcolor: '#21262d', side: 'right' },
+    margin: { t: 12, r: 50, b: 36, l: 10 },
+    showlegend: false,
+  }, { responsive: true, displayModeBar: false });
+}
+
+function loadNews() {
+  fetch('/api/trump/news')
+    .then(function(r){ return r.json(); })
+    .then(function(d) {
+      if (d.error || !d.articles || d.articles.length === 0) {
+        document.getElementById('news-list').innerHTML = '<div class="news-loading">No Trump-related news found.</div>';
+        return;
+      }
+      var html = '';
+      d.articles.forEach(function(a) {
+        html += '<a class="news-item" href="' + a.link + '" target="_blank" rel="noopener">'
+              + '<div class="news-src">' + a.source + '</div>'
+              + '<div class="news-title">' + a.title + '</div>'
+              + '<div class="news-time">' + (a.published || '') + '</div>'
+              + '</a>';
+      });
+      document.getElementById('news-list').innerHTML = html;
+    })
+    .catch(function(){
+      document.getElementById('news-list').innerHTML = '<div class="news-loading">Failed to load news.</div>';
+    });
+}
+
+document.getElementById('inst-select').addEventListener('change', loadChart);
+
+loadChart();
+loadNews();
+setTimeout(loadNews, 5 * 60 * 1000);
 """ + _THEME_JS + """
 </script>
 </body>
