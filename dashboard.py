@@ -2274,6 +2274,121 @@ def gamma_api():
         return jsonify({"error": str(e)}), 500
 
 
+# ── Greeks Dashboard ─────────────────────────────────────────────────────────
+
+@app.route("/greeks")
+@login_required
+def greeks_page():
+    plan = _get_user_plan(session.get("user_id"))
+    if plan != "pro":
+        return redirect("/pricing?upgrade=greeks")
+    return render_template_string(GREEKS_HTML, current_user=current_user())
+
+
+@app.route("/api/greeks")
+@login_required
+def greeks_api():
+    plan = _get_user_plan(session.get("user_id"))
+    if plan != "pro":
+        return jsonify({"error": "upgrade_required"}), 403
+    import yfinance as yf
+    import numpy as np
+    from scipy.stats import norm
+    from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
+
+    ticker = request.args.get("ticker", "SPY").upper()[:10]
+    req_exp = request.args.get("exp", "")
+
+    try:
+        def _fetch():
+            t = yf.Ticker(ticker)
+            spot_ = round(float(t.fast_info.last_price), 2)
+            exps_ = t.options
+            return t, spot_, list(exps_)
+
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            fut = pool.submit(_fetch)
+            try:
+                t, spot, expirations = fut.result(timeout=20)
+            except FuturesTimeout:
+                return jsonify({"error": "yfinance timed out — try again"}), 504
+
+        if not expirations:
+            return jsonify({"error": f"No options data found for {ticker}"}), 404
+
+        exp = req_exp if req_exp in expirations else expirations[0]
+        chain = t.option_chain(exp)
+        calls = chain.calls.copy()
+        puts  = chain.puts.copy()
+
+        # Risk-free rate approximation
+        r = 0.045
+        from datetime import datetime
+        T = max((datetime.strptime(exp, "%Y-%m-%d") - datetime.utcnow()).days / 365.0, 1e-6)
+
+        def bs_greeks(S, K, T, r, iv, is_call):
+            if iv <= 0 or T <= 0:
+                return {"delta": None, "gamma": None, "theta": None, "vega": None, "rho": None}
+            d1 = (np.log(S / K) + (r + 0.5 * iv ** 2) * T) / (iv * np.sqrt(T))
+            d2 = d1 - iv * np.sqrt(T)
+            nd1 = norm.pdf(d1)
+            if is_call:
+                delta = float(norm.cdf(d1))
+                theta = float((-(S * nd1 * iv) / (2 * np.sqrt(T)) - r * K * np.exp(-r * T) * norm.cdf(d2)) / 365)
+                rho   = float(K * T * np.exp(-r * T) * norm.cdf(d2) / 100)
+            else:
+                delta = float(norm.cdf(d1) - 1)
+                theta = float((-(S * nd1 * iv) / (2 * np.sqrt(T)) + r * K * np.exp(-r * T) * norm.cdf(-d2)) / 365)
+                rho   = float(-K * T * np.exp(-r * T) * norm.cdf(-d2) / 100)
+            gamma = float(nd1 / (S * iv * np.sqrt(T)))
+            vega  = float(S * nd1 * np.sqrt(T) / 100)
+            return {
+                "delta": round(delta, 4),
+                "gamma": round(gamma, 6),
+                "theta": round(theta, 4),
+                "vega":  round(vega, 4),
+                "rho":   round(rho, 4),
+            }
+
+        def row(r_ser, is_call):
+            iv   = float(r_ser.get("impliedVolatility", 0) or 0)
+            K    = float(r_ser["strike"])
+            mid  = round((float(r_ser.get("bid", 0) or 0) + float(r_ser.get("ask", 0) or 0)) / 2, 2)
+            oi   = int(r_ser.get("openInterest", 0) or 0)
+            vol  = int(r_ser.get("volume", 0) or 0)
+            g    = bs_greeks(spot, K, T, r, iv, is_call)
+            return {
+                "strike": K,
+                "mid":    mid,
+                "iv":     round(iv * 100, 1),
+                "oi":     oi,
+                "volume": vol,
+                **g,
+            }
+
+        calls_data = [row(r, True)  for _, r in calls.iterrows()]
+        puts_data  = [row(r, False) for _, r in puts.iterrows()]
+
+        # ATM row for summary cards
+        atm_call = min(calls_data, key=lambda x: abs(x["strike"] - spot), default={})
+        atm_put  = min(puts_data,  key=lambda x: abs(x["strike"] - spot), default={})
+
+        return jsonify({
+            "ticker":      ticker,
+            "spot":        spot,
+            "expiry":      exp,
+            "expirations": list(expirations[:20]),
+            "T_days":      round(T * 365),
+            "calls":       calls_data,
+            "puts":        puts_data,
+            "atm_call":    atm_call,
+            "atm_put":     atm_put,
+        })
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 # ── Unusual Volume ────────────────────────────────────────────────────────────
 
 _VOLUME_TICKERS = [
@@ -2583,6 +2698,7 @@ _NAV_LINKS = """
         <a href="/earnings">Earnings Calendar</a>
         <a href="/flow">Options Flow</a>
         <a href="/gamma">Gamma Exposure</a>
+        <a href="/greeks">Greeks Dashboard</a>
         <a href="/volume">Unusual Volume</a>
         <a href="/news">News</a>
         <a href="/insider">Insider Trading</a>
@@ -4007,6 +4123,9 @@ HOME_HTML = """<!DOCTYPE html>
     </a>
     <a class="ind-pill" href="/gamma">
       <div class="cat">Options · Basic+</div><div class="iname">Gamma Exposure</div>
+    </a>
+    <a class="ind-pill" href="/greeks">
+      <div class="cat">Options · Pro</div><div class="iname">Greeks Dashboard</div>
     </a>
     <a class="ind-pill" href="/earnings">
       <div class="cat">Calendar · Basic+</div><div class="iname">Earnings Calendar</div>
@@ -6614,6 +6733,207 @@ function runScan() {
       btn.textContent = '\u25b6 Scan Now';
       document.getElementById('vol-content').innerHTML = '<div class="loading-msg" style="color:var(--red);">\u26a0 Scan failed: ' + err.message + '</div>';
     });
+}
+""" + _THEME_JS + """
+</script>
+</body>
+</html>"""
+
+
+GREEKS_HTML = """<!DOCTYPE html>
+<html data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">""" + _META + """
+  <title>Greeks Dashboard · ChartEdge</title>
+  <style>
+    :root[data-theme="dark"]  { --bg:#0d1117; --bg2:#161b22; --bg3:#21262d; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --green:#3fb950; --red:#f85149; }
+    :root[data-theme="light"] { --bg:#ffffff; --bg2:#f6f8fa; --bg3:#eaeef2; --border:#d0d7de; --text:#1f2328; --muted:#636c76; --accent:#0969da; --green:#1a7f37; --red:#cf222e; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: monospace; background: var(--bg); color: var(--text); min-height: 100vh; }
+    nav { background: var(--bg2); border-bottom: 1px solid var(--border); padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; }
+    .logo { color: var(--accent); font-size: 1.1rem; font-weight: bold; text-decoration: none; }
+    """ + _NAV_CSS + """
+    .hero { text-align: center; padding: 40px 24px 28px; border-bottom: 1px solid var(--border); }
+    .hero h1 { font-size: 1.6rem; margin-bottom: 8px; }
+    .hero h1 span { color: var(--accent); }
+    .hero p { color: var(--muted); font-size: .9rem; }
+    .container { max-width: 1100px; margin: 0 auto; padding: 28px 24px; }
+    .search-row { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
+    .search-row input { flex: 1; min-width: 140px; background: var(--bg2); border: 1px solid var(--border); border-radius: 6px; padding: 10px 14px; color: var(--text); font-size: .95rem; font-family: monospace; text-transform: uppercase; outline: none; }
+    .search-row input:focus { border-color: var(--accent); }
+    .search-row button { background: var(--accent); color: #fff; border: none; border-radius: 6px; padding: 10px 22px; cursor: pointer; font-weight: 600; font-size: .9rem; }
+    .search-row button:hover { opacity: .88; }
+    .exp-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 20px; }
+    .exp-tab { background: var(--bg2); border: 1px solid var(--border); border-radius: 6px; padding: 5px 12px; font-size: .8rem; cursor: pointer; color: var(--muted); }
+    .exp-tab.active { border-color: var(--accent); color: var(--accent); }
+    .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 24px; }
+    .scard { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 14px; text-align: center; }
+    .scard .val { font-size: 1.25rem; font-weight: 700; }
+    .scard .lbl { font-size: .72rem; color: var(--muted); margin-top: 4px; }
+    .scard .sub { font-size: .7rem; color: var(--muted); margin-top: 2px; }
+    .pos { color: var(--green); } .neg { color: var(--red); } .neutral { color: var(--accent); }
+    .tabs { display: flex; gap: 0; margin-bottom: 0; border-bottom: 1px solid var(--border); }
+    .tab-btn { background: none; border: none; color: var(--muted); padding: 10px 22px; cursor: pointer; font-size: .88rem; font-family: monospace; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+    .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+    .table-wrap { background: var(--bg2); border: 1px solid var(--border); border-radius: 0 0 8px 8px; overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: .82rem; }
+    th { color: var(--muted); font-size: .72rem; text-transform: uppercase; letter-spacing: .05em; padding: 10px 12px; border-bottom: 1px solid var(--border); text-align: right; white-space: nowrap; }
+    th:first-child { text-align: left; }
+    td { padding: 9px 12px; border-bottom: 1px solid var(--border); text-align: right; }
+    td:first-child { text-align: left; font-weight: 600; }
+    tr:hover td { background: var(--bg3); }
+    tr.atm td { background: rgba(88,166,255,.08); }
+    tr.atm td:first-child { color: var(--accent); }
+    .loading { text-align: center; padding: 60px; color: var(--muted); }
+    .error-msg { background: #2d1f1f; border: 1px solid var(--red); border-radius: 8px; padding: 14px 18px; color: var(--red); margin-bottom: 20px; display: none; }
+    .disclaimer { color: var(--muted); font-size: .78rem; margin-top: 16px; padding: 12px; background: var(--bg2); border-radius: 6px; border: 1px solid var(--border); }
+    footer { text-align: center; padding: 32px 24px; color: var(--muted); font-size: .8rem; border-top: 1px solid var(--border); margin-top: 20px; }
+    .greek-delta { color: var(--accent); }
+    .greek-theta { color: var(--red); }
+    .greek-vega  { color: #d29922; }
+    .greek-rho   { color: var(--muted); }
+  </style>
+</head>
+<body>
+<nav>
+  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span></a>
+  <button class="hamburger" onclick="toggleMobileNav(event)">☰</button>
+  <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
+</nav>
+<div class="hero">
+  <h1>Options <span>Greeks</span></h1>
+  <p>Delta · Gamma · Theta · Vega · Rho — computed via Black-Scholes</p>
+</div>
+<div class="container">
+  <div class="error-msg" id="error-msg"></div>
+  <div class="search-row">
+    <input id="ticker-input" placeholder="Ticker (e.g. AAPL, SPY)" maxlength="10"
+           onkeydown="if(event.key==='Enter') loadGreeks()">
+    <button onclick="loadGreeks()">Load Greeks</button>
+  </div>
+  <div id="greeks-content" class="loading">Enter a ticker above to load options Greeks.</div>
+</div>
+<footer>© 2026 ChartEdge · Greeks via Black-Scholes · Not financial advice</footer>
+<script>
+var _greeksData = null;
+var _activeTab  = 'calls';
+
+function loadGreeks(exp) {
+  var ticker = document.getElementById('ticker-input').value.trim().toUpperCase();
+  if (!ticker) {
+    showErr('Enter a ticker first.');
+    return;
+  }
+  document.getElementById('ticker-input').value = ticker;
+  document.getElementById('error-msg').style.display = 'none';
+  document.getElementById('greeks-content').innerHTML = '<div class="loading">Fetching options chain for ' + ticker + '…</div>';
+  var url = '/api/greeks?ticker=' + encodeURIComponent(ticker) + (exp ? '&exp=' + encodeURIComponent(exp) : '');
+  fetch(url)
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (d.error) { showErr(d.error); document.getElementById('greeks-content').innerHTML = ''; return; }
+      _greeksData = d;
+      renderGreeks(d, _activeTab);
+    })
+    .catch(function() { showErr('Failed to load data.'); document.getElementById('greeks-content').innerHTML = ''; });
+}
+
+function showErr(msg) {
+  var el = document.getElementById('error-msg');
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+
+function switchTab(tab) {
+  _activeTab = tab;
+  if (_greeksData) renderGreeks(_greeksData, tab);
+}
+
+function renderGreeks(d, tab) {
+  // Expiration tabs
+  var tabs = '';
+  for (var i = 0; i < d.expirations.length; i++) {
+    var e = d.expirations[i];
+    var cls = e === d.expiry ? ' active' : '';
+    tabs += '<span class="exp-tab' + cls + '" onclick="loadGreeks(\'' + e + '\')">' + e + '</span>';
+  }
+
+  // ATM summary cards
+  var atm = tab === 'calls' ? d.atm_call : d.atm_put;
+  var cards = [
+    { lbl: 'Spot',   val: '$' + d.spot,          cls: 'neutral', sub: ticker() },
+    { lbl: 'Expiry', val: d.expiry,               cls: 'neutral', sub: d.T_days + ' days' },
+    { lbl: 'Delta',  val: fmt(atm.delta, 4),      cls: atm.delta >= 0 ? 'pos' : 'neg', sub: 'ATM ' + (tab==='calls'?'call':'put') },
+    { lbl: 'Gamma',  val: fmt(atm.gamma, 5),      cls: 'neutral', sub: 'per $1 move' },
+    { lbl: 'Theta',  val: fmt(atm.theta, 4),      cls: 'neg',     sub: 'per day' },
+    { lbl: 'Vega',   val: fmt(atm.vega, 4),       cls: 'neutral', sub: 'per 1% IV' },
+    { lbl: 'Rho',    val: fmt(atm.rho, 4),        cls: atm.rho >= 0 ? 'pos' : 'neg', sub: 'per 1% rate' },
+    { lbl: 'IV',     val: atm.iv + '%',            cls: 'neutral', sub: 'implied vol' },
+  ];
+
+  var cardsHtml = '<div class="summary-grid">';
+  for (var i = 0; i < cards.length; i++) {
+    var c = cards[i];
+    cardsHtml += '<div class="scard"><div class="val ' + c.cls + '">' + c.val + '</div>'
+              +  '<div class="lbl">' + c.lbl + '</div><div class="sub">' + c.sub + '</div></div>';
+  }
+  cardsHtml += '</div>';
+
+  // Tab buttons
+  var tabBtns = '<div class="tabs">'
+    + '<button class="tab-btn' + (tab==='calls'?' active':'') + '" onclick="switchTab(\'calls\')">Calls</button>'
+    + '<button class="tab-btn' + (tab==='puts'?' active':'') + '" onclick="switchTab(\'puts\')">Puts</button>'
+    + '</div>';
+
+  // Table
+  var rows = tab === 'calls' ? d.calls : d.puts;
+  var tableHtml = '<div class="table-wrap"><table><thead><tr>'
+    + '<th>Strike</th><th>Mid</th><th>IV %</th><th>OI</th><th>Vol</th>'
+    + '<th>Delta</th><th>Gamma</th><th>Theta</th><th>Vega</th><th>Rho</th>'
+    + '</tr></thead><tbody>';
+
+  for (var i = 0; i < rows.length; i++) {
+    var row = rows[i];
+    var isAtm = Math.abs(row.strike - d.spot) === Math.min.apply(null, rows.map(function(r){ return Math.abs(r.strike - d.spot); }));
+    var cls = isAtm ? ' class="atm"' : '';
+    tableHtml += '<tr' + cls + '>'
+      + '<td>' + row.strike + '</td>'
+      + '<td>' + (row.mid > 0 ? '$' + row.mid : '—') + '</td>'
+      + '<td>' + (row.iv > 0 ? row.iv + '%' : '—') + '</td>'
+      + '<td>' + fmtInt(row.oi) + '</td>'
+      + '<td>' + fmtInt(row.volume) + '</td>'
+      + '<td class="greek-delta">' + (row.delta !== null ? row.delta : '—') + '</td>'
+      + '<td>' + (row.gamma !== null ? row.gamma : '—') + '</td>'
+      + '<td class="greek-theta">' + (row.theta !== null ? row.theta : '—') + '</td>'
+      + '<td class="greek-vega">' + (row.vega !== null ? row.vega : '—') + '</td>'
+      + '<td class="greek-rho">' + (row.rho !== null ? row.rho : '—') + '</td>'
+      + '</tr>';
+  }
+  tableHtml += '</tbody></table></div>';
+
+  document.getElementById('greeks-content').innerHTML =
+    '<div class="exp-tabs">' + tabs + '</div>'
+    + cardsHtml
+    + tabBtns
+    + tableHtml
+    + '<div class="disclaimer">⚠ Greeks computed via Black-Scholes using implied volatility from Yahoo Finance. r = 4.5% risk-free rate assumed. For educational use only — not financial advice.</div>';
+}
+
+function ticker() {
+  return document.getElementById('ticker-input').value.trim().toUpperCase();
+}
+
+function fmt(v, dec) {
+  if (v === null || v === undefined) return '—';
+  return parseFloat(v).toFixed(dec);
+}
+
+function fmtInt(v) {
+  if (!v) return '—';
+  if (v >= 1000000) return (v/1000000).toFixed(1) + 'M';
+  if (v >= 1000) return (v/1000).toFixed(0) + 'K';
+  return v;
 }
 """ + _THEME_JS + """
 </script>
