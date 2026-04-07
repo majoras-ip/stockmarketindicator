@@ -3147,6 +3147,7 @@ _NAV_LINKS = """
         <a href="/pricing?upgrade=flow" style="opacity:.4;">Options Flow 🔒</a>
         <a href="/pricing?upgrade=insider" style="opacity:.4;">Insider Trading 🔒</a>
         <a href="/pricing?upgrade=premarket" style="opacity:.4;">Pre-Market Scanner 🔒</a>
+        <a href="/pricing?upgrade=scalper" style="opacity:.4;">Options Scalper 🔒</a>
         {% elif nav_plan == 'basic' %}
         <a href="/trump">Trump Tracker</a>
         <a href="/gamma">Gamma Exposure</a>
@@ -3154,6 +3155,7 @@ _NAV_LINKS = """
         <a href="/pricing?upgrade=flow" style="opacity:.4;">Options Flow 🔒</a>
         <a href="/pricing?upgrade=insider" style="opacity:.4;">Insider Trading 🔒</a>
         <a href="/pricing?upgrade=premarket" style="opacity:.4;">Pre-Market Scanner 🔒</a>
+        <a href="/pricing?upgrade=scalper" style="opacity:.4;">Options Scalper 🔒</a>
         {% else %}
         <a href="/trump">Trump Tracker</a>
         <a href="/gamma">Gamma Exposure</a>
@@ -3161,6 +3163,7 @@ _NAV_LINKS = """
         <a href="/flow">Options Flow</a>
         <a href="/insider">Insider Trading</a>
         <a href="/premarket">Pre-Market Scanner</a>
+        <a href="/scalper">Options Scalper</a>
         {% endif %}
       </div>
     </div>
@@ -3572,6 +3575,7 @@ PRICING_HTML = """<!DOCTYPE html>
         <li class="no">Options flow</li>
         <li class="no">Insider trading</li>
         <li class="no">Pre-market scanner</li>
+        <li class="no">Options scalper</li>
 
       </ul>
       <a href="/indicators" class="btn-plan btn-free">Start Free</a>
@@ -3597,6 +3601,7 @@ PRICING_HTML = """<!DOCTYPE html>
         <li class="no">Options flow</li>
         <li class="no">Insider trading</li>
         <li class="no">Pre-market scanner</li>
+        <li class="no">Options scalper</li>
 
       </ul>
       {% if current_user %}
@@ -3627,6 +3632,7 @@ PRICING_HTML = """<!DOCTYPE html>
         <li>Options flow</li>
         <li>Insider trading</li>
         <li>Pre-market scanner</li>
+        <li>Options scalper</li>
 
       </ul>
       {% if current_user %}
@@ -8402,6 +8408,382 @@ function copyLink() {
   });
 }
 """ + _THEME_JS + """
+</script>
+</body>
+</html>"""
+
+
+# ── Options Scalping Indicator ────────────────────────────────────────────────
+
+@app.route("/scalper")
+@login_required
+def scalper_page():
+    if _get_user_plan(session.get("user_id")) != "pro":
+        return redirect("/pricing?upgrade=scalper")
+    return render_template_string(SCALPER_HTML, current_user=current_user())
+
+
+@app.route("/api/scalper")
+@login_required
+def scalper_api():
+    if _get_user_plan(session.get("user_id")) != "pro":
+        return jsonify({"error": "upgrade_required"}), 403
+    import yfinance as yf
+    import numpy as np
+    from scipy.stats import norm
+    from datetime import date, datetime
+
+    ticker = request.args.get("ticker", "SPY").upper()[:10]
+    req_exp = request.args.get("exp", "")
+    opt_type = request.args.get("type", "both")  # calls / puts / both
+
+    try:
+        t = yf.Ticker(ticker)
+        spot = float(t.fast_info.last_price)
+        exps = t.options
+        if not exps:
+            return jsonify({"error": "No options data for " + ticker}), 404
+
+        exp = req_exp if req_exp in exps else exps[0]
+        chain = t.option_chain(exp)
+
+        today = date.today()
+        exp_date = date.fromisoformat(exp)
+        dte = max((exp_date - today).days, 0)
+        T = max(dte / 365, 1 / 365)
+        r = 0.05
+
+        def _bs_greeks(S, K, T, r, iv, is_call):
+            if iv <= 0 or T <= 0:
+                return 0.0, 0.0, 0.0, 0.0, 0.0
+            d1 = (np.log(S / K) + (r + 0.5 * iv ** 2) * T) / (iv * np.sqrt(T))
+            d2 = d1 - iv * np.sqrt(T)
+            pdf_d1 = norm.pdf(d1)
+            delta = norm.cdf(d1) if is_call else norm.cdf(d1) - 1
+            gamma = pdf_d1 / (S * iv * np.sqrt(T))
+            theta_raw = (-(S * pdf_d1 * iv) / (2 * np.sqrt(T))
+                         - r * K * np.exp(-r * T) * (norm.cdf(d2) if is_call else -norm.cdf(-d2)))
+            theta = theta_raw / 365
+            vega  = S * pdf_d1 * np.sqrt(T) / 100
+            rho   = (K * T * np.exp(-r * T) * (norm.cdf(d2) if is_call else -norm.cdf(-d2))) / 100
+            return round(delta, 4), round(gamma, 4), round(theta, 4), round(vega, 4), round(rho, 4)
+
+        rows = []
+
+        def _process(df, is_call):
+            label = "call" if is_call else "put"
+            for _, row in df.iterrows():
+                try:
+                    K    = float(row["strike"])
+                    bid  = float(row.get("bid") or 0)
+                    ask  = float(row.get("ask") or 0)
+                    last = float(row.get("lastPrice") or 0)
+                    vol  = int(row.get("volume") or 0)
+                    oi   = int(row.get("openInterest") or 0)
+                    iv   = float(row.get("impliedVolatility") or 0)
+
+                    if bid <= 0 and ask <= 0:
+                        continue
+                    mid = (bid + ask) / 2 if bid > 0 and ask > 0 else last
+                    if mid <= 0:
+                        continue
+
+                    spread_pct = round((ask - bid) / mid * 100, 1) if mid > 0 else 999
+                    delta, gamma, theta, vega, rho = _bs_greeks(spot, K, T, r, iv, is_call)
+
+                    # Scalp score: reward tight spreads, high volume, 0.2–0.6 delta, high gamma
+                    delta_score  = max(0, 1 - abs(abs(delta) - 0.4) / 0.4)   # peaks at delta=0.4
+                    spread_score = max(0, 1 - spread_pct / 20)                 # 0% spread = 1.0
+                    vol_score    = min(vol / 1000, 1.0) if vol > 0 else 0
+                    gamma_score  = min(gamma * 500, 1.0)
+                    score = round((delta_score * 0.3 + spread_score * 0.35 + vol_score * 0.2 + gamma_score * 0.15) * 100)
+
+                    rows.append({
+                        "type":       label,
+                        "strike":     K,
+                        "bid":        round(bid, 2),
+                        "ask":        round(ask, 2),
+                        "mid":        round(mid, 2),
+                        "spread_pct": spread_pct,
+                        "delta":      delta,
+                        "gamma":      gamma,
+                        "theta":      theta,
+                        "vega":       vega,
+                        "iv":         round(iv * 100, 1),
+                        "volume":     vol,
+                        "oi":         oi,
+                        "vol_oi":     round(vol / oi, 2) if oi > 0 else 0,
+                        "score":      score,
+                    })
+                except Exception:
+                    continue
+
+        if opt_type in ("calls", "both"):
+            _process(chain.calls, True)
+        if opt_type in ("puts", "both"):
+            _process(chain.puts, False)
+
+        rows.sort(key=lambda x: x["score"], reverse=True)
+
+        # Max pain
+        all_strikes = sorted(set(float(r["strike"]) for r in chain.calls.itertuples()) |
+                             set(float(r["strike"]) for r in chain.puts.itertuples()))
+        pain = {}
+        for mp in all_strikes:
+            call_pain = sum(max(0, mp - float(r["strike"])) * float(r.get("openInterest") or 0)
+                           for _, r in chain.calls.iterrows())
+            put_pain  = sum(max(0, float(r["strike"]) - mp) * float(r.get("openInterest") or 0)
+                           for _, r in chain.puts.iterrows())
+            pain[mp] = call_pain + put_pain
+        max_pain_strike = min(pain, key=pain.get) if pain else None
+
+        # Put/call ratio
+        total_call_vol = int(chain.calls["volume"].fillna(0).sum())
+        total_put_vol  = int(chain.puts["volume"].fillna(0).sum())
+        pc_ratio = round(total_put_vol / total_call_vol, 2) if total_call_vol > 0 else None
+
+        # Expected move (1 SD)
+        atm_iv = None
+        atm_row = chain.calls.iloc[(chain.calls["strike"] - spot).abs().argsort()[:1]]
+        if not atm_row.empty:
+            atm_iv = float(atm_row.iloc[0].get("impliedVolatility") or 0)
+        exp_move = round(spot * atm_iv * np.sqrt(T), 2) if atm_iv else None
+
+        return jsonify({
+            "ticker":      ticker,
+            "spot":        round(spot, 2),
+            "exp":         exp,
+            "dte":         dte,
+            "expirations": list(exps[:16]),
+            "rows":        rows,
+            "max_pain":    max_pain_strike,
+            "pc_ratio":    pc_ratio,
+            "exp_move":    exp_move,
+            "atm_iv":      round(atm_iv * 100, 1) if atm_iv else None,
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+SCALPER_HTML = """<!DOCTYPE html>
+<html data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">""" + _META + """
+  <title>Options Scalper · ChartEdge</title>
+  <style>
+    :root[data-theme="dark"]  { --bg:#0d1117; --bg2:#161b22; --bg3:#21262d; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --green:#3fb950; --red:#f85149; }
+    :root[data-theme="light"] { --bg:#ffffff; --bg2:#f6f8fa; --bg3:#eaeef2; --border:#d0d7de; --text:#1f2328; --muted:#636c76; --accent:#0969da; --green:#1a7f37; --red:#cf222e; }
+    * { box-sizing:border-box; margin:0; padding:0; }
+    body { font-family:-apple-system,sans-serif; background:var(--bg); color:var(--text); min-height:100vh; }
+    nav { background:var(--bg2); border-bottom:1px solid var(--border); padding:14px 24px; display:flex; align-items:center; justify-content:space-between; }
+    .logo { font-size:1.1rem; font-weight:bold; text-decoration:none; }
+    """ + _NAV_CSS + """
+    .page { max-width:1200px; margin:0 auto; padding:28px 20px 60px; }
+    h1 { font-size:1.5rem; margin-bottom:4px; } h1 span { color:var(--accent); }
+    .sub { color:var(--muted); font-size:.83rem; margin-bottom:20px; }
+
+    /* Controls */
+    .controls { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:16px; }
+    .controls input, .controls select { background:var(--bg2); border:1px solid var(--border); color:var(--text); padding:8px 12px; border-radius:7px; font-size:.9rem; outline:none; }
+    .controls input:focus, .controls select:focus { border-color:var(--accent); }
+    .controls input { width:120px; }
+    .btn-load { background:var(--accent); color:#fff; border:none; border-radius:7px; padding:8px 20px; font-size:.9rem; font-weight:600; cursor:pointer; }
+    .btn-load:hover { opacity:.85; }
+    .type-tabs { display:flex; gap:4px; }
+    .ttab { background:var(--bg2); border:1px solid var(--border); color:var(--muted); padding:6px 14px; border-radius:6px; font-size:.82rem; cursor:pointer; }
+    .ttab.active { background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600; }
+    .sort-row { display:flex; gap:6px; align-items:center; flex-wrap:wrap; margin-bottom:12px; }
+    .sort-lbl { font-size:.75rem; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; }
+    .sb { background:var(--bg2); border:1px solid var(--border); color:var(--muted); padding:4px 10px; border-radius:5px; font-size:.76rem; cursor:pointer; }
+    .sb.active { border-color:var(--accent); color:var(--accent); }
+
+    /* Stats bar */
+    .stats-bar { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:16px; }
+    .stat { background:var(--bg2); border:1px solid var(--border); border-radius:8px; padding:10px 16px; flex:1; min-width:110px; }
+    .stat .sv { font-size:1.15rem; font-weight:800; }
+    .stat .sl { font-size:.68rem; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; margin-top:2px; }
+
+    /* Table */
+    .tbl-wrap { overflow-x:auto; }
+    table { width:100%; border-collapse:collapse; font-size:.82rem; }
+    thead th { text-align:left; font-size:.7rem; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; padding:8px 10px; border-bottom:1px solid var(--border); white-space:nowrap; cursor:pointer; user-select:none; }
+    thead th:hover { color:var(--text); }
+    thead th .sort-arrow { font-size:.65rem; margin-left:3px; color:var(--accent); }
+    tbody td { padding:8px 10px; border-bottom:1px solid var(--border); white-space:nowrap; vertical-align:middle; }
+    tbody tr:hover td { background:var(--bg2); }
+    tbody tr.call-row td:first-child { border-left:2px solid var(--green); }
+    tbody tr.put-row  td:first-child { border-left:2px solid var(--red); }
+    .score-bar { display:inline-block; background:var(--bg3); border-radius:3px; width:60px; height:7px; vertical-align:middle; margin-right:5px; overflow:hidden; }
+    .score-fill { height:100%; border-radius:3px; }
+    .badge-call { background:#1a2d1a; color:var(--green); border:1px solid #3fb95040; border-radius:4px; font-size:.68rem; font-weight:700; padding:1px 6px; }
+    .badge-put  { background:#2d1a1a; color:var(--red);   border:1px solid #f8514940; border-radius:4px; font-size:.68rem; font-weight:700; padding:1px 6px; }
+    .itm { background:#1a2a1a; }
+    .loading { color:var(--muted); padding:40px; text-align:center; }
+    .err { color:var(--red); padding:20px; }
+    .delta-bar { display:inline-block; width:36px; height:5px; background:var(--bg3); border-radius:3px; vertical-align:middle; margin-right:4px; overflow:hidden; }
+    .delta-fill { height:100%; border-radius:3px; }
+    footer { text-align:center; padding:32px 24px; color:var(--muted); font-size:.8rem; border-top:1px solid var(--border); margin-top:20px; }
+  </style>
+</head>
+<body>
+<nav>
+  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span></a>
+  <button class="hamburger" onclick="toggleMobileNav(event)">☰</button>
+  <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
+</nav>
+<div class="page">
+  <h1>Options <span>Scalper</span></h1>
+  <p class="sub">Ranked options chain with scalp score, spread %, Greeks &amp; liquidity — Pro only</p>
+
+  <div class="controls">
+    <input type="text" id="ticker-in" value="SPY" placeholder="Ticker" onkeydown="if(event.key==='Enter')load()">
+    <select id="exp-sel" onchange="load()"><option value="">Loading…</option></select>
+    <div class="type-tabs">
+      <button class="ttab active" data-t="both"  onclick="setType(this)">All</button>
+      <button class="ttab"        data-t="calls" onclick="setType(this)">Calls</button>
+      <button class="ttab"        data-t="puts"  onclick="setType(this)">Puts</button>
+    </div>
+    <button class="btn-load" onclick="load()">Load</button>
+  </div>
+
+  <div class="stats-bar" id="stats-bar" style="display:none">
+    <div class="stat"><div class="sv" id="st-spot">—</div><div class="sl">Spot Price</div></div>
+    <div class="stat"><div class="sv" id="st-dte">—</div><div class="sl">DTE</div></div>
+    <div class="stat"><div class="sv" id="st-iv">—</div><div class="sl">ATM IV</div></div>
+    <div class="stat"><div class="sv" id="st-move">—</div><div class="sl">Expected Move</div></div>
+    <div class="stat"><div class="sv" id="st-pain">—</div><div class="sl">Max Pain</div></div>
+    <div class="stat"><div class="sv" id="st-pc">—</div><div class="sl">P/C Ratio</div></div>
+  </div>
+
+  <div class="sort-row" id="sort-row" style="display:none">
+    <span class="sort-lbl">Sort:</span>
+    <button class="sb active" data-s="score"      onclick="setSort(this)">Scalp Score</button>
+    <button class="sb"        data-s="volume"     onclick="setSort(this)">Volume</button>
+    <button class="sb"        data-s="spread_pct" onclick="setSort(this)">Spread %</button>
+    <button class="sb"        data-s="gamma"      onclick="setSort(this)">Gamma</button>
+    <button class="sb"        data-s="oi"         onclick="setSort(this)">Open Int</button>
+    <button class="sb"        data-s="strike"     onclick="setSort(this)">Strike</button>
+  </div>
+
+  <div class="tbl-wrap" id="tbl-wrap">
+    <div class="loading">Enter a ticker and click Load</div>
+  </div>
+</div>
+<footer>© 2026 ChartEdge · Data via Yahoo Finance · Not financial advice</footer>
+<script>""" + _THEME_JS + """
+var _data = [];
+var _sortKey = 'score';
+var _sortAsc  = false;
+var _optType  = 'both';
+
+function setType(btn) {
+  _optType = btn.getAttribute('data-t');
+  document.querySelectorAll('.ttab').forEach(function(b){ b.classList.remove('active'); });
+  btn.classList.add('active');
+  load();
+}
+
+function setSort(btn) {
+  var key = btn.getAttribute('data-s');
+  if (_sortKey === key) { _sortAsc = !_sortAsc; }
+  else { _sortKey = key; _sortAsc = key === 'strike' || key === 'spread_pct'; }
+  document.querySelectorAll('.sb').forEach(function(b){ b.classList.remove('active'); });
+  btn.classList.add('active');
+  renderTable(_data);
+}
+
+function load() {
+  var ticker = document.getElementById('ticker-in').value.trim().toUpperCase();
+  var exp    = document.getElementById('exp-sel').value;
+  if (!ticker) return;
+  document.getElementById('tbl-wrap').innerHTML = '<div class="loading">Loading ' + ticker + ' options…</div>';
+  document.getElementById('stats-bar').style.display = 'none';
+  document.getElementById('sort-row').style.display  = 'none';
+  fetch('/api/scalper?ticker=' + encodeURIComponent(ticker) + '&exp=' + encodeURIComponent(exp) + '&type=' + _optType)
+    .then(function(r){ return r.json(); })
+    .then(function(d) {
+      if (d.error) { document.getElementById('tbl-wrap').innerHTML = '<div class="err">Error: ' + d.error + '</div>'; return; }
+
+      // Populate expiry dropdown
+      var sel = document.getElementById('exp-sel');
+      var curExp = d.exp;
+      sel.innerHTML = d.expirations.map(function(e){
+        var dte = Math.round((new Date(e) - new Date()) / 86400000);
+        var lbl = e + ' (' + (dte === 0 ? '0DTE' : dte + 'd') + ')';
+        return '<option value="' + e + '"' + (e === curExp ? ' selected' : '') + '>' + lbl + '</option>';
+      }).join('');
+
+      // Stats bar
+      document.getElementById('st-spot').textContent  = '$' + d.spot.toFixed(2);
+      document.getElementById('st-dte').textContent   = d.dte + (d.dte === 0 ? ' (0DTE)' : 'd');
+      document.getElementById('st-dte').style.color   = d.dte === 0 ? 'var(--red)' : d.dte <= 3 ? '#e3b341' : 'var(--text)';
+      document.getElementById('st-iv').textContent    = d.atm_iv != null ? d.atm_iv + '%' : '—';
+      document.getElementById('st-move').textContent  = d.exp_move != null ? '±$' + d.exp_move : '—';
+      document.getElementById('st-pain').textContent  = d.max_pain != null ? '$' + d.max_pain : '—';
+      document.getElementById('st-pc').textContent    = d.pc_ratio != null ? d.pc_ratio : '—';
+      document.getElementById('st-pc').style.color    = d.pc_ratio > 1 ? 'var(--red)' : d.pc_ratio < 0.7 ? 'var(--green)' : 'var(--text)';
+      document.getElementById('stats-bar').style.display = 'flex';
+      document.getElementById('sort-row').style.display  = 'flex';
+
+      _data = d.rows;
+      renderTable(_data);
+    })
+    .catch(function(){ document.getElementById('tbl-wrap').innerHTML = '<div class="err">Failed to load.</div>'; });
+}
+
+function renderTable(rows) {
+  var sorted = rows.slice().sort(function(a, b){
+    var v = a[_sortKey] > b[_sortKey] ? 1 : a[_sortKey] < b[_sortKey] ? -1 : 0;
+    return _sortAsc ? v : -v;
+  });
+
+  if (!sorted.length) {
+    document.getElementById('tbl-wrap').innerHTML = '<p style="color:var(--muted);padding:20px">No contracts found.</p>';
+    return;
+  }
+
+  var spot = parseFloat(document.getElementById('st-spot').textContent.replace('$',''));
+  var html = '<table><thead><tr>'
+    + '<th>Type</th><th>Strike</th><th>Bid</th><th>Ask</th>'
+    + '<th>Spread %</th><th>Delta</th><th>Gamma</th><th>Theta/day</th>'
+    + '<th>IV %</th><th>Volume</th><th>OI</th><th>Vol/OI</th><th>Scalp Score</th>'
+    + '</tr></thead><tbody>';
+
+  sorted.forEach(function(r) {
+    var isCall = r.type === 'call';
+    var itm = isCall ? r.strike < spot : r.strike > spot;
+    var scoreColor = r.score >= 70 ? 'var(--green)' : r.score >= 40 ? '#e3b341' : 'var(--red)';
+    var deltaAbs = Math.abs(r.delta);
+    var deltaColor = deltaAbs >= 0.3 && deltaAbs <= 0.65 ? 'var(--green)' : 'var(--muted)';
+    var spreadColor = r.spread_pct < 5 ? 'var(--green)' : r.spread_pct < 15 ? '#e3b341' : 'var(--red)';
+
+    html += '<tr class="' + (isCall ? 'call-row' : 'put-row') + (itm ? ' itm' : '') + '">';
+    html += '<td><span class="badge-' + r.type + '">' + r.type.toUpperCase() + '</span></td>';
+    html += '<td><strong>' + r.strike + '</strong>' + (itm ? ' <span style="font-size:.65rem;color:var(--muted)">ITM</span>' : '') + '</td>';
+    html += '<td>' + r.bid + '</td>';
+    html += '<td>' + r.ask + '</td>';
+    html += '<td style="color:' + spreadColor + '">' + r.spread_pct + '%</td>';
+    html += '<td style="color:' + deltaColor + '">'
+          + '<div class="delta-bar"><div class="delta-fill" style="width:' + Math.round(deltaAbs*100) + '%;background:' + (isCall ? 'var(--green)' : 'var(--red)') + '"></div></div>'
+          + r.delta + '</td>';
+    html += '<td>' + r.gamma + '</td>';
+    html += '<td style="color:var(--red)">' + r.theta + '</td>';
+    html += '<td>' + r.iv + '%</td>';
+    html += '<td style="font-weight:' + (r.volume > 500 ? '700' : '400') + '">' + (r.volume || 0).toLocaleString() + '</td>';
+    html += '<td>' + (r.oi || 0).toLocaleString() + '</td>';
+    html += '<td style="color:' + (r.vol_oi > 0.5 ? 'var(--green)' : 'var(--muted)') + '">' + r.vol_oi + '</td>';
+    html += '<td><div class="score-bar"><div class="score-fill" style="width:' + r.score + '%;background:' + scoreColor + '"></div></div>'
+          + '<span style="color:' + scoreColor + ';font-weight:700">' + r.score + '</span></td>';
+    html += '</tr>';
+  });
+
+  html += '</tbody></table>';
+  document.getElementById('tbl-wrap').innerHTML = html;
+}
+
+// Auto-load SPY on page open
+load();
 </script>
 </body>
 </html>"""
