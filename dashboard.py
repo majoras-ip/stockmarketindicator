@@ -7147,7 +7147,7 @@ function renderHeatmap(d) {
       var pct   = st.change_pct;
       var sign  = pct >= 0 ? '+' : '';
       var color = pctColor(pct);
-      html += '<div class="cell" style="background:' + color + '" title="' + t + ' $' + st.price + ' (' + sign + pct + '%)" onclick="window.open(\'https://finance.yahoo.com/quote/' + t + '\',\'_blank\')">'
+      html += '<div class="cell" style="background:' + color + '" data-t="' + t + '" title="' + t + ' $' + st.price + ' (' + sign + pct + '%)">'
             + '<div class="ct">' + t + '</div>'
             + '<div class="cp">' + sign + pct + '%</div>'
             + '</div>';
@@ -7161,6 +7161,11 @@ function renderHeatmap(d) {
   var updated = new Date(d.ts * 1000);
   document.getElementById('ts-label').textContent = 'Updated ' + updated.toLocaleTimeString();
 }
+
+document.addEventListener('click', function(e) {
+  var cell = e.target.closest('.cell');
+  if (cell) window.open('https://finance.yahoo.com/quote/' + cell.getAttribute('data-t'), '_blank');
+});
 
 loadHeatmap();
 setTimeout(function() { loadHeatmap(); }, 5 * 60 * 1000);
