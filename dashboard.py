@@ -3475,7 +3475,7 @@ PRICING_HTML = """<!DOCTYPE html>
     .plan-features{list-style:none;margin-bottom:24px;}
     .plan-features li{font-size:.85rem;padding:6px 0;border-bottom:1px solid var(--border);color:var(--muted);}
     .plan-features li:last-child{border:none;} .plan-features li::before{content:"✓ ";color:#3fb950;}
-    .plan-features li.no::before{content:"✗ ";color:var(--muted);} .plan-features li.no{opacity:.6;}
+    .plan-features li.no::before{content:"🔒 ";font-size:.75rem;} .plan-features li.no{opacity:.45;color:var(--muted);}
     .btn-plan{display:block;text-align:center;padding:11px;border-radius:8px;font-size:.9rem;font-weight:600;text-decoration:none;}
     .btn-free{background:var(--bg);border:1px solid var(--border);color:var(--text);}
     .btn-basic{background:var(--bg);border:2px solid var(--accent);color:var(--accent);}
@@ -3517,9 +3517,23 @@ PRICING_HTML = """<!DOCTYPE html>
       <div class="plan-price">$0<span>/mo</span></div>
       <div class="plan-desc">Get started with no commitment.</div>
       <ul class="plan-features">
-        <li>3 copies per day</li><li>All indicators visible</li>
-        <li>Unusual volume</li><li>Market news</li><li>Earnings calendar</li><li>Market heatmap</li><li>Dividends calendar</li>
-        <li class="no">Ticker news</li><li class="no">Gamma exposure</li><li class="no">Greeks dashboard</li><li class="no">LSTM forecast</li><li class="no">Options flow</li><li class="no">Insider trading</li><li class="no">Pre-market scanner</li>
+        <li>3 copies per day</li>
+        <li>All indicators</li>
+        <li>Live chart &amp; forecast</li>
+        <li>Unusual volume scanner</li>
+        <li>Market news</li>
+        <li>Earnings calendar</li>
+        <li>Market heatmap</li>
+        <li>Dividends calendar</li>
+        <li>Trump tracker</li>
+        <li class="no">Ticker news</li>
+        <li class="no">Gamma exposure</li>
+        <li class="no">Greeks dashboard</li>
+        <li class="no">LSTM forecast</li>
+        <li class="no">Options flow</li>
+        <li class="no">Insider trading</li>
+        <li class="no">Pre-market scanner</li>
+        <li class="no">Priority support</li>
       </ul>
       <a href="/indicators" class="btn-plan btn-free">Start Free</a>
     </div>
@@ -3528,10 +3542,23 @@ PRICING_HTML = """<!DOCTYPE html>
       <div class="plan-price" id="basic-price">$9.99<span>/mo</span></div>
       <div class="plan-desc">For active traders who copy often.</div>
       <ul class="plan-features">
-        <li>8 copies per day</li><li>All indicators visible</li>
-        <li>Unusual volume</li><li>Market news</li><li>Earnings calendar</li><li>Market heatmap</li><li>Dividends calendar</li><li>Ticker news</li>
-        <li>Gamma exposure</li><li>Greeks dashboard</li>
-        <li class="no">LSTM forecast</li><li class="no">Options flow</li><li class="no">Insider trading</li><li class="no">Pre-market scanner</li>
+        <li>8 copies per day</li>
+        <li>All indicators</li>
+        <li>Live chart &amp; forecast</li>
+        <li>Unusual volume scanner</li>
+        <li>Market news</li>
+        <li>Earnings calendar</li>
+        <li>Market heatmap</li>
+        <li>Dividends calendar</li>
+        <li>Trump tracker</li>
+        <li>Ticker news</li>
+        <li>Gamma exposure</li>
+        <li>Greeks dashboard</li>
+        <li class="no">LSTM forecast</li>
+        <li class="no">Options flow</li>
+        <li class="no">Insider trading</li>
+        <li class="no">Pre-market scanner</li>
+        <li class="no">Priority support</li>
       </ul>
       {% if current_user %}
       <a href="/subscribe/basic" class="btn-plan btn-basic" id="btn-basic">Get Basic</a>
@@ -3545,10 +3572,23 @@ PRICING_HTML = """<!DOCTYPE html>
       <div class="plan-price" id="pro-price">$15.99<span>/mo</span></div>
       <div class="plan-desc">Unlimited access for power users.</div>
       <ul class="plan-features">
-        <li>Unlimited copies</li><li>All indicators visible</li>
-        <li>Unusual volume</li><li>Market news</li><li>Earnings calendar</li><li>Market heatmap</li><li>Dividends calendar</li><li>Ticker news</li>
-        <li>Gamma exposure</li><li>Greeks dashboard</li>
-        <li>LSTM forecast</li><li>Options flow</li><li>Insider trading</li><li>Pre-market scanner</li>
+        <li>Unlimited copies</li>
+        <li>All indicators</li>
+        <li>Live chart &amp; forecast</li>
+        <li>Unusual volume scanner</li>
+        <li>Market news</li>
+        <li>Earnings calendar</li>
+        <li>Market heatmap</li>
+        <li>Dividends calendar</li>
+        <li>Trump tracker</li>
+        <li>Ticker news</li>
+        <li>Gamma exposure</li>
+        <li>Greeks dashboard</li>
+        <li>LSTM forecast</li>
+        <li>Options flow</li>
+        <li>Insider trading</li>
+        <li>Pre-market scanner</li>
+        <li>Priority support</li>
       </ul>
       {% if current_user %}
       <a href="/subscribe/pro" class="btn-plan btn-pro" id="btn-pro">Get Pro</a>
