@@ -2280,7 +2280,7 @@ def gamma_api():
 @login_required
 def greeks_page():
     plan = _get_user_plan(session.get("user_id"))
-    if plan != "pro":
+    if plan == "free":
         return redirect("/pricing?upgrade=greeks")
     return render_template_string(GREEKS_HTML, current_user=current_user())
 
@@ -2289,7 +2289,7 @@ def greeks_page():
 @login_required
 def greeks_api():
     plan = _get_user_plan(session.get("user_id"))
-    if plan != "pro":
+    if plan == "free":
         return jsonify({"error": "upgrade_required"}), 403
     import yfinance as yf
     import numpy as np
@@ -3114,7 +3114,7 @@ PRICING_HTML = """<!DOCTYPE html>
       <div class="plan-desc">For active traders who copy often.</div>
       <ul class="plan-features">
         <li>8 copies per day</li><li>All indicators visible</li>
-        <li>Unusual volume</li><li>Market news</li><li>Ticker news</li><li>Earnings calendar</li><li>Gamma exposure</li><li class="no">LSTM forecast</li><li class="no">Options flow</li><li class="no">Insider trading</li><li class="no">Pre-market scanner</li>
+        <li>Unusual volume</li><li>Market news</li><li>Ticker news</li><li>Earnings calendar</li><li>Gamma exposure</li><li>Greeks dashboard</li><li class="no">LSTM forecast</li><li class="no">Options flow</li><li class="no">Insider trading</li><li class="no">Pre-market scanner</li>
       </ul>
       {% if current_user %}
       <a href="/subscribe/basic" class="btn-plan btn-basic" id="btn-basic">Get Basic</a>
@@ -3129,7 +3129,7 @@ PRICING_HTML = """<!DOCTYPE html>
       <div class="plan-desc">Unlimited access for power users.</div>
       <ul class="plan-features">
         <li>Unlimited copies</li><li>All indicators visible</li>
-        <li>Unusual volume</li><li>Market news</li><li>Ticker news</li><li>Earnings calendar</li><li>Gamma exposure</li><li>LSTM forecast</li><li>Options flow</li><li>Insider trading</li><li>Pre-market scanner</li>      </ul>
+        <li>Unusual volume</li><li>Market news</li><li>Ticker news</li><li>Earnings calendar</li><li>Gamma exposure</li><li>Greeks dashboard</li><li>LSTM forecast</li><li>Options flow</li><li>Insider trading</li><li>Pre-market scanner</li>      </ul>
       {% if current_user %}
       <a href="/subscribe/pro" class="btn-plan btn-pro" id="btn-pro">Get Pro</a>
       {% else %}
@@ -4132,7 +4132,7 @@ HOME_HTML = """<!DOCTYPE html>
       <div class="cat">Options · Basic+</div><div class="iname">Gamma Exposure</div>
     </a>
     <a class="ind-pill" href="/greeks">
-      <div class="cat">Options · Pro</div><div class="iname">Greeks Dashboard</div>
+      <div class="cat">Options · Basic+</div><div class="iname">Greeks Dashboard</div>
     </a>
     <a class="ind-pill" href="/earnings">
       <div class="cat">Calendar · Basic+</div><div class="iname">Earnings Calendar</div>
