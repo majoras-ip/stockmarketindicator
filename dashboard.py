@@ -347,65 +347,67 @@ def api_forecast():
     ticker   = request.args.get("ticker", "SPY").upper()
     interval = request.args.get("interval", "5m")
 
-    # Download price data
     try:
-        from dotenv import load_dotenv
-        load_dotenv(os.path.join(config.BASE_DIR, ".env"))
-        from live.live_feed import fetch_bars
-        interval_map = {"1m": "1Min", "5m": "5Min", "15m": "15Min", "1h": "1Hour"}
-        df = fetch_bars(ticker, interval_map.get(interval, "5Min"))
-    except Exception:
-        from data.collector import download
-        df = download(ticker, period="5d", interval=interval, save_csv=False)
+        # Download price data via yfinance
+        import yfinance as yf
+        period_map = {"1m": "7d", "5m": "60d", "15m": "60d", "1h": "730d"}
+        period = period_map.get(interval, "60d")
+        raw = yf.download(ticker, period=period, interval=interval, progress=False, auto_adjust=True)
+        if raw is None or len(raw) < 30:
+            return jsonify({"error": "Not enough data"}), 400
 
-    if df is None or len(df) < 30:
-        return jsonify({"error": "Not enough data"}), 400
+        # Flatten MultiIndex columns if present
+        if isinstance(raw.columns, __import__('pandas').MultiIndex):
+            raw.columns = raw.columns.get_level_values(0)
 
-    close = df["Close"].dropna()
-    if len(close) < 30:
-        return jsonify({"error": "Not enough data"}), 400
+        close = raw["Close"].dropna()
+        if len(close) < 30:
+            return jsonify({"error": "Not enough data"}), 400
 
-    # Compute realized volatility: rolling 20-bar std of log returns
-    log_ret = np.log(close / close.shift(1)).dropna()
-    rv = log_ret.rolling(window=20).std().dropna()
+        # Compute realized volatility: rolling 20-bar std of log returns
+        log_ret = np.log(close / close.shift(1)).dropna()
+        rv = log_ret.rolling(window=20).std().dropna()
 
-    hist_index = rv.index
-    hist_rv    = rv.values
+        hist_index = rv.index
+        hist_rv    = rv.values
 
-    # Simple forecast: mean-revert toward recent average over next 6 bars
-    FORECAST_STEPS = 6
-    recent_mean = float(np.mean(hist_rv[-20:]))
-    last_rv     = float(hist_rv[-1])
-    mean_fcast  = np.array([last_rv + (recent_mean - last_rv) * (i + 1) / FORECAST_STEPS
-                            for i in range(FORECAST_STEPS)])
-    std_fcast   = float(np.std(hist_rv[-20:])) * 0.5
-    lower = mean_fcast - std_fcast
-    upper = mean_fcast + std_fcast
+        # Simple forecast: mean-revert toward recent average over next 6 bars
+        FORECAST_STEPS = 6
+        recent_mean = float(np.mean(hist_rv[-20:]))
+        last_rv     = float(hist_rv[-1])
+        mean_fcast  = np.array([last_rv + (recent_mean - last_rv) * (i + 1) / FORECAST_STEPS
+                                for i in range(FORECAST_STEPS)])
+        std_fcast   = float(np.std(hist_rv[-20:])) * 0.5
+        lower = mean_fcast - std_fcast
+        upper = mean_fcast + std_fcast
 
-    interval_ms_map = {"1m": 60_000, "5m": 300_000, "15m": 900_000, "1h": 3_600_000}
-    bar_ms    = interval_ms_map.get(interval, 300_000)
-    last_ts   = int(hist_index[-1].timestamp() * 1000)
-    future_ts = [last_ts + bar_ms * (i + 1) for i in range(FORECAST_STEPS)]
+        interval_ms_map = {"1m": 60_000, "5m": 300_000, "15m": 900_000, "1h": 3_600_000}
+        bar_ms    = interval_ms_map.get(interval, 300_000)
+        last_ts   = int(hist_index[-1].timestamp() * 1000)
+        future_ts = [last_ts + bar_ms * (i + 1) for i in range(FORECAST_STEPS)]
 
-    # Direction: compare last RV to recent mean
-    direction_up   = bool(last_rv < recent_mean)
-    direction_conf = float(min(0.99, 0.5 + abs(last_rv - recent_mean) / (recent_mean + 1e-10) * 0.5))
+        # Direction: compare last RV to recent mean
+        direction_up   = bool(last_rv < recent_mean)
+        direction_conf = float(min(0.99, 0.5 + abs(last_rv - recent_mean) / (recent_mean + 1e-10) * 0.5))
 
-    return jsonify({
-        "ticker":   ticker,
-        "interval": interval,
-        "hist_ts":  [int(ts.timestamp() * 1000) for ts in hist_index],
-        "hist_rv":  [round(float(v), 8) for v in hist_rv],
-        "future_ts":    future_ts,
-        "future_mean":  [round(float(v), 8) for v in mean_fcast],
-        "future_lower": [round(float(v), 8) for v in lower],
-        "future_upper": [round(float(v), 8) for v in upper],
-        "low_thresh":    round(float(np.percentile(hist_rv, 25)), 8),
-        "medium_thresh": round(float(np.percentile(hist_rv, 50)), 8),
-        "high_thresh":   round(float(np.percentile(hist_rv, 75)), 8),
-        "direction_up":   direction_up,
-        "direction_conf": direction_conf,
-    })
+        return jsonify({
+            "ticker":   ticker,
+            "interval": interval,
+            "hist_ts":  [int(ts.timestamp() * 1000) for ts in hist_index],
+            "hist_rv":  [round(float(v), 8) for v in hist_rv],
+            "future_ts":    future_ts,
+            "future_mean":  [round(float(v), 8) for v in mean_fcast],
+            "future_lower": [round(float(v), 8) for v in lower],
+            "future_upper": [round(float(v), 8) for v in upper],
+            "low_thresh":    round(float(np.percentile(hist_rv, 25)), 8),
+            "medium_thresh": round(float(np.percentile(hist_rv, 50)), 8),
+            "high_thresh":   round(float(np.percentile(hist_rv, 75)), 8),
+            "direction_up":   direction_up,
+            "direction_conf": direction_conf,
+        })
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 # ── Pine Script JSON endpoint ─────────────────────────────────────────────────
