@@ -8526,8 +8526,8 @@ def scalper_api():
         rows.sort(key=lambda x: x["score"], reverse=True)
 
         # Max pain
-        all_strikes = sorted(set(float(r["strike"]) for r in chain.calls.itertuples()) |
-                             set(float(r["strike"]) for r in chain.puts.itertuples()))
+        all_strikes = sorted(set(chain.calls["strike"].astype(float)) |
+                             set(chain.puts["strike"].astype(float)))
         pain = {}
         for mp in all_strikes:
             call_pain = sum(max(0, mp - float(r["strike"])) * float(r.get("openInterest") or 0)
