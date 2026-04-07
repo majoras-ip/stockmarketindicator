@@ -2016,16 +2016,23 @@ def _fetch_earnings() -> list[dict]:
             if hasattr(earn_date, "date"):
                 earn_date = earn_date.date()
             if today <= earn_date <= cutoff:
-                eps_est = cal.get("EPS Estimate", [None])
-                eps_est = eps_est[0] if isinstance(eps_est, list) and eps_est else eps_est
-                rev_est = cal.get("Revenue Estimate", [None])
-                rev_est = rev_est[0] if isinstance(rev_est, list) and rev_est else rev_est
+                def _first(val):
+                    return val[0] if isinstance(val, list) and val else val
+
+                eps_est = _first(cal.get("EPS Estimate") or cal.get("Earnings Average") or cal.get("epsEstimate"))
+                rev_est = _first(cal.get("Revenue Estimate") or cal.get("Revenue Average") or cal.get("revenueEstimate"))
+
+                import math
+                def _is_num(v):
+                    try: return v is not None and not math.isnan(float(v))
+                    except: return False
+
                 results.append({
                     "ticker":   ticker,
                     "date":     earn_date.strftime("%b %d, %Y"),
                     "date_ord": earn_date.toordinal(),
-                    "eps_est":  f"${eps_est:.2f}" if eps_est and eps_est == eps_est else "—",
-                    "rev_est":  f"${rev_est/1e9:.1f}B" if rev_est and rev_est == rev_est else "—",
+                    "eps_est":  f"${float(eps_est):.2f}" if _is_num(eps_est) else "—",
+                    "rev_est":  f"${float(rev_est)/1e9:.1f}B" if _is_num(rev_est) else "—",
                 })
         except Exception:
             continue
