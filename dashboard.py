@@ -2388,6 +2388,73 @@ def greeks_api():
         return jsonify({"error": str(e)}), 500
 
 
+# ── Heatmap ──────────────────────────────────────────────────────────────────
+
+_HEATMAP_SECTORS = {
+    "Technology":     ["AAPL","MSFT","NVDA","AVGO","ORCL","AMD","QCOM","TXN","INTC","AMAT","MU","CRM","NOW","PANW","CRWD","NET","LRCX","KLAC","SNOW","PLTR"],
+    "Communication":  ["GOOGL","META","NFLX","DIS","T","VZ","SNAP","PINS","RDDT","RBLX"],
+    "Consumer Disc.": ["AMZN","TSLA","HD","MCD","NKE","SBUX","TGT","ABNB","BKNG","DASH","GM","F","RIVN"],
+    "Financials":     ["JPM","BAC","WFC","GS","MS","V","MA","C","BLK","AXP","PYPL","COIN"],
+    "Healthcare":     ["UNH","JNJ","LLY","ABBV","PFE","MRK","AMGN","TMO","ABT","ISRG"],
+    "Energy":         ["XOM","CVX","COP","SLB","EOG","PSX","MPC","OXY"],
+    "Industrials":    ["CAT","BA","GE","RTX","HON","UPS","FDX","LMT","DE"],
+    "Consumer Stap.": ["WMT","PG","COST","KO","PEP","PM","MO","CL"],
+    "Materials":      ["LIN","APD","SHW","FCX","NEM","AA"],
+    "Real Estate":    ["AMT","PLD","EQIX","CCI","SPG","O"],
+    "Utilities":      ["NEE","DUK","SO","D","AEP","EXC"],
+}
+
+import time as _hm_time
+_heatmap_cache = {"data": None, "ts": 0}
+
+def _fetch_heatmap_data():
+    import yfinance as yf
+    import pandas as pd
+
+    all_tickers = [t for tickers in _HEATMAP_SECTORS.values() for t in tickers]
+    raw = yf.download(all_tickers, period="2d", interval="1d", progress=False, auto_adjust=True)
+
+    if isinstance(raw.columns, pd.MultiIndex):
+        closes = raw["Close"]
+    else:
+        closes = raw[["Close"]]
+
+    result = []
+    for sector, tickers in _HEATMAP_SECTORS.items():
+        for ticker in tickers:
+            try:
+                col = closes[ticker] if ticker in closes.columns else None
+                if col is None:
+                    continue
+                vals = col.dropna()
+                if len(vals) == 0:
+                    continue
+                price = round(float(vals.iloc[-1]), 2)
+                pct   = round((float(vals.iloc[-1]) - float(vals.iloc[-2])) / float(vals.iloc[-2]) * 100, 2) if len(vals) >= 2 else 0.0
+                result.append({"ticker": ticker, "sector": sector, "price": price, "change_pct": pct})
+            except Exception:
+                continue
+    return result
+
+
+@app.route("/heatmap")
+def heatmap_page():
+    return render_template_string(HEATMAP_HTML, current_user=current_user())
+
+
+@app.route("/api/heatmap")
+def heatmap_api():
+    global _heatmap_cache
+    try:
+        now = _hm_time.time()
+        if _heatmap_cache["data"] is None or now - _heatmap_cache["ts"] > 300:
+            _heatmap_cache["data"] = _fetch_heatmap_data()
+            _heatmap_cache["ts"]   = now
+        return jsonify({"sectors": _HEATMAP_SECTORS, "stocks": _heatmap_cache["data"], "ts": int(_heatmap_cache["ts"])})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 # ── Unusual Volume ────────────────────────────────────────────────────────────
 
 _VOLUME_TICKERS = [
@@ -2694,6 +2761,7 @@ _NAV_LINKS = """
         <a href="/indicators">Indicators</a>
         <a href="/generate">Forecast</a>
         <a href="/dashboard">Live Chart</a>
+        <a href="/heatmap">Market Heatmap</a>
         <a href="/earnings">Earnings Calendar</a>
         <a href="/flow">Options Flow</a>
         <a href="/gamma">Gamma Exposure</a>
@@ -4132,6 +4200,9 @@ HOME_HTML = """<!DOCTYPE html>
     </a>
     <a class="ind-pill" href="/greeks">
       <div class="cat">Options · Basic+</div><div class="iname">Greeks Dashboard</div>
+    </a>
+    <a class="ind-pill" href="/heatmap">
+      <div class="cat">Market · Free</div><div class="iname">Market Heatmap</div>
     </a>
     <a class="ind-pill" href="/earnings">
       <div class="cat">Calendar · Free</div><div class="iname">Earnings Calendar</div>
@@ -6941,6 +7012,158 @@ function fmtInt(v) {
   if (v >= 1000) return (v/1000).toFixed(0) + 'K';
   return v;
 }
+""" + _THEME_JS + """
+</script>
+</body>
+</html>"""
+
+
+HEATMAP_HTML = """<!DOCTYPE html>
+<html data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">""" + _META + """
+  <title>Market Heatmap · ChartEdge</title>
+  <style>
+    :root[data-theme="dark"]  { --bg:#0d1117; --bg2:#161b22; --bg3:#21262d; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --green:#3fb950; --red:#f85149; }
+    :root[data-theme="light"] { --bg:#ffffff; --bg2:#f6f8fa; --bg3:#eaeef2; --border:#d0d7de; --text:#1f2328; --muted:#636c76; --accent:#0969da; --green:#1a7f37; --red:#cf222e; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: monospace; background: var(--bg); color: var(--text); min-height: 100vh; }
+    nav { background: var(--bg2); border-bottom: 1px solid var(--border); padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; }
+    .logo { color: var(--accent); font-size: 1.1rem; font-weight: bold; text-decoration: none; }
+    """ + _NAV_CSS + """
+    .hero { text-align: center; padding: 32px 24px 20px; border-bottom: 1px solid var(--border); }
+    .hero h1 { font-size: 1.6rem; margin-bottom: 6px; }
+    .hero h1 span { color: var(--accent); }
+    .hero p { color: var(--muted); font-size: .85rem; }
+    .container { max-width: 1300px; margin: 0 auto; padding: 20px 16px 40px; }
+    .toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; flex-wrap: wrap; gap: 8px; }
+    .toolbar .ts { color: var(--muted); font-size: .78rem; }
+    .toolbar button { background: var(--bg2); border: 1px solid var(--border); color: var(--text); padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: .8rem; font-family: monospace; }
+    .toolbar button:hover { border-color: var(--accent); color: var(--accent); }
+    .legend { display: flex; align-items: center; gap: 6px; font-size: .72rem; color: var(--muted); }
+    .legend-bar { display: flex; height: 12px; border-radius: 3px; overflow: hidden; }
+    .legend-bar span { width: 24px; }
+    .sectors { display: flex; flex-direction: column; gap: 14px; }
+    .sector-block { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+    .sector-label { font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); padding: 7px 12px; border-bottom: 1px solid var(--border); background: var(--bg3); }
+    .sector-cells { display: flex; flex-wrap: wrap; gap: 3px; padding: 6px; }
+    .cell { border-radius: 4px; padding: 6px 8px; cursor: pointer; transition: filter .15s, transform .1s; display: flex; flex-direction: column; justify-content: center; align-items: center; min-width: 64px; flex: 1 1 64px; max-width: 110px; height: 52px; text-align: center; }
+    .cell:hover { filter: brightness(1.25); transform: scale(1.04); z-index: 1; }
+    .cell .ct { font-size: .78rem; font-weight: 700; color: #fff; line-height: 1; }
+    .cell .cp { font-size: .7rem; color: rgba(255,255,255,.85); margin-top: 3px; }
+    .loading { text-align: center; padding: 80px; color: var(--muted); font-size: .9rem; }
+    .error-msg { background: #2d1f1f; border: 1px solid var(--red); border-radius: 8px; padding: 12px 16px; color: var(--red); margin-bottom: 16px; display: none; }
+    .disclaimer { color: var(--muted); font-size: .75rem; margin-top: 16px; text-align: center; }
+    footer { text-align: center; padding: 28px 24px; color: var(--muted); font-size: .8rem; border-top: 1px solid var(--border); margin-top: 20px; }
+  </style>
+</head>
+<body>
+<nav>
+  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span></a>
+  <button class="hamburger" onclick="toggleMobileNav(event)">☰</button>
+  <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
+</nav>
+<div class="hero">
+  <h1>Market <span>Heatmap</span></h1>
+  <p>S&amp;P 500 major stocks — color by daily % change</p>
+</div>
+<div class="container">
+  <div class="error-msg" id="error-msg"></div>
+  <div class="toolbar">
+    <div class="ts" id="ts-label">Loading…</div>
+    <div style="display:flex;gap:10px;align-items:center;">
+      <div class="legend">
+        <div class="legend-bar">
+          <span style="background:hsl(0,90%,28%)"></span>
+          <span style="background:hsl(0,60%,28%)"></span>
+          <span style="background:hsl(0,30%,22%)"></span>
+          <span style="background:#2a2a2a"></span>
+          <span style="background:hsl(120,30%,22%)"></span>
+          <span style="background:hsl(120,60%,26%)"></span>
+          <span style="background:hsl(120,90%,26%)"></span>
+        </div>
+        <span>-3% &nbsp; 0 &nbsp; +3%</span>
+      </div>
+      <button onclick="loadHeatmap()">Refresh</button>
+    </div>
+  </div>
+  <div id="heatmap-content" class="loading">Fetching market data…</div>
+  <p class="disclaimer">Data from Yahoo Finance · Cached up to 5 min · Not financial advice</p>
+</div>
+<footer>© 2026 ChartEdge · Not financial advice</footer>
+<script>
+function pctColor(pct) {
+  var v = Math.min(Math.abs(pct) / 3, 1);
+  var sat = Math.round(20 + v * 70);
+  var lit = pct === 0 ? 20 : Math.round(20 + v * 10);
+  var hue = pct >= 0 ? 120 : 0;
+  if (Math.abs(pct) < 0.05) return '#1e2127';
+  return 'hsl(' + hue + ',' + sat + '%,' + lit + '%)';
+}
+
+function loadHeatmap() {
+  document.getElementById('error-msg').style.display = 'none';
+  document.getElementById('heatmap-content').innerHTML = '<div class="loading">Fetching market data…</div>';
+  document.getElementById('ts-label').textContent = 'Loading…';
+  fetch('/api/heatmap')
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (d.error) {
+        document.getElementById('error-msg').textContent = d.error;
+        document.getElementById('error-msg').style.display = 'block';
+        document.getElementById('heatmap-content').innerHTML = '';
+        return;
+      }
+      renderHeatmap(d);
+    })
+    .catch(function(e) {
+      document.getElementById('error-msg').textContent = 'Failed to load heatmap data.';
+      document.getElementById('error-msg').style.display = 'block';
+      document.getElementById('heatmap-content').innerHTML = '';
+    });
+}
+
+function renderHeatmap(d) {
+  // Build lookup: ticker -> stock data
+  var lookup = {};
+  for (var i = 0; i < d.stocks.length; i++) {
+    lookup[d.stocks[i].ticker] = d.stocks[i];
+  }
+
+  var sectorOrder = Object.keys(d.sectors);
+  var html = '<div class="sectors">';
+
+  for (var s = 0; s < sectorOrder.length; s++) {
+    var sector = sectorOrder[s];
+    var tickers = d.sectors[sector];
+    html += '<div class="sector-block">';
+    html += '<div class="sector-label">' + sector + '</div>';
+    html += '<div class="sector-cells">';
+    for (var i = 0; i < tickers.length; i++) {
+      var t  = tickers[i];
+      var st = lookup[t];
+      if (!st) continue;
+      var pct   = st.change_pct;
+      var sign  = pct >= 0 ? '+' : '';
+      var color = pctColor(pct);
+      html += '<div class="cell" style="background:' + color + '" title="' + t + ' $' + st.price + ' (' + sign + pct + '%)" onclick="window.open(\'https://finance.yahoo.com/quote/' + t + '\',\'_blank\')">'
+            + '<div class="ct">' + t + '</div>'
+            + '<div class="cp">' + sign + pct + '%</div>'
+            + '</div>';
+    }
+    html += '</div></div>';
+  }
+
+  html += '</div>';
+  document.getElementById('heatmap-content').innerHTML = html;
+
+  var updated = new Date(d.ts * 1000);
+  document.getElementById('ts-label').textContent = 'Updated ' + updated.toLocaleTimeString();
+}
+
+loadHeatmap();
+setTimeout(function() { loadHeatmap(); }, 5 * 60 * 1000);
 """ + _THEME_JS + """
 </script>
 </body>
