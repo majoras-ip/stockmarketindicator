@@ -2031,7 +2031,7 @@ def _fetch_earnings() -> list[dict]:
                     "ticker":   ticker,
                     "date":     earn_date.strftime("%b %d, %Y"),
                     "date_ord": earn_date.toordinal(),
-                    "eps_est":  f"${float(eps_est):.2f}" if _is_num(eps_est) else "—",
+                    "eps_est":  (f"-${abs(float(eps_est)):.2f}" if float(eps_est) < 0 else f"${float(eps_est):.2f}") if _is_num(eps_est) else "—",
                     "rev_est":  f"${float(rev_est)/1e9:.1f}B" if _is_num(rev_est) else "—",
                 })
         except Exception:
