@@ -7921,7 +7921,7 @@ TRUMP_HTML = """<!DOCTYPE html>
         <option value="IWM">Russell 2000 (IWM)</option>
         <option value="DJT">Trump Media (DJT)</option>
         <option value="TLT">Bonds 20Y (TLT)</option>
-        <option value="GLD">Gold (GLD)</option>
+        <option value="GC=F">Gold (GC=F)</option>
         <option value="USO">Oil (USO)</option>
         <option value="XLE">Energy (XLE)</option>
         <option value="XLF">Financials (XLF)</option>
@@ -7965,7 +7965,7 @@ function setPeriod(btn) {
 }
 
 function fmtPrice(p, ticker) {
-  if (ticker && (ticker.indexOf('BTC') !== -1 || ticker === 'IBIT') && p > 1000) {
+  if (p > 999) {
     return '$' + p.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0});
   }
   return '$' + p.toFixed(2);
