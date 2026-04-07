@@ -5832,10 +5832,20 @@ INSIDER_HTML = """<!DOCTYPE html>
     .page { max-width:900px; margin:0 auto; padding:36px 24px; }
     h1 { font-size:1.6rem; margin-bottom:6px; } h1 span { color:var(--accent); }
     .sub { color:var(--muted); font-size:.85rem; margin-bottom:24px; }
-    .search-row { display:flex; gap:10px; margin-bottom:24px; }
-    .search-row input { flex:1; background:var(--bg2); border:1px solid var(--border); border-radius:6px; padding:9px 14px; color:var(--text); font-size:.9rem; }
+    .filter-section { margin-bottom:20px; display:flex; flex-direction:column; gap:10px; }
+    .search-row { display:flex; gap:10px; }
+    .search-row input { flex:1; background:var(--bg2); border:1px solid var(--border); border-radius:6px; padding:9px 14px; color:var(--text); font-size:.9rem; outline:none; }
+    .search-row input:focus { border-color:var(--accent); }
     .search-row button { background:var(--accent); color:#fff; border:none; border-radius:6px; padding:9px 18px; font-size:.9rem; font-weight:600; cursor:pointer; }
     .search-row button:hover { opacity:.85; }
+    .filter-row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+    .filter-label { font-size:.75rem; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; white-space:nowrap; }
+    .chip { background:var(--bg2); border:1px solid var(--border); color:var(--muted); padding:4px 12px; border-radius:20px; font-size:.78rem; cursor:pointer; white-space:nowrap; transition:all .15s; }
+    .chip:hover { border-color:var(--accent); color:var(--accent); }
+    .chip.active { background:#1a2a4a; border-color:var(--accent); color:var(--accent); font-weight:600; }
+    .source-tabs { display:flex; gap:4px; }
+    .stab { background:var(--bg2); border:1px solid var(--border); color:var(--muted); padding:5px 14px; border-radius:6px; font-size:.8rem; cursor:pointer; }
+    .stab.active { background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600; }
     .back-btn { background:none; border:none; color:var(--accent); font-size:.85rem; cursor:pointer; margin-bottom:16px; padding:0; }
     .filing-table { width:100%; border-collapse:collapse; }
     .filing-table th { text-align:left; font-size:.72rem; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; padding:8px 12px; border-bottom:1px solid var(--border); }
@@ -5861,13 +5871,32 @@ INSIDER_HTML = """<!DOCTYPE html>
   <h1>Insider Trading <span>Feed</span> <span class="pro-badge">PRO</span></h1>
   <p class="sub">SEC Form 4 filings for major companies · U.S. Congressional STOCK Act disclosures</p>
 
-  <div class="search-row">
-    <input type="text" id="ticker-input" placeholder="Search by ticker (e.g. AAPL)" onkeydown="if(event.key==='Enter')searchTicker()">
-    <button onclick="searchTicker()">Search</button>
-  </div>
-
-  <div id="back-wrap" style="display:none">
-    <button class="back-btn" onclick="showAll()">← All filings</button>
+  <div class="filter-section">
+    <div class="search-row">
+      <input type="text" id="ticker-input" placeholder="Filter by ticker (e.g. AAPL)" oninput="applyFilters()">
+      <input type="text" id="name-input" placeholder="Filter by name (e.g. Pelosi)" oninput="applyFilters()" style="max-width:220px;">
+    </div>
+    <div class="filter-row">
+      <span class="filter-label">Source:</span>
+      <div class="source-tabs">
+        <button class="stab active" data-src="all" onclick="setSource(this)">All</button>
+        <button class="stab" data-src="congress" onclick="setSource(this)">Congress</button>
+        <button class="stab" data-src="sec" onclick="setSource(this)">SEC</button>
+      </div>
+    </div>
+    <div class="filter-row">
+      <span class="filter-label">Politicians:</span>
+      <button class="chip" onclick="setPolitician(this, 'Pelosi')">Nancy Pelosi</button>
+      <button class="chip" onclick="setPolitician(this, 'Tuberville')">Tommy Tuberville</button>
+      <button class="chip" onclick="setPolitician(this, 'Gottheimer')">Josh Gottheimer</button>
+      <button class="chip" onclick="setPolitician(this, 'Crenshaw')">Dan Crenshaw</button>
+      <button class="chip" onclick="setPolitician(this, 'Khanna')">Ro Khanna</button>
+      <button class="chip" onclick="setPolitician(this, 'McCaul')">Michael McCaul</button>
+      <button class="chip" onclick="setPolitician(this, 'Greene')">Marjorie Taylor Greene</button>
+      <button class="chip" onclick="setPolitician(this, 'Capito')">Shelley Capito</button>
+      <button class="chip" onclick="setPolitician(this, 'Collins')">Susan Collins</button>
+      <button class="chip" onclick="setPolitician(this, 'Scott')">Austin Scott</button>
+    </div>
   </div>
 
   <div id="content" class="loading">Loading filings…</div>
@@ -5878,6 +5907,56 @@ INSIDER_HTML = """<!DOCTYPE html>
 var allFilings = [];
 var currentPage = 1;
 var PAGE_SIZE = 15;
+var _sourceFilter = 'all';
+var _activeChip = null;
+
+function setSource(btn) {
+  _sourceFilter = btn.getAttribute('data-src');
+  document.querySelectorAll('.stab').forEach(function(b){ b.classList.remove('active'); });
+  btn.classList.add('active');
+  currentPage = 1;
+  applyFilters();
+}
+
+function setPolitician(btn, name) {
+  var nameInput = document.getElementById('name-input');
+  if (_activeChip === btn) {
+    // deselect
+    btn.classList.remove('active');
+    _activeChip = null;
+    nameInput.value = '';
+  } else {
+    document.querySelectorAll('.chip').forEach(function(c){ c.classList.remove('active'); });
+    btn.classList.add('active');
+    _activeChip = btn;
+    nameInput.value = name;
+    // auto-switch to congress filter
+    document.querySelectorAll('.stab').forEach(function(b){ b.classList.remove('active'); });
+    document.querySelector('[data-src="congress"]').classList.add('active');
+    _sourceFilter = 'congress';
+  }
+  currentPage = 1;
+  applyFilters();
+}
+
+function applyFilters() {
+  var ticker = document.getElementById('ticker-input').value.trim().toUpperCase();
+  var name   = document.getElementById('name-input').value.trim().toLowerCase();
+  if (!name && _activeChip) { _activeChip.classList.remove('active'); _activeChip = null; }
+
+  var filtered = allFilings.filter(function(f) {
+    if (_sourceFilter === 'congress' && f.source !== 'congress') return false;
+    if (_sourceFilter === 'sec'      && f.source === 'congress') return false;
+    if (ticker && !(f.ticker || '').toUpperCase().includes(ticker)) return false;
+    if (name   && !(f.insider || '').toLowerCase().includes(name)) return false;
+    return true;
+  });
+  currentPage = 1;
+  var label = '';
+  if (name) label = 'Trades by "' + document.getElementById('name-input').value.trim() + '"';
+  else if (ticker) label = 'Filings for ' + ticker;
+  renderTable(filtered, label);
+}
 
 function renderTable(filings, title) {
   if (!filings.length) {
@@ -5922,7 +6001,7 @@ function renderTable(filings, title) {
 
 function changePage(dir) {
   currentPage += dir;
-  renderTable(allFilings);
+  applyFilters();
 }
 
 async function loadAll() {
@@ -5931,31 +6010,10 @@ async function loadAll() {
     var data = await res.json();
     if (data.error) { document.getElementById('content').innerHTML = '<p style="color:var(--red)">Error: ' + data.error + '</p>'; return; }
     allFilings = data;
-    renderTable(data);
+    applyFilters();
   } catch(e) {
     document.getElementById('content').innerHTML = '<p style="color:var(--red)">Failed to load filings.</p>';
   }
-}
-
-async function searchTicker() {
-  var ticker = document.getElementById('ticker-input').value.trim().toUpperCase();
-  if (!ticker) return;
-  document.getElementById('content').innerHTML = '<div class="loading">Searching ' + ticker + '…</div>';
-  document.getElementById('back-wrap').style.display = 'block';
-  try {
-    var res = await fetch('/api/insider/ticker?ticker=' + ticker);
-    var data = await res.json();
-    if (data.error) { document.getElementById('content').innerHTML = '<p style="color:var(--red)">Error: ' + data.error + '</p>'; return; }
-    renderTable(data, 'Form 4 filings for ' + ticker);
-  } catch(e) {
-    document.getElementById('content').innerHTML = '<p style="color:var(--red)">Search failed.</p>';
-  }
-}
-
-function showAll() {
-  document.getElementById('back-wrap').style.display = 'none';
-  document.getElementById('ticker-input').value = '';
-  renderTable(allFilings);
 }
 
 loadAll();
