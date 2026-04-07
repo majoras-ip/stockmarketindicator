@@ -2410,14 +2410,40 @@ _heatmap_cache = {"data": None, "ts": 0}
 def _fetch_heatmap_data():
     import yfinance as yf
     import pandas as pd
+    from concurrent.futures import ThreadPoolExecutor
 
     all_tickers = [t for tickers in _HEATMAP_SECTORS.values() for t in tickers]
-    raw = yf.download(all_tickers, period="2d", interval="1d", progress=False, auto_adjust=True)
 
+    # Batch price download
+    raw = yf.download(all_tickers, period="2d", interval="1d", progress=False, auto_adjust=True)
     if isinstance(raw.columns, pd.MultiIndex):
-        closes = raw["Close"]
+        closes  = raw["Close"]
+        volumes = raw["Volume"] if "Volume" in raw.columns.get_level_values(0) else None
     else:
-        closes = raw[["Close"]]
+        closes  = raw[["Close"]]
+        volumes = None
+
+    # Fetch market cap via fast_info in parallel
+    def _get_mcap(ticker):
+        try:
+            fi = yf.Ticker(ticker).fast_info
+            return ticker, getattr(fi, "market_cap", None)
+        except Exception:
+            return ticker, None
+
+    mcap_map = {}
+    with ThreadPoolExecutor(max_workers=20) as pool:
+        for t, mc in pool.map(_get_mcap, all_tickers):
+            mcap_map[t] = mc
+
+    def _fmt_mcap(v):
+        if not v:
+            return "—"
+        if v >= 1e12:
+            return f"${v/1e12:.2f}T"
+        if v >= 1e9:
+            return f"${v/1e9:.1f}B"
+        return f"${v/1e6:.0f}M"
 
     result = []
     for sector, tickers in _HEATMAP_SECTORS.items():
@@ -2431,7 +2457,13 @@ def _fetch_heatmap_data():
                     continue
                 price = round(float(vals.iloc[-1]), 2)
                 pct   = round((float(vals.iloc[-1]) - float(vals.iloc[-2])) / float(vals.iloc[-2]) * 100, 2) if len(vals) >= 2 else 0.0
-                result.append({"ticker": ticker, "sector": sector, "price": price, "change_pct": pct})
+                result.append({
+                    "ticker":     ticker,
+                    "sector":     sector,
+                    "price":      price,
+                    "change_pct": pct,
+                    "mcap":       _fmt_mcap(mcap_map.get(ticker)),
+                })
             except Exception:
                 continue
     return result
@@ -7037,21 +7069,35 @@ HEATMAP_HTML = """<!DOCTYPE html>
     .hero h1 span { color: var(--accent); }
     .hero p { color: var(--muted); font-size: .85rem; }
     .container { max-width: 1300px; margin: 0 auto; padding: 20px 16px 40px; }
-    .toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; flex-wrap: wrap; gap: 8px; }
+    .toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; flex-wrap: wrap; gap: 8px; }
     .toolbar .ts { color: var(--muted); font-size: .78rem; }
     .toolbar button { background: var(--bg2); border: 1px solid var(--border); color: var(--text); padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: .8rem; font-family: monospace; }
     .toolbar button:hover { border-color: var(--accent); color: var(--accent); }
     .legend { display: flex; align-items: center; gap: 6px; font-size: .72rem; color: var(--muted); }
     .legend-bar { display: flex; height: 12px; border-radius: 3px; overflow: hidden; }
     .legend-bar span { width: 24px; }
-    .sectors { display: flex; flex-direction: column; gap: 14px; }
+
+    /* Detail card */
+    .detail-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 16px 22px; margin-bottom: 16px; display: none; align-items: center; gap: 28px; flex-wrap: wrap; }
+    .detail-card.visible { display: flex; }
+    .detail-ticker { font-size: 1.5rem; font-weight: 800; }
+    .detail-field { display: flex; flex-direction: column; }
+    .detail-field .lbl { font-size: .68rem; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 2px; }
+    .detail-field .val { font-size: 1rem; font-weight: 600; }
+    .detail-close { margin-left: auto; cursor: pointer; color: var(--muted); font-size: 1.2rem; line-height: 1; padding: 4px 8px; border-radius: 4px; }
+    .detail-close:hover { background: var(--bg3); color: var(--text); }
+    .pos { color: var(--green); } .neg { color: var(--red); }
+
+    /* Sector grid */
+    .sectors { display: flex; flex-direction: column; gap: 12px; }
     .sector-block { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
-    .sector-label { font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); padding: 7px 12px; border-bottom: 1px solid var(--border); background: var(--bg3); }
-    .sector-cells { display: flex; flex-wrap: wrap; gap: 3px; padding: 6px; }
-    .cell { border-radius: 4px; padding: 6px 8px; cursor: pointer; transition: filter .15s, transform .1s; display: flex; flex-direction: column; justify-content: center; align-items: center; min-width: 64px; flex: 1 1 64px; max-width: 110px; height: 52px; text-align: center; }
-    .cell:hover { filter: brightness(1.25); transform: scale(1.04); z-index: 1; }
-    .cell .ct { font-size: .78rem; font-weight: 700; color: #fff; line-height: 1; }
-    .cell .cp { font-size: .7rem; color: rgba(255,255,255,.85); margin-top: 3px; }
+    .sector-label { font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); padding: 6px 10px; border-bottom: 1px solid var(--border); background: var(--bg3); }
+    .sector-cells { display: grid; grid-template-columns: repeat(auto-fill, 90px); gap: 4px; padding: 8px; }
+    .cell { width: 90px; height: 90px; border-radius: 6px; cursor: pointer; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; transition: filter .15s, transform .12s; user-select: none; }
+    .cell:hover { filter: brightness(1.3); transform: scale(1.06); z-index: 2; position: relative; }
+    .cell.active { outline: 2px solid #fff; outline-offset: 1px; filter: brightness(1.2); }
+    .cell .ct { font-size: .85rem; font-weight: 800; color: #fff; line-height: 1; }
+    .cell .cp { font-size: .75rem; color: rgba(255,255,255,.9); margin-top: 5px; font-weight: 600; }
     .loading { text-align: center; padding: 80px; color: var(--muted); font-size: .9rem; }
     .error-msg { background: #2d1f1f; border: 1px solid var(--red); border-radius: 8px; padding: 12px 16px; color: var(--red); margin-bottom: 16px; display: none; }
     .disclaimer { color: var(--muted); font-size: .75rem; margin-top: 16px; text-align: center; }
@@ -7066,7 +7112,7 @@ HEATMAP_HTML = """<!DOCTYPE html>
 </nav>
 <div class="hero">
   <h1>Market <span>Heatmap</span></h1>
-  <p>S&amp;P 500 major stocks — color by daily % change</p>
+  <p>Click any stock to see price, market cap &amp; daily change</p>
 </div>
 <div class="container">
   <div class="error-msg" id="error-msg"></div>
@@ -7076,27 +7122,39 @@ HEATMAP_HTML = """<!DOCTYPE html>
       <div class="legend">
         <div class="legend-bar">
           <span style="background:hsl(0,90%,28%)"></span>
-          <span style="background:hsl(0,60%,28%)"></span>
-          <span style="background:hsl(0,30%,22%)"></span>
-          <span style="background:#2a2a2a"></span>
-          <span style="background:hsl(120,30%,22%)"></span>
-          <span style="background:hsl(120,60%,26%)"></span>
-          <span style="background:hsl(120,90%,26%)"></span>
+          <span style="background:hsl(0,55%,26%)"></span>
+          <span style="background:hsl(0,25%,20%)"></span>
+          <span style="background:#1e2127"></span>
+          <span style="background:hsl(120,25%,20%)"></span>
+          <span style="background:hsl(120,55%,24%)"></span>
+          <span style="background:hsl(120,90%,24%)"></span>
         </div>
-        <span>-3% &nbsp; 0 &nbsp; +3%</span>
+        <span style="margin-left:4px">-3% · 0 · +3%</span>
       </div>
       <button onclick="loadHeatmap()">Refresh</button>
     </div>
   </div>
+
+  <!-- Detail card (hidden until a cell is clicked) -->
+  <div class="detail-card" id="detail-card">
+    <div class="detail-ticker" id="dp-ticker">—</div>
+    <div class="detail-field"><span class="lbl">Price</span><span class="val" id="dp-price">—</span></div>
+    <div class="detail-field"><span class="lbl">Change</span><span class="val" id="dp-change">—</span></div>
+    <div class="detail-field"><span class="lbl">Market Cap</span><span class="val" id="dp-mcap">—</span></div>
+    <span class="detail-close" id="detail-close">&#x2715;</span>
+  </div>
+
   <div id="heatmap-content" class="loading">Fetching market data…</div>
   <p class="disclaimer">Data from Yahoo Finance · Cached up to 5 min · Not financial advice</p>
 </div>
 <footer>© 2026 ChartEdge · Not financial advice</footer>
 <script>
+var _lookup = {};
+
 function pctColor(pct) {
   var v = Math.min(Math.abs(pct) / 3, 1);
-  var sat = Math.round(20 + v * 70);
-  var lit = pct === 0 ? 20 : Math.round(20 + v * 10);
+  var sat = Math.round(15 + v * 75);
+  var lit = Math.round(18 + v * 10);
   var hue = pct >= 0 ? 120 : 0;
   if (Math.abs(pct) < 0.05) return '#1e2127';
   return 'hsl(' + hue + ',' + sat + '%,' + lit + '%)';
@@ -7106,6 +7164,7 @@ function loadHeatmap() {
   document.getElementById('error-msg').style.display = 'none';
   document.getElementById('heatmap-content').innerHTML = '<div class="loading">Fetching market data…</div>';
   document.getElementById('ts-label').textContent = 'Loading…';
+  document.getElementById('detail-card').classList.remove('visible');
   fetch('/api/heatmap')
     .then(function(r) { return r.json(); })
     .then(function(d) {
@@ -7117,7 +7176,7 @@ function loadHeatmap() {
       }
       renderHeatmap(d);
     })
-    .catch(function(e) {
+    .catch(function() {
       document.getElementById('error-msg').textContent = 'Failed to load heatmap data.';
       document.getElementById('error-msg').style.display = 'block';
       document.getElementById('heatmap-content').innerHTML = '';
@@ -7125,46 +7184,60 @@ function loadHeatmap() {
 }
 
 function renderHeatmap(d) {
-  // Build lookup: ticker -> stock data
-  var lookup = {};
+  _lookup = {};
   for (var i = 0; i < d.stocks.length; i++) {
-    lookup[d.stocks[i].ticker] = d.stocks[i];
+    _lookup[d.stocks[i].ticker] = d.stocks[i];
   }
 
   var sectorOrder = Object.keys(d.sectors);
   var html = '<div class="sectors">';
-
   for (var s = 0; s < sectorOrder.length; s++) {
-    var sector = sectorOrder[s];
+    var sector  = sectorOrder[s];
     var tickers = d.sectors[sector];
-    html += '<div class="sector-block">';
-    html += '<div class="sector-label">' + sector + '</div>';
-    html += '<div class="sector-cells">';
+    html += '<div class="sector-block"><div class="sector-label">' + sector + '</div><div class="sector-cells">';
     for (var i = 0; i < tickers.length; i++) {
       var t  = tickers[i];
-      var st = lookup[t];
+      var st = _lookup[t];
       if (!st) continue;
-      var pct   = st.change_pct;
-      var sign  = pct >= 0 ? '+' : '';
-      var color = pctColor(pct);
-      html += '<div class="cell" style="background:' + color + '" data-t="' + t + '" title="' + t + ' $' + st.price + ' (' + sign + pct + '%)">'
+      var pct  = st.change_pct;
+      var sign = pct >= 0 ? '+' : '';
+      html += '<div class="cell" style="background:' + pctColor(pct) + '" data-t="' + t + '">'
             + '<div class="ct">' + t + '</div>'
             + '<div class="cp">' + sign + pct + '%</div>'
             + '</div>';
     }
     html += '</div></div>';
   }
-
   html += '</div>';
   document.getElementById('heatmap-content').innerHTML = html;
+  document.getElementById('ts-label').textContent = 'Updated ' + new Date(d.ts * 1000).toLocaleTimeString();
+}
 
-  var updated = new Date(d.ts * 1000);
-  document.getElementById('ts-label').textContent = 'Updated ' + updated.toLocaleTimeString();
+function showDetail(t) {
+  var st = _lookup[t];
+  if (!st) return;
+  var sign = st.change_pct >= 0 ? '+' : '';
+  var cls  = st.change_pct >= 0 ? 'pos' : 'neg';
+  document.getElementById('dp-ticker').textContent = t;
+  document.getElementById('dp-price').textContent  = '$' + st.price;
+  document.getElementById('dp-change').className   = 'val ' + cls;
+  document.getElementById('dp-change').textContent = sign + st.change_pct + '%';
+  document.getElementById('dp-mcap').textContent   = st.mcap || '—';
+  document.getElementById('detail-card').classList.add('visible');
+  document.getElementById('detail-card').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  // highlight active cell
+  document.querySelectorAll('.cell.active').forEach(function(c) { c.classList.remove('active'); });
+  var el = document.querySelector('.cell[data-t="' + t + '"]');
+  if (el) el.classList.add('active');
 }
 
 document.addEventListener('click', function(e) {
   var cell = e.target.closest('.cell');
-  if (cell) window.open('https://finance.yahoo.com/quote/' + cell.getAttribute('data-t'), '_blank');
+  if (cell) { showDetail(cell.getAttribute('data-t')); return; }
+  if (e.target.id === 'detail-close') {
+    document.getElementById('detail-card').classList.remove('visible');
+    document.querySelectorAll('.cell.active').forEach(function(c) { c.classList.remove('active'); });
+  }
 });
 
 loadHeatmap();
