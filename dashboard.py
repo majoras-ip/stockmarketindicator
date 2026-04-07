@@ -2803,6 +2803,19 @@ def trump_chart_api():
             if len(prices) < n + 1: return None
             return round((prices[-1] - prices[-(n+1)]) / prices[-(n+1)] * 100, 2)
 
+        # Include recent news timestamps for event markers
+        try:
+            articles = _fetch_trump_news()
+            chart_start = times[0]
+            chart_end   = times[-1]
+            events = []
+            for a in articles:
+                ts = a.get("ts", 0)
+                if ts and chart_start <= ts * 1000 <= chart_end:
+                    events.append({"ts": ts * 1000, "title": a.get("title", "")[:60]})
+        except Exception:
+            events = []
+
         return jsonify({
             "ticker":    ticker,
             "period":    period,
@@ -2810,6 +2823,7 @@ def trump_chart_api():
             "prices":    prices,
             "price":     price_now,
             "chg_pct":   chg_pct,
+            "events":    events,
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -7855,6 +7869,7 @@ TRUMP_HTML = """<!DOCTYPE html>
   <div class="chart-panel">
     <div class="controls">
       <select class="inst-select" id="inst-select">
+        <option value="BTC-USD" selected>Bitcoin (BTC)</option>
         <option value="SPY">S&amp;P 500 (SPY)</option>
         <option value="QQQ">NASDAQ 100 (QQQ)</option>
         <option value="DIA">Dow Jones (DIA)</option>
@@ -7866,13 +7881,12 @@ TRUMP_HTML = """<!DOCTYPE html>
         <option value="XLE">Energy (XLE)</option>
         <option value="XLF">Financials (XLF)</option>
         <option value="XLK">Tech (XLK)</option>
-        <option value="UVIX">VIX (UVIX)</option>
-        <option value="IBIT">Bitcoin (IBIT)</option>
+        <option value="IBIT">Bitcoin ETF (IBIT)</option>
         <option value="FXI">China (FXI)</option>
       </select>
       <div class="period-btns">
-        <button class="pb" data-p="1D" onclick="setPeriod(this)">1D</button>
-        <button class="pb active" data-p="1W" onclick="setPeriod(this)">1W</button>
+        <button class="pb active" data-p="1D" onclick="setPeriod(this)">1D</button>
+        <button class="pb" data-p="1W" onclick="setPeriod(this)">1W</button>
         <button class="pb" data-p="1M" onclick="setPeriod(this)">1M</button>
         <button class="pb" data-p="3M" onclick="setPeriod(this)">3M</button>
       </div>
@@ -7896,13 +7910,20 @@ TRUMP_HTML = """<!DOCTYPE html>
 </div>
 <footer>© 2026 ChartEdge · Not financial advice</footer>
 <script>
-var _curPeriod = '1W';
+var _curPeriod = '1D';
 
 function setPeriod(btn) {
   _curPeriod = btn.getAttribute('data-p');
   document.querySelectorAll('.pb').forEach(function(b){ b.classList.remove('active'); });
   btn.classList.add('active');
   loadChart();
+}
+
+function fmtPrice(p, ticker) {
+  if (ticker && (ticker.indexOf('BTC') !== -1 || ticker === 'IBIT') && p > 1000) {
+    return '$' + p.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0});
+  }
+  return '$' + p.toFixed(2);
 }
 
 function loadChart() {
@@ -7918,32 +7939,62 @@ function loadChart() {
 }
 
 function renderChart(d) {
-  var sign   = d.chg_pct >= 0 ? '+' : '';
-  var color  = d.chg_pct >= 0 ? '#3fb950' : '#f85149';
-  document.getElementById('sc-price').textContent = '$' + d.price.toFixed(2);
+  var sign  = d.chg_pct >= 0 ? '+' : '';
+  var color = d.chg_pct >= 0 ? '#3fb950' : '#f85149';
+  document.getElementById('sc-price').textContent = fmtPrice(d.price, d.ticker);
   document.getElementById('sc-chg').className  = 'sv ' + (d.chg_pct >= 0 ? 'pos' : 'neg');
   document.getElementById('sc-chg').textContent = sign + d.chg_pct + '%';
   document.getElementById('chart-status').textContent = '';
 
   var dates = d.times.map(function(t){ return new Date(t); });
+  var minP  = Math.min.apply(null, d.prices);
+  var maxP  = Math.max.apply(null, d.prices);
+
+  // Baseline shape
+  var shapes = [{
+    type: 'line', xref: 'paper', x0: 0, x1: 1,
+    y0: d.prices[0], y1: d.prices[0],
+    line: { color: 'rgba(139,148,158,0.4)', width: 1, dash: 'dot' },
+  }];
+
+  // Event marker shapes (vertical lines at news timestamps)
+  var annotations = [];
+  var events = d.events || [];
+  events.forEach(function(ev, i) {
+    var evDate = new Date(ev.ts);
+    shapes.push({
+      type: 'line', xref: 'x', yref: 'paper',
+      x0: evDate, x1: evDate, y0: 0, y1: 1,
+      line: { color: 'rgba(255,165,0,0.55)', width: 1.5, dash: 'dot' },
+    });
+    // Only label the top few to avoid clutter
+    if (i < 6) {
+      annotations.push({
+        x: evDate, y: 1, xref: 'x', yref: 'paper',
+        text: '📰', showarrow: false,
+        font: { size: 12 },
+        yanchor: 'top', xanchor: 'center',
+        hovertext: ev.title,
+      });
+    }
+  });
+
   Plotly.react('price-chart', [{
     x: dates, y: d.prices, type: 'scatter', mode: 'lines',
     line: { color: color, width: 2 },
     name: d.ticker,
+    hovertemplate: fmtPrice(0, d.ticker).replace('0', '%{y:.2f}') + '<extra></extra>',
   }], {
     paper_bgcolor: '#161b22', plot_bgcolor: '#161b22',
     font: { color: '#e6edf3', family: 'monospace', size: 11 },
     xaxis: { gridcolor: '#21262d', tickformat: _curPeriod === '1D' ? '%H:%M' : '%m/%d' },
     yaxis: {
       gridcolor: '#21262d', side: 'right',
-      range: [Math.min.apply(null, d.prices) * 0.998, Math.max.apply(null, d.prices) * 1.002],
+      range: [minP * 0.998, maxP * 1.002],
     },
-    shapes: [{
-      type: 'line', xref: 'paper', x0: 0, x1: 1,
-      y0: d.prices[0], y1: d.prices[0],
-      line: { color: 'rgba(139,148,158,0.5)', width: 1, dash: 'dot' },
-    }],
-    margin: { t: 12, r: 50, b: 36, l: 10 },
+    shapes: shapes,
+    annotations: annotations,
+    margin: { t: 20, r: 50, b: 36, l: 10 },
     showlegend: false,
   }, { responsive: true, displayModeBar: false });
 }
