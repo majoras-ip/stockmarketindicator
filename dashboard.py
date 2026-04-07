@@ -2554,8 +2554,46 @@ _TRUMP_INSTRUMENTS = [
     {"label": "China (FXI)",          "ticker": "FXI"},
 ]
 
+def _parse_ts(entry) -> float:
+    """Best-effort Unix timestamp from a feedparser entry."""
+    import calendar, email.utils, time as _t
+    if hasattr(entry, "published_parsed") and entry.published_parsed:
+        try: return float(calendar.timegm(entry.published_parsed))
+        except Exception: pass
+    for attr in ("updated_parsed", "created_parsed"):
+        val = getattr(entry, attr, None)
+        if val:
+            try: return float(calendar.timegm(val))
+            except Exception: pass
+    for attr in ("published", "updated"):
+        s = getattr(entry, attr, None)
+        if s:
+            try: return float(email.utils.mktime_tz(email.utils.parsedate_tz(s)))
+            except Exception: pass
+    return 0.0
+
+
+def _rel_time(ts: float) -> str:
+    """Return '2h ago', 'Apr 4' etc."""
+    import time as _t
+    from datetime import datetime, timezone
+    if not ts:
+        return ""
+    diff = _t.time() - ts
+    if diff < 60:
+        return "just now"
+    if diff < 3600:
+        return f"{int(diff//60)}m ago"
+    if diff < 86400:
+        return f"{int(diff//3600)}h ago"
+    if diff < 86400 * 2:
+        return "yesterday"
+    dt = datetime.fromtimestamp(ts, tz=timezone.utc)
+    return f"{_MONTHS[dt.month-1]} {dt.day}"
+
+
 def _fetch_trump_news():
-    import feedparser, re, calendar
+    import feedparser, re
     keywords = ["trump", "tariff", "white house", "executive order", "maga", "trade war",
                 "mar-a-lago", "truth social", "federal reserve", "doge", "elon musk"]
     articles = []
@@ -2568,16 +2606,12 @@ def _fetch_trump_news():
                 combined = (title + " " + summary).lower()
                 if not any(k in combined for k in keywords):
                     continue
-                ts = 0
-                published = ""
-                if hasattr(entry, "published_parsed") and entry.published_parsed:
-                    ts = calendar.timegm(entry.published_parsed)
-                    published = _fmt_ts(ts)
+                ts = _parse_ts(entry)
                 articles.append({
                     "source":    source,
                     "title":     title,
                     "link":      entry.get("link", "#"),
-                    "published": published,
+                    "published": _rel_time(ts),
                     "summary":   summary[:200],
                     "ts":        ts,
                 })
