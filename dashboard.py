@@ -2067,8 +2067,22 @@ _DIVIDEND_TICKERS = [
     "NEE","DUK","SO","D","AEP","EXC",
     "AMT","PLD","O","SPG","EQIX","CCI","WPC",
     "LIN","APD","SHW","ECL",
-    # ETFs
+    # Additional dividend payers
+    "USB","PNC","TFC","COF","RF","FITB","KEY","HBAN","CFG","MTB",  # regional banks
+    "MET","PRU","AFL","ALL","CB","PGR","HIG","UNM","LNC",           # insurance
+    "ENB","ET","EPD","MMP","KMI","OKE","WMB","TRGP","PAA",          # midstream energy/MLPs
+    "BP","SHEL","TOT","SLB","HAL","BKR",                            # energy
+    "CSCO","HPQ","HPE","ORCL","PAYX","ADP",                         # tech dividends
+    "CMI","EMR","ETN","PH","ITW","MMM","ROK","IR","XYL",            # industrials
+    "ADM","BG","MOS","NTR","CF",                                     # agriculture/materials
+    "VFC","RL","HAS","MAT","CLX","CHD","CPB","GIS","K","SJM","MKC", # consumer staples
+    "MDT","SYK","BSX","BDX","ZBH","EW","BAX","RMD","HOLX",          # medical devices
+    "WPC","NNN","STAG","LTC","OHI","IIPR","HR","MPW","GOOD",        # more REITs
+    "BX","KKR","APO","ARCC","MAIN","BXSL","GBDC","HTGC","TPVG",    # BDCs / alternatives
+    # Income ETFs
     "SPY","QQQ","DIA","IWM","VYM","SCHD","HDV","DVY","JEPI","JEPQ",
+    "DIVO","PFF","PGX","PFFD","SDOG","NOBL","SDY","VIG","DGRO","IDV",
+    "FDVV","SPYD","RDVY","XYLD","QYLD","RYLD","NUSI","QQQX",
 ]
 
 import threading as _div_threading
