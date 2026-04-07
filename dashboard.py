@@ -260,6 +260,12 @@ def current_user():
     return session.get("username")
 
 
+@app.context_processor
+def inject_nav_plan():
+    uid = session.get("user_id")
+    return {"nav_plan": _get_user_plan(uid) if uid else "free"}
+
+
 # Routes that don't require login
 _PUBLIC_ROUTES = {
     "index", "login", "register", "google_login", "google_callback",
@@ -3116,13 +3122,27 @@ _NAV_LINKS = """
         <a href="/trump">Trump Tracker</a>
         <a href="/earnings">Earnings Calendar</a>
         <a href="/dividends">Dividends Calendar</a>
-        <a href="/flow">Options Flow</a>
-        <a href="/gamma">Gamma Exposure</a>
-        <a href="/greeks">Greeks Dashboard</a>
         <a href="/volume">Unusual Volume</a>
         <a href="/news">News</a>
+        {% if nav_plan == 'free' %}
+        <a href="/pricing?upgrade=gamma" style="opacity:.4;">Gamma Exposure 🔒</a>
+        <a href="/pricing?upgrade=greeks" style="opacity:.4;">Greeks Dashboard 🔒</a>
+        <a href="/pricing?upgrade=flow" style="opacity:.4;">Options Flow 🔒</a>
+        <a href="/pricing?upgrade=insider" style="opacity:.4;">Insider Trading 🔒</a>
+        <a href="/pricing?upgrade=premarket" style="opacity:.4;">Pre-Market Scanner 🔒</a>
+        {% elif nav_plan == 'basic' %}
+        <a href="/gamma">Gamma Exposure</a>
+        <a href="/greeks">Greeks Dashboard</a>
+        <a href="/pricing?upgrade=flow" style="opacity:.4;">Options Flow 🔒</a>
+        <a href="/pricing?upgrade=insider" style="opacity:.4;">Insider Trading 🔒</a>
+        <a href="/pricing?upgrade=premarket" style="opacity:.4;">Pre-Market Scanner 🔒</a>
+        {% else %}
+        <a href="/gamma">Gamma Exposure</a>
+        <a href="/greeks">Greeks Dashboard</a>
+        <a href="/flow">Options Flow</a>
         <a href="/insider">Insider Trading</a>
         <a href="/premarket">Pre-Market Scanner</a>
+        {% endif %}
       </div>
     </div>
     <div class="dropdown">
@@ -3533,7 +3553,7 @@ PRICING_HTML = """<!DOCTYPE html>
         <li class="no">Options flow</li>
         <li class="no">Insider trading</li>
         <li class="no">Pre-market scanner</li>
-        <li class="no">Priority support</li>
+
       </ul>
       <a href="/indicators" class="btn-plan btn-free">Start Free</a>
     </div>
@@ -3558,7 +3578,7 @@ PRICING_HTML = """<!DOCTYPE html>
         <li class="no">Options flow</li>
         <li class="no">Insider trading</li>
         <li class="no">Pre-market scanner</li>
-        <li class="no">Priority support</li>
+
       </ul>
       {% if current_user %}
       <a href="/subscribe/basic" class="btn-plan btn-basic" id="btn-basic">Get Basic</a>
@@ -3588,7 +3608,7 @@ PRICING_HTML = """<!DOCTYPE html>
         <li>Options flow</li>
         <li>Insider trading</li>
         <li>Pre-market scanner</li>
-        <li>Priority support</li>
+
       </ul>
       {% if current_user %}
       <a href="/subscribe/pro" class="btn-plan btn-pro" id="btn-pro">Get Pro</a>
