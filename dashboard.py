@@ -2041,20 +2041,12 @@ def _fetch_earnings() -> list[dict]:
 
 
 @app.route("/earnings")
-@login_required
 def earnings_page():
-    plan = _get_user_plan(session.get("user_id"))
-    if plan == "free":
-        return redirect("/pricing?upgrade=earnings")
     return render_template_string(EARNINGS_HTML, current_user=current_user())
 
 
 @app.route("/api/earnings")
-@login_required
 def earnings_api():
-    plan = _get_user_plan(session.get("user_id"))
-    if plan == "free":
-        return jsonify({"error": "upgrade_required"}), 403
     try:
         earnings = _fetch_earnings()
         return jsonify({"earnings": earnings})
@@ -3105,7 +3097,7 @@ PRICING_HTML = """<!DOCTYPE html>
       <div class="plan-desc">Get started with no commitment.</div>
       <ul class="plan-features">
         <li>3 copies per day</li><li>All indicators visible</li>
-        <li>Unusual volume</li><li>Market news</li><li class="no">Ticker news</li><li class="no">Earnings calendar</li><li class="no">Gamma exposure</li><li class="no">LSTM forecast</li><li class="no">Options flow</li><li class="no">Insider trading</li><li class="no">Pre-market scanner</li>      </ul>
+        <li>Unusual volume</li><li>Market news</li><li>Earnings calendar</li><li class="no">Ticker news</li><li class="no">Gamma exposure</li><li class="no">LSTM forecast</li><li class="no">Options flow</li><li class="no">Insider trading</li><li class="no">Pre-market scanner</li>      </ul>
       <a href="/indicators" class="btn-plan btn-free">Start Free</a>
     </div>
     <div class="plan">
@@ -4135,7 +4127,7 @@ HOME_HTML = """<!DOCTYPE html>
       <div class="cat">Options · Basic+</div><div class="iname">Greeks Dashboard</div>
     </a>
     <a class="ind-pill" href="/earnings">
-      <div class="cat">Calendar · Basic+</div><div class="iname">Earnings Calendar</div>
+      <div class="cat">Calendar · Free</div><div class="iname">Earnings Calendar</div>
     </a>
   </div>
   <div style="text-align:center;margin-top:24px;">
