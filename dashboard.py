@@ -2410,31 +2410,31 @@ import threading as _hm_threading
 _heatmap_cache    = {"data": None, "ts": 0}
 _heatmap_fetching = False
 
-# Hardcoded approximate market caps (avoids per-ticker fast_info calls)
+# Hardcoded approximate market caps in dollars (used for treemap sizing + display)
 _MCAP_STATIC = {
-    "AAPL":"$3.3T","MSFT":"$3.1T","NVDA":"$2.9T","GOOGL":"$2.1T","AMZN":"$2.2T",
-    "META":"$1.5T","TSLA":"$850B","AVGO":"$900B","ORCL":"$450B","AMD":"$250B",
-    "QCOM":"$170B","TXN":"$170B","INTC":"$90B","AMAT":"$180B","MU":"$110B",
-    "CRM":"$290B","NOW":"$200B","PANW":"$120B","CRWD":"$90B","NET":"$70B",
-    "LRCX":"$100B","KLAC":"$90B","SNOW":"$50B","PLTR":"$150B",
-    "NFLX":"$380B","DIS":"$180B","T":"$140B","VZ":"$160B","SNAP":"$15B",
-    "PINS":"$20B","RDDT":"$20B","RBLX":"$30B",
-    "HD":"$400B","MCD":"$230B","NKE":"$90B","SBUX":"$90B","TGT":"$60B",
-    "ABNB":"$80B","BKNG":"$140B","DASH":"$55B","GM":"$45B","F":"$40B","RIVN":"$12B",
-    "JPM":"$750B","BAC":"$330B","WFC":"$250B","GS":"$190B","MS":"$200B",
-    "V":"$600B","MA":"$490B","C":"$130B","BLK":"$140B","AXP":"$200B",
-    "PYPL":"$65B","COIN":"$60B",
-    "UNH":"$500B","JNJ":"$380B","LLY":"$750B","ABBV":"$320B","PFE":"$140B",
-    "MRK":"$280B","AMGN":"$160B","TMO":"$200B","ABT":"$200B","ISRG":"$150B",
-    "XOM":"$490B","CVX":"$280B","COP":"$130B","SLB":"$55B","EOG":"$60B",
-    "PSX":"$50B","MPC":"$45B","OXY":"$45B",
-    "CAT":"$190B","BA":"$100B","GE":"$210B","RTX":"$160B","HON":"$130B",
-    "UPS":"$100B","FDX":"$60B","LMT":"$110B","DE":"$130B",
-    "WMT":"$700B","PG":"$380B","COST":"$400B","KO":"$260B","PEP":"$220B",
-    "PM":"$170B","MO":"$80B","CL":"$60B",
-    "LIN":"$220B","APD":"$60B","SHW":"$90B","FCX":"$55B","NEM":"$55B","AA":"$12B",
-    "AMT":"$95B","PLD":"$100B","EQIX":"$80B","CCI":"$45B","SPG":"$60B","O":"$50B",
-    "NEE":"$130B","DUK":"$70B","SO":"$65B","D":"$40B","AEP":"$45B","EXC":"$40B",
+    "AAPL":3.3e12,"MSFT":3.1e12,"NVDA":2.9e12,"GOOGL":2.1e12,"AMZN":2.2e12,
+    "META":1.5e12,"TSLA":8.5e11,"AVGO":9.0e11,"ORCL":4.5e11,"AMD":2.5e11,
+    "QCOM":1.7e11,"TXN":1.7e11,"INTC":9.0e10,"AMAT":1.8e11,"MU":1.1e11,
+    "CRM":2.9e11,"NOW":2.0e11,"PANW":1.2e11,"CRWD":9.0e10,"NET":7.0e10,
+    "LRCX":1.0e11,"KLAC":9.0e10,"SNOW":5.0e10,"PLTR":1.5e11,
+    "NFLX":3.8e11,"DIS":1.8e11,"T":1.4e11,"VZ":1.6e11,"SNAP":1.5e10,
+    "PINS":2.0e10,"RDDT":2.0e10,"RBLX":3.0e10,
+    "HD":4.0e11,"MCD":2.3e11,"NKE":9.0e10,"SBUX":9.0e10,"TGT":6.0e10,
+    "ABNB":8.0e10,"BKNG":1.4e11,"DASH":5.5e10,"GM":4.5e10,"F":4.0e10,"RIVN":1.2e10,
+    "JPM":7.5e11,"BAC":3.3e11,"WFC":2.5e11,"GS":1.9e11,"MS":2.0e11,
+    "V":6.0e11,"MA":4.9e11,"C":1.3e11,"BLK":1.4e11,"AXP":2.0e11,
+    "PYPL":6.5e10,"COIN":6.0e10,
+    "UNH":5.0e11,"JNJ":3.8e11,"LLY":7.5e11,"ABBV":3.2e11,"PFE":1.4e11,
+    "MRK":2.8e11,"AMGN":1.6e11,"TMO":2.0e11,"ABT":2.0e11,"ISRG":1.5e11,
+    "XOM":4.9e11,"CVX":2.8e11,"COP":1.3e11,"SLB":5.5e10,"EOG":6.0e10,
+    "PSX":5.0e10,"MPC":4.5e10,"OXY":4.5e10,
+    "CAT":1.9e11,"BA":1.0e11,"GE":2.1e11,"RTX":1.6e11,"HON":1.3e11,
+    "UPS":1.0e11,"FDX":6.0e10,"LMT":1.1e11,"DE":1.3e11,
+    "WMT":7.0e11,"PG":3.8e11,"COST":4.0e11,"KO":2.6e11,"PEP":2.2e11,
+    "PM":1.7e11,"MO":8.0e10,"CL":6.0e10,
+    "LIN":2.2e11,"APD":6.0e10,"SHW":9.0e10,"FCX":5.5e10,"NEM":5.5e10,"AA":1.2e10,
+    "AMT":9.5e10,"PLD":1.0e11,"EQIX":8.0e10,"CCI":4.5e10,"SPG":6.0e10,"O":5.0e10,
+    "NEE":1.3e11,"DUK":7.0e10,"SO":6.5e10,"D":4.0e10,"AEP":4.5e10,"EXC":4.0e10,
 }
 
 def _fmt_mcap(v):
@@ -2466,12 +2466,14 @@ def _fetch_heatmap_data():
                     continue
                 price = round(float(vals.iloc[-1]), 2)
                 pct   = round((float(vals.iloc[-1]) - float(vals.iloc[-2])) / float(vals.iloc[-2]) * 100, 2) if len(vals) >= 2 else 0.0
+                mc = _MCAP_STATIC.get(ticker, 1e9)
                 result.append({
                     "ticker":     ticker,
                     "sector":     sector,
                     "price":      price,
                     "change_pct": pct,
-                    "mcap":       _MCAP_STATIC.get(ticker, "—"),
+                    "mcap":       _fmt_mcap(mc),
+                    "mcap_num":   mc,
                 })
             except Exception:
                 continue
@@ -7082,53 +7084,49 @@ HEATMAP_HTML = """<!DOCTYPE html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">""" + _META + """
+  <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
   <title>Market Heatmap · ChartEdge</title>
   <style>
     :root[data-theme="dark"]  { --bg:#0d1117; --bg2:#161b22; --bg3:#21262d; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --green:#3fb950; --red:#f85149; }
     :root[data-theme="light"] { --bg:#ffffff; --bg2:#f6f8fa; --bg3:#eaeef2; --border:#d0d7de; --text:#1f2328; --muted:#636c76; --accent:#0969da; --green:#1a7f37; --red:#cf222e; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: monospace; background: var(--bg); color: var(--text); min-height: 100vh; }
+    body { font-family: -apple-system, monospace; background: var(--bg); color: var(--text); min-height: 100vh; }
     nav { background: var(--bg2); border-bottom: 1px solid var(--border); padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; }
     .logo { color: var(--accent); font-size: 1.1rem; font-weight: bold; text-decoration: none; }
     """ + _NAV_CSS + """
-    .hero { text-align: center; padding: 32px 24px 20px; border-bottom: 1px solid var(--border); }
-    .hero h1 { font-size: 1.6rem; margin-bottom: 6px; }
+    .hero { text-align: center; padding: 24px 24px 16px; border-bottom: 1px solid var(--border); }
+    .hero h1 { font-size: 1.5rem; margin-bottom: 4px; }
     .hero h1 span { color: var(--accent); }
-    .hero p { color: var(--muted); font-size: .85rem; }
-    .container { max-width: 1300px; margin: 0 auto; padding: 20px 16px 40px; }
-    .toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; flex-wrap: wrap; gap: 8px; }
-    .toolbar .ts { color: var(--muted); font-size: .78rem; }
-    .toolbar button { background: var(--bg2); border: 1px solid var(--border); color: var(--text); padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: .8rem; font-family: monospace; }
+    .hero p { color: var(--muted); font-size: .82rem; }
+    .page { max-width: 1400px; margin: 0 auto; padding: 14px 12px 32px; }
+    .toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; flex-wrap: wrap; gap: 8px; }
+    .toolbar .ts { color: var(--muted); font-size: .76rem; }
+    .toolbar button { background: var(--bg2); border: 1px solid var(--border); color: var(--text); padding: 5px 12px; border-radius: 5px; cursor: pointer; font-size: .78rem; font-family: monospace; }
     .toolbar button:hover { border-color: var(--accent); color: var(--accent); }
-    .legend { display: flex; align-items: center; gap: 6px; font-size: .72rem; color: var(--muted); }
-    .legend-bar { display: flex; height: 12px; border-radius: 3px; overflow: hidden; }
-    .legend-bar span { width: 24px; }
-
-    /* Detail card */
-    .detail-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 16px 22px; margin-bottom: 16px; display: none; align-items: center; gap: 28px; flex-wrap: wrap; }
+    .legend { display: flex; align-items: center; gap: 5px; font-size: .7rem; color: var(--muted); }
+    .legend-bar { display: flex; height: 10px; border-radius: 2px; overflow: hidden; }
+    .legend-bar span { width: 20px; }
+    .detail-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 12px 18px; margin-bottom: 10px; display: none; align-items: center; gap: 24px; flex-wrap: wrap; }
     .detail-card.visible { display: flex; }
-    .detail-ticker { font-size: 1.5rem; font-weight: 800; }
+    .detail-ticker { font-size: 1.4rem; font-weight: 800; min-width: 60px; }
     .detail-field { display: flex; flex-direction: column; }
-    .detail-field .lbl { font-size: .68rem; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 2px; }
-    .detail-field .val { font-size: 1rem; font-weight: 600; }
-    .detail-close { margin-left: auto; cursor: pointer; color: var(--muted); font-size: 1.2rem; line-height: 1; padding: 4px 8px; border-radius: 4px; }
+    .detail-field .lbl { font-size: .65rem; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 1px; }
+    .detail-field .val { font-size: .95rem; font-weight: 700; }
+    .detail-close { margin-left: auto; cursor: pointer; color: var(--muted); font-size: 1.1rem; padding: 3px 7px; border-radius: 4px; }
     .detail-close:hover { background: var(--bg3); color: var(--text); }
     .pos { color: var(--green); } .neg { color: var(--red); }
-
-    /* Sector grid */
-    .sectors { display: flex; flex-direction: column; gap: 12px; }
-    .sector-block { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
-    .sector-label { font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); padding: 6px 10px; border-bottom: 1px solid var(--border); background: var(--bg3); }
-    .sector-cells { display: grid; grid-template-columns: repeat(auto-fill, 90px); gap: 4px; padding: 8px; }
-    .cell { width: 90px; height: 90px; border-radius: 6px; cursor: pointer; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; transition: filter .15s, transform .12s; user-select: none; }
-    .cell:hover { filter: brightness(1.3); transform: scale(1.06); z-index: 2; position: relative; }
-    .cell.active { outline: 2px solid #fff; outline-offset: 1px; filter: brightness(1.2); }
-    .cell .ct { font-size: .85rem; font-weight: 800; color: #fff; line-height: 1; }
-    .cell .cp { font-size: .75rem; color: rgba(255,255,255,.9); margin-top: 5px; font-weight: 600; }
+    #treemap-wrap { position: relative; width: 100%; background: #0a0e14; border-radius: 8px; overflow: hidden; }
+    .tm-cell { position: absolute; cursor: pointer; overflow: hidden; display: flex; flex-direction: column; justify-content: center; align-items: center; transition: filter .12s; }
+    .tm-cell:hover { filter: brightness(1.35); z-index: 5; }
+    .tm-cell.active { outline: 2px solid rgba(255,255,255,.9); outline-offset: -2px; }
+    .tm-cell .tc { font-weight: 800; color: #fff; line-height: 1; text-align: center; }
+    .tm-cell .tp { color: rgba(255,255,255,.85); font-weight: 600; text-align: center; margin-top: 3px; }
+    .tm-sector { position: absolute; display: flex; align-items: flex-start; pointer-events: none; overflow: hidden; }
+    .tm-sector span { font-size: .62rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: rgba(255,255,255,.45); padding: 3px 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .loading { text-align: center; padding: 80px; color: var(--muted); font-size: .9rem; }
-    .error-msg { background: #2d1f1f; border: 1px solid var(--red); border-radius: 8px; padding: 12px 16px; color: var(--red); margin-bottom: 16px; display: none; }
-    .disclaimer { color: var(--muted); font-size: .75rem; margin-top: 16px; text-align: center; }
-    footer { text-align: center; padding: 28px 24px; color: var(--muted); font-size: .8rem; border-top: 1px solid var(--border); margin-top: 20px; }
+    .error-msg { background: #2d1f1f; border: 1px solid var(--red); border-radius: 8px; padding: 10px 14px; color: var(--red); margin-bottom: 10px; display: none; }
+    .disclaimer { color: var(--muted); font-size: .72rem; margin-top: 10px; text-align: center; }
+    footer { text-align: center; padding: 24px; color: var(--muted); font-size: .78rem; border-top: 1px solid var(--border); margin-top: 16px; }
   </style>
 </head>
 <body>
@@ -7139,30 +7137,25 @@ HEATMAP_HTML = """<!DOCTYPE html>
 </nav>
 <div class="hero">
   <h1>Market <span>Heatmap</span></h1>
-  <p>Click any stock to see price, market cap &amp; daily change</p>
+  <p>Cell size = market cap · Color = daily % change · Click for details</p>
 </div>
-<div class="container">
+<div class="page">
   <div class="error-msg" id="error-msg"></div>
   <div class="toolbar">
     <div class="ts" id="ts-label">Loading…</div>
     <div style="display:flex;gap:10px;align-items:center;">
       <div class="legend">
         <div class="legend-bar">
-          <span style="background:hsl(0,90%,28%)"></span>
-          <span style="background:hsl(0,55%,26%)"></span>
-          <span style="background:hsl(0,25%,20%)"></span>
-          <span style="background:#1e2127"></span>
-          <span style="background:hsl(120,25%,20%)"></span>
-          <span style="background:hsl(120,55%,24%)"></span>
-          <span style="background:hsl(120,90%,24%)"></span>
+          <span style="background:#8b1a1a"></span><span style="background:#6b2020"></span>
+          <span style="background:#3a2020"></span><span style="background:#1a1e27"></span>
+          <span style="background:#1e3a1e"></span><span style="background:#1f5c1f"></span>
+          <span style="background:#1a7a1a"></span>
         </div>
-        <span style="margin-left:4px">-3% · 0 · +3%</span>
+        <span style="margin-left:4px">-3%  0  +3%</span>
       </div>
       <button onclick="loadHeatmap()">Refresh</button>
     </div>
   </div>
-
-  <!-- Detail card (hidden until a cell is clicked) -->
   <div class="detail-card" id="detail-card">
     <div class="detail-ticker" id="dp-ticker">—</div>
     <div class="detail-field"><span class="lbl">Price</span><span class="val" id="dp-price">—</span></div>
@@ -7170,81 +7163,128 @@ HEATMAP_HTML = """<!DOCTYPE html>
     <div class="detail-field"><span class="lbl">Market Cap</span><span class="val" id="dp-mcap">—</span></div>
     <span class="detail-close" id="detail-close">&#x2715;</span>
   </div>
-
-  <div id="heatmap-content" class="loading">Fetching market data…</div>
-  <p class="disclaimer">Data from Yahoo Finance · Cached up to 5 min · Not financial advice</p>
+  <div id="treemap-wrap"><div class="loading" id="hm-loading">Fetching market data…</div></div>
+  <p class="disclaimer">Data from Yahoo Finance · Size = market cap · Cached 5 min · Not financial advice</p>
 </div>
 <footer>© 2026 ChartEdge · Not financial advice</footer>
 <script>
 var _lookup = {};
+var _hmData = null;
 
 function pctColor(pct) {
-  var v = Math.min(Math.abs(pct) / 3, 1);
-  var sat = Math.round(15 + v * 75);
-  var lit = Math.round(18 + v * 10);
-  var hue = pct >= 0 ? 120 : 0;
-  if (Math.abs(pct) < 0.05) return '#1e2127';
-  return 'hsl(' + hue + ',' + sat + '%,' + lit + '%)';
+  if (Math.abs(pct) < 0.05) return '#1a1e27';
+  var t = Math.max(-5, Math.min(5, pct)) / 5;
+  if (t > 0) {
+    var l = Math.round(14 + t * 16), s = Math.round(35 + t * 55);
+    return 'hsl(120,' + s + '%,' + l + '%)';
+  } else {
+    var l = Math.round(14 + (-t) * 16), s = Math.round(35 + (-t) * 55);
+    return 'hsl(0,' + s + '%,' + l + '%)';
+  }
 }
 
 function loadHeatmap(silent) {
   if (!silent) {
     document.getElementById('error-msg').style.display = 'none';
-    document.getElementById('heatmap-content').innerHTML = '<div class="loading">Fetching market data…</div>';
+    document.getElementById('hm-loading').style.display = 'block';
     document.getElementById('ts-label').textContent = 'Loading…';
     document.getElementById('detail-card').classList.remove('visible');
+    // remove old cells
+    document.querySelectorAll('.tm-cell,.tm-sector').forEach(function(el){ el.remove(); });
   }
   fetch('/api/heatmap')
-    .then(function(r) { return r.json(); })
+    .then(function(r){ return r.json(); })
     .then(function(d) {
       if (d.loading) {
-        // Server is still warming up — poll every 3s
         document.getElementById('ts-label').textContent = 'Warming up…';
-        setTimeout(function() { loadHeatmap(true); }, 3000);
+        setTimeout(function(){ loadHeatmap(true); }, 3000);
         return;
       }
       if (d.error) {
         document.getElementById('error-msg').textContent = d.error;
         document.getElementById('error-msg').style.display = 'block';
-        document.getElementById('heatmap-content').innerHTML = '';
+        document.getElementById('hm-loading').style.display = 'none';
         return;
       }
-      renderHeatmap(d);
+      _hmData = d;
+      renderTreemap(d);
     })
     .catch(function() {
-      document.getElementById('error-msg').textContent = 'Failed to load heatmap data.';
+      document.getElementById('error-msg').textContent = 'Failed to load data.';
       document.getElementById('error-msg').style.display = 'block';
-      document.getElementById('heatmap-content').innerHTML = '';
+      document.getElementById('hm-loading').style.display = 'none';
     });
 }
 
-function renderHeatmap(d) {
+function renderTreemap(d) {
   _lookup = {};
-  for (var i = 0; i < d.stocks.length; i++) {
-    _lookup[d.stocks[i].ticker] = d.stocks[i];
-  }
+  d.stocks.forEach(function(s){ _lookup[s.ticker] = s; });
 
-  var sectorOrder = Object.keys(d.sectors);
-  var html = '<div class="sectors">';
-  for (var s = 0; s < sectorOrder.length; s++) {
-    var sector  = sectorOrder[s];
-    var tickers = d.sectors[sector];
-    html += '<div class="sector-block"><div class="sector-label">' + sector + '</div><div class="sector-cells">';
-    for (var i = 0; i < tickers.length; i++) {
-      var t  = tickers[i];
-      var st = _lookup[t];
-      if (!st) continue;
-      var pct  = st.change_pct;
-      var sign = pct >= 0 ? '+' : '';
-      html += '<div class="cell" style="background:' + pctColor(pct) + '" data-t="' + t + '">'
-            + '<div class="ct">' + t + '</div>'
-            + '<div class="cp">' + sign + pct + '%</div>'
-            + '</div>';
-    }
-    html += '</div></div>';
-  }
-  html += '</div>';
-  document.getElementById('heatmap-content').innerHTML = html;
+  var wrap   = document.getElementById('treemap-wrap');
+  var W      = wrap.offsetWidth || 1200;
+  var H      = Math.max(560, Math.round(W * 0.58));
+  wrap.style.height = H + 'px';
+
+  // Build D3 hierarchy
+  var sectors = Object.keys(d.sectors);
+  var children = sectors.map(function(sec) {
+    var leaves = d.sectors[sec]
+      .map(function(t){ return _lookup[t]; })
+      .filter(Boolean)
+      .map(function(st){ return { name: st.ticker, value: Math.max(st.mcap_num || 5e9, 5e9), st: st }; });
+    return { name: sec, children: leaves };
+  });
+
+  var root = d3.hierarchy({ name: 'root', children: children })
+    .sum(function(n){ return n.value || 0; })
+    .sort(function(a, b){ return b.value - a.value; });
+
+  d3.treemap()
+    .size([W, H])
+    .paddingOuter(3)
+    .paddingTop(16)
+    .paddingInner(1)
+    .round(true)(root);
+
+  // Remove old elements
+  document.querySelectorAll('.tm-cell,.tm-sector').forEach(function(el){ el.remove(); });
+  document.getElementById('hm-loading').style.display = 'none';
+
+  // Render sector labels
+  root.children.forEach(function(node) {
+    var sw = node.x1 - node.x0, sh = node.y1 - node.y0;
+    if (sw < 20 || sh < 14) return;
+    var el = document.createElement('div');
+    el.className = 'tm-sector';
+    el.style.cssText = 'left:' + node.x0 + 'px;top:' + node.y0 + 'px;width:' + sw + 'px;height:16px;';
+    el.innerHTML = '<span>' + node.data.name + '</span>';
+    wrap.appendChild(el);
+  });
+
+  // Render leaf cells
+  root.leaves().forEach(function(node) {
+    var cw = node.x1 - node.x0, ch = node.y1 - node.y0;
+    if (cw < 3 || ch < 3) return;
+    var st   = node.data.st;
+    var pct  = st.change_pct;
+    var sign = pct >= 0 ? '+' : '';
+
+    var el = document.createElement('div');
+    el.className = 'tm-cell';
+    el.setAttribute('data-t', st.ticker);
+    el.style.cssText = 'left:' + node.x0 + 'px;top:' + node.y0 + 'px;width:' + cw + 'px;height:' + ch + 'px;background:' + pctColor(pct) + ';';
+
+    var fontSize = Math.min(14, Math.max(7, Math.floor(Math.min(cw, ch) / 5)));
+    var pctSize  = Math.max(6, fontSize - 2);
+    var showPct  = ch > fontSize * 2.5;
+
+    el.innerHTML = cw > 20 && ch > 14
+      ? '<div class="tc" style="font-size:' + fontSize + 'px">' + st.ticker + '</div>'
+        + (showPct ? '<div class="tp" style="font-size:' + pctSize + 'px">' + sign + pct + '%</div>' : '')
+      : '';
+    wrap.appendChild(el);
+  });
+
   document.getElementById('ts-label').textContent = 'Updated ' + new Date(d.ts * 1000).toLocaleTimeString();
 }
 
@@ -7259,24 +7299,26 @@ function showDetail(t) {
   document.getElementById('dp-change').textContent = sign + st.change_pct + '%';
   document.getElementById('dp-mcap').textContent   = st.mcap || '—';
   document.getElementById('detail-card').classList.add('visible');
-  document.getElementById('detail-card').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  // highlight active cell
-  document.querySelectorAll('.cell.active').forEach(function(c) { c.classList.remove('active'); });
-  var el = document.querySelector('.cell[data-t="' + t + '"]');
+  document.querySelectorAll('.tm-cell.active').forEach(function(c){ c.classList.remove('active'); });
+  var el = document.querySelector('.tm-cell[data-t="' + t + '"]');
   if (el) el.classList.add('active');
 }
 
 document.addEventListener('click', function(e) {
-  var cell = e.target.closest('.cell');
+  var cell = e.target.closest('.tm-cell');
   if (cell) { showDetail(cell.getAttribute('data-t')); return; }
   if (e.target.id === 'detail-close') {
     document.getElementById('detail-card').classList.remove('visible');
-    document.querySelectorAll('.cell.active').forEach(function(c) { c.classList.remove('active'); });
+    document.querySelectorAll('.tm-cell.active').forEach(function(c){ c.classList.remove('active'); });
   }
 });
 
+window.addEventListener('resize', function() {
+  if (_hmData) renderTreemap(_hmData);
+});
+
 loadHeatmap();
-setTimeout(function() { loadHeatmap(); }, 5 * 60 * 1000);
+setTimeout(function(){ loadHeatmap(); }, 5 * 60 * 1000);
 """ + _THEME_JS + """
 </script>
 </body>
