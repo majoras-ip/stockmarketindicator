@@ -6856,7 +6856,7 @@ function renderGreeks(d, tab) {
   for (var i = 0; i < d.expirations.length; i++) {
     var e = d.expirations[i];
     var cls = e === d.expiry ? ' active' : '';
-    tabs += '<span class="exp-tab' + cls + '" onclick="loadGreeks(\'' + e + '\')">' + e + '</span>';
+    tabs += '<span class="exp-tab' + cls + '" onclick="loadGreeks(&quot;' + e + '&quot;)">' + e + '</span>';
   }
 
   // ATM summary cards
@@ -6882,8 +6882,8 @@ function renderGreeks(d, tab) {
 
   // Tab buttons
   var tabBtns = '<div class="tabs">'
-    + '<button class="tab-btn' + (tab==='calls'?' active':'') + '" onclick="switchTab(\'calls\')">Calls</button>'
-    + '<button class="tab-btn' + (tab==='puts'?' active':'') + '" onclick="switchTab(\'puts\')">Puts</button>'
+    + '<button class="tab-btn' + (tab==='calls'?' active':'') + '" onclick="switchTab(&quot;calls&quot;)">Calls</button>'
+    + '<button class="tab-btn' + (tab==='puts'?' active':'') + '" onclick="switchTab(&quot;puts&quot;)">Puts</button>'
     + '</div>';
 
   // Table
