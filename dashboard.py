@@ -2405,51 +2405,60 @@ _HEATMAP_SECTORS = {
 }
 
 import time as _hm_time
-_heatmap_cache = {"data": None, "ts": 0}
+import threading as _hm_threading
+
+_heatmap_cache    = {"data": None, "ts": 0}
+_heatmap_fetching = False
+
+# Hardcoded approximate market caps (avoids per-ticker fast_info calls)
+_MCAP_STATIC = {
+    "AAPL":"$3.3T","MSFT":"$3.1T","NVDA":"$2.9T","GOOGL":"$2.1T","AMZN":"$2.2T",
+    "META":"$1.5T","TSLA":"$850B","AVGO":"$900B","ORCL":"$450B","AMD":"$250B",
+    "QCOM":"$170B","TXN":"$170B","INTC":"$90B","AMAT":"$180B","MU":"$110B",
+    "CRM":"$290B","NOW":"$200B","PANW":"$120B","CRWD":"$90B","NET":"$70B",
+    "LRCX":"$100B","KLAC":"$90B","SNOW":"$50B","PLTR":"$150B",
+    "NFLX":"$380B","DIS":"$180B","T":"$140B","VZ":"$160B","SNAP":"$15B",
+    "PINS":"$20B","RDDT":"$20B","RBLX":"$30B",
+    "HD":"$400B","MCD":"$230B","NKE":"$90B","SBUX":"$90B","TGT":"$60B",
+    "ABNB":"$80B","BKNG":"$140B","DASH":"$55B","GM":"$45B","F":"$40B","RIVN":"$12B",
+    "JPM":"$750B","BAC":"$330B","WFC":"$250B","GS":"$190B","MS":"$200B",
+    "V":"$600B","MA":"$490B","C":"$130B","BLK":"$140B","AXP":"$200B",
+    "PYPL":"$65B","COIN":"$60B",
+    "UNH":"$500B","JNJ":"$380B","LLY":"$750B","ABBV":"$320B","PFE":"$140B",
+    "MRK":"$280B","AMGN":"$160B","TMO":"$200B","ABT":"$200B","ISRG":"$150B",
+    "XOM":"$490B","CVX":"$280B","COP":"$130B","SLB":"$55B","EOG":"$60B",
+    "PSX":"$50B","MPC":"$45B","OXY":"$45B",
+    "CAT":"$190B","BA":"$100B","GE":"$210B","RTX":"$160B","HON":"$130B",
+    "UPS":"$100B","FDX":"$60B","LMT":"$110B","DE":"$130B",
+    "WMT":"$700B","PG":"$380B","COST":"$400B","KO":"$260B","PEP":"$220B",
+    "PM":"$170B","MO":"$80B","CL":"$60B",
+    "LIN":"$220B","APD":"$60B","SHW":"$90B","FCX":"$55B","NEM":"$55B","AA":"$12B",
+    "AMT":"$95B","PLD":"$100B","EQIX":"$80B","CCI":"$45B","SPG":"$60B","O":"$50B",
+    "NEE":"$130B","DUK":"$70B","SO":"$65B","D":"$40B","AEP":"$45B","EXC":"$40B",
+}
+
+def _fmt_mcap(v):
+    if not v:
+        return "—"
+    if v >= 1e12:
+        return f"${v/1e12:.2f}T"
+    if v >= 1e9:
+        return f"${v/1e9:.1f}B"
+    return f"${v/1e6:.0f}M"
 
 def _fetch_heatmap_data():
     import yfinance as yf
     import pandas as pd
-    from concurrent.futures import ThreadPoolExecutor
 
     all_tickers = [t for tickers in _HEATMAP_SECTORS.values() for t in tickers]
-
-    # Batch price download
     raw = yf.download(all_tickers, period="2d", interval="1d", progress=False, auto_adjust=True)
-    if isinstance(raw.columns, pd.MultiIndex):
-        closes  = raw["Close"]
-        volumes = raw["Volume"] if "Volume" in raw.columns.get_level_values(0) else None
-    else:
-        closes  = raw[["Close"]]
-        volumes = None
-
-    # Fetch market cap via fast_info in parallel
-    def _get_mcap(ticker):
-        try:
-            fi = yf.Ticker(ticker).fast_info
-            return ticker, getattr(fi, "market_cap", None)
-        except Exception:
-            return ticker, None
-
-    mcap_map = {}
-    with ThreadPoolExecutor(max_workers=20) as pool:
-        for t, mc in pool.map(_get_mcap, all_tickers):
-            mcap_map[t] = mc
-
-    def _fmt_mcap(v):
-        if not v:
-            return "—"
-        if v >= 1e12:
-            return f"${v/1e12:.2f}T"
-        if v >= 1e9:
-            return f"${v/1e9:.1f}B"
-        return f"${v/1e6:.0f}M"
+    closes = raw["Close"] if isinstance(raw.columns, pd.MultiIndex) else raw[["Close"]]
 
     result = []
     for sector, tickers in _HEATMAP_SECTORS.items():
         for ticker in tickers:
             try:
-                col = closes[ticker] if ticker in closes.columns else None
+                col  = closes[ticker] if ticker in closes.columns else None
                 if col is None:
                     continue
                 vals = col.dropna()
@@ -2462,11 +2471,31 @@ def _fetch_heatmap_data():
                     "sector":     sector,
                     "price":      price,
                     "change_pct": pct,
-                    "mcap":       _fmt_mcap(mcap_map.get(ticker)),
+                    "mcap":       _MCAP_STATIC.get(ticker, "—"),
                 })
             except Exception:
                 continue
     return result
+
+def _heatmap_refresh_bg():
+    global _heatmap_fetching
+    if _heatmap_fetching:
+        return
+    _heatmap_fetching = True
+    def _run():
+        global _heatmap_fetching
+        try:
+            data = _fetch_heatmap_data()
+            _heatmap_cache["data"] = data
+            _heatmap_cache["ts"]   = _hm_time.time()
+        except Exception:
+            pass
+        finally:
+            _heatmap_fetching = False
+    _hm_threading.Thread(target=_run, daemon=True).start()
+
+# Pre-fetch at server start so first visitor gets instant data
+_heatmap_refresh_bg()
 
 
 @app.route("/heatmap")
@@ -2476,15 +2505,13 @@ def heatmap_page():
 
 @app.route("/api/heatmap")
 def heatmap_api():
-    global _heatmap_cache
-    try:
-        now = _hm_time.time()
-        if _heatmap_cache["data"] is None or now - _heatmap_cache["ts"] > 300:
-            _heatmap_cache["data"] = _fetch_heatmap_data()
-            _heatmap_cache["ts"]   = now
-        return jsonify({"sectors": _HEATMAP_SECTORS, "stocks": _heatmap_cache["data"], "ts": int(_heatmap_cache["ts"])})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    now = _hm_time.time()
+    # Trigger background refresh if stale (non-blocking)
+    if _heatmap_cache["data"] is None or now - _heatmap_cache["ts"] > 300:
+        _heatmap_refresh_bg()
+    if _heatmap_cache["data"] is None:
+        return jsonify({"loading": True})
+    return jsonify({"sectors": _HEATMAP_SECTORS, "stocks": _heatmap_cache["data"], "ts": int(_heatmap_cache["ts"])})
 
 
 # ── Unusual Volume ────────────────────────────────────────────────────────────
@@ -7160,14 +7187,22 @@ function pctColor(pct) {
   return 'hsl(' + hue + ',' + sat + '%,' + lit + '%)';
 }
 
-function loadHeatmap() {
-  document.getElementById('error-msg').style.display = 'none';
-  document.getElementById('heatmap-content').innerHTML = '<div class="loading">Fetching market data…</div>';
-  document.getElementById('ts-label').textContent = 'Loading…';
-  document.getElementById('detail-card').classList.remove('visible');
+function loadHeatmap(silent) {
+  if (!silent) {
+    document.getElementById('error-msg').style.display = 'none';
+    document.getElementById('heatmap-content').innerHTML = '<div class="loading">Fetching market data…</div>';
+    document.getElementById('ts-label').textContent = 'Loading…';
+    document.getElementById('detail-card').classList.remove('visible');
+  }
   fetch('/api/heatmap')
     .then(function(r) { return r.json(); })
     .then(function(d) {
+      if (d.loading) {
+        // Server is still warming up — poll every 3s
+        document.getElementById('ts-label').textContent = 'Warming up…';
+        setTimeout(function() { loadHeatmap(true); }, 3000);
+        return;
+      }
       if (d.error) {
         document.getElementById('error-msg').textContent = d.error;
         document.getElementById('error-msg').style.display = 'block';
