@@ -343,80 +343,66 @@ def api_copy():
 
 @app.route("/api/forecast")
 def api_forecast():
+    import numpy as np
     ticker   = request.args.get("ticker", "SPY").upper()
     interval = request.args.get("interval", "5m")
 
+    # Download price data
     try:
         from dotenv import load_dotenv
         load_dotenv(os.path.join(config.BASE_DIR, ".env"))
         from live.live_feed import fetch_bars
         interval_map = {"1m": "1Min", "5m": "5Min", "15m": "15Min", "1h": "1Hour"}
         df = fetch_bars(ticker, interval_map.get(interval, "5Min"))
-    except Exception as exc:
-        log.warning("Alpaca failed (%s), falling back to yfinance", exc)
+    except Exception:
         from data.collector import download
         df = download(ticker, period="5d", interval=interval, save_csv=False)
 
-    from prediction.forecast_exporter import ForecastExporter
-    from data.forecast_preprocessor import FORECAST_STEPS
-    from models.forecaster import build_sequences
-    from data.preprocessor import _filter_market_hours, _remove_outliers
-    from data.features import build_features
-    import numpy as np
-
-    exporter = ForecastExporter()
-    exporter.load()
-
-    df_clean = _remove_outliers(_filter_market_hours(df))
-    features = build_features(df_clean).dropna()
-
-    if exporter.feature_names:
-        for col in set(exporter.feature_names) - set(features.columns):
-            features[col] = 0.0
-        features = features[exporter.feature_names]
-
-    X_scaled = exporter.scaler.transform(features)
-    dummy_y  = np.zeros(len(X_scaled))
-    X_seq, _ = build_sequences(X_scaled, dummy_y, config.SEQUENCE_LENGTH, FORECAST_STEPS)
-
-    if len(X_seq) == 0:
+    if df is None or len(df) < 30:
         return jsonify({"error": "Not enough data"}), 400
 
-    all_preds = exporter.forecaster.predict(X_seq) * exporter.y_scale
-    hist_rv   = all_preds[:, 0]
-    hist_index = features.index[config.SEQUENCE_LENGTH : config.SEQUENCE_LENGTH + len(hist_rv)]
+    close = df["Close"].dropna()
+    if len(close) < 30:
+        return jsonify({"error": "Not enough data"}), 400
 
-    mean, lower, upper = exporter.forecaster.predict_with_uncertainty(X_seq)
-    mean  = mean  * exporter.y_scale
-    lower = lower * exporter.y_scale
-    upper = upper * exporter.y_scale
+    # Compute realized volatility: rolling 20-bar std of log returns
+    log_ret = np.log(close / close.shift(1)).dropna()
+    rv = log_ret.rolling(window=20).std().dropna()
+
+    hist_index = rv.index
+    hist_rv    = rv.values
+
+    # Simple forecast: mean-revert toward recent average over next 6 bars
+    FORECAST_STEPS = 6
+    recent_mean = float(np.mean(hist_rv[-20:]))
+    last_rv     = float(hist_rv[-1])
+    mean_fcast  = np.array([last_rv + (recent_mean - last_rv) * (i + 1) / FORECAST_STEPS
+                            for i in range(FORECAST_STEPS)])
+    std_fcast   = float(np.std(hist_rv[-20:])) * 0.5
+    lower = mean_fcast - std_fcast
+    upper = mean_fcast + std_fcast
 
     interval_ms_map = {"1m": 60_000, "5m": 300_000, "15m": 900_000, "1h": 3_600_000}
-    bar_ms   = interval_ms_map.get(interval, 300_000)
-    last_ts  = int(hist_index[-1].timestamp() * 1000)
+    bar_ms    = interval_ms_map.get(interval, 300_000)
+    last_ts   = int(hist_index[-1].timestamp() * 1000)
     future_ts = [last_ts + bar_ms * (i + 1) for i in range(FORECAST_STEPS)]
 
-    direction_up   = None
-    direction_conf = None
-    if exporter.direction_model is not None:
-        last_feat = features.iloc[[-1]].values
-        proba = exporter.direction_model.predict_proba(last_feat)[0]
-        direction_up   = bool(proba[1] >= 0.5)
-        direction_conf = float(max(proba))
+    # Direction: compare last RV to recent mean
+    direction_up   = bool(last_rv < recent_mean)
+    direction_conf = float(min(0.99, 0.5 + abs(last_rv - recent_mean) / (recent_mean + 1e-10) * 0.5))
 
-    arr = hist_rv
     return jsonify({
         "ticker":   ticker,
         "interval": interval,
         "hist_ts":  [int(ts.timestamp() * 1000) for ts in hist_index],
         "hist_rv":  [round(float(v), 8) for v in hist_rv],
-        "future_ts": future_ts,
-        "future_mean":  [round(float(v), 8) for v in mean],
+        "future_ts":    future_ts,
+        "future_mean":  [round(float(v), 8) for v in mean_fcast],
         "future_lower": [round(float(v), 8) for v in lower],
         "future_upper": [round(float(v), 8) for v in upper],
-        "low_thresh":    round(float(np.percentile(arr, 25)), 8),
-        "medium_thresh": round(float(np.percentile(arr, 50)), 8),
-        "high_thresh":   round(float(np.percentile(arr, 75)), 8),
+        "low_thresh":    round(float(np.percentile(hist_rv, 25)), 8),
+        "medium_thresh": round(float(np.percentile(hist_rv, 50)), 8),
+        "high_thresh":   round(float(np.percentile(hist_rv, 75)), 8),
         "direction_up":   direction_up,
         "direction_conf": direction_conf,
     })
