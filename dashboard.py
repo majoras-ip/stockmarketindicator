@@ -2449,9 +2449,27 @@ def _fmt_mcap(v):
 def _fetch_heatmap_data():
     import yfinance as yf
     import pandas as pd
+    from concurrent.futures import ThreadPoolExecutor
 
     all_tickers = [t for tickers in _HEATMAP_SECTORS.values() for t in tickers]
-    raw = yf.download(all_tickers, period="2d", interval="1d", progress=False, auto_adjust=True)
+
+    # Fetch prices and market caps in parallel
+    def _get_mcap(ticker):
+        try:
+            mc = yf.Ticker(ticker).fast_info.market_cap
+            return ticker, float(mc) if mc else None
+        except Exception:
+            return ticker, None
+
+    with ThreadPoolExecutor(max_workers=25) as pool:
+        price_future = pool.submit(
+            lambda: yf.download(all_tickers, period="2d", interval="1d", progress=False, auto_adjust=True)
+        )
+        mcap_futures = {t: pool.submit(_get_mcap, t) for t in all_tickers}
+
+        raw      = price_future.result()
+        mcap_map = {t: f.result()[1] for t, f in mcap_futures.items()}
+
     closes = raw["Close"] if isinstance(raw.columns, pd.MultiIndex) else raw[["Close"]]
 
     result = []
@@ -2466,7 +2484,8 @@ def _fetch_heatmap_data():
                     continue
                 price = round(float(vals.iloc[-1]), 2)
                 pct   = round((float(vals.iloc[-1]) - float(vals.iloc[-2])) / float(vals.iloc[-2]) * 100, 2) if len(vals) >= 2 else 0.0
-                mc = _MCAP_STATIC.get(ticker, 1e9)
+                # Use live market cap, fall back to hardcoded if unavailable
+                mc = mcap_map.get(ticker) or _MCAP_STATIC.get(ticker, 1e9)
                 result.append({
                     "ticker":     ticker,
                     "sector":     sector,
