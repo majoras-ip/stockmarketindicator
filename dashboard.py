@@ -8437,6 +8437,21 @@ def scalper_api():
     req_exp = request.args.get("exp", "")
     opt_type = request.args.get("type", "both")  # calls / puts / both
 
+    def _safe_f(v, decimals=4):
+        """Return float rounded to decimals, or None if NaN/inf/missing."""
+        try:
+            f = float(v)
+            return None if (f != f or abs(f) == float("inf")) else round(f, decimals)
+        except Exception:
+            return None
+
+    def _safe_i(v):
+        try:
+            f = float(v)
+            return 0 if (f != f) else int(f)
+        except Exception:
+            return 0
+
     try:
         t = yf.Ticker(ticker)
         spot = float(t.fast_info.last_price)
@@ -8474,13 +8489,14 @@ def scalper_api():
             label = "call" if is_call else "put"
             for _, row in df.iterrows():
                 try:
-                    K    = float(row["strike"])
-                    bid  = float(row.get("bid") or 0)
-                    ask  = float(row.get("ask") or 0)
-                    last = float(row.get("lastPrice") or 0)
-                    vol  = int(row.get("volume") or 0)
-                    oi   = int(row.get("openInterest") or 0)
-                    iv   = float(row.get("impliedVolatility") or 0)
+                    K    = _safe_f(row.get("strike"), 2);
+                    if K is None: continue
+                    bid  = _safe_f(row.get("bid"), 2) or 0.0
+                    ask  = _safe_f(row.get("ask"), 2) or 0.0
+                    last = _safe_f(row.get("lastPrice"), 2) or 0.0
+                    vol  = _safe_i(row.get("volume"))
+                    oi   = _safe_i(row.get("openInterest"))
+                    iv   = _safe_f(row.get("impliedVolatility"), 6) or 0.0
 
                     if bid <= 0 and ask <= 0:
                         continue
@@ -8488,27 +8504,26 @@ def scalper_api():
                     if mid <= 0:
                         continue
 
-                    spread_pct = round((ask - bid) / mid * 100, 1) if mid > 0 else 999
+                    spread_pct = round((ask - bid) / mid * 100, 1) if mid > 0 else 999.0
                     delta, gamma, theta, vega, rho = _bs_greeks(spot, K, T, r, iv, is_call)
 
-                    # Scalp score: reward tight spreads, high volume, 0.2–0.6 delta, high gamma
-                    delta_score  = max(0, 1 - abs(abs(delta) - 0.4) / 0.4)   # peaks at delta=0.4
-                    spread_score = max(0, 1 - spread_pct / 20)                 # 0% spread = 1.0
+                    delta_score  = max(0, 1 - abs(abs(delta or 0) - 0.4) / 0.4)
+                    spread_score = max(0, 1 - spread_pct / 20)
                     vol_score    = min(vol / 1000, 1.0) if vol > 0 else 0
-                    gamma_score  = min(gamma * 500, 1.0)
+                    gamma_score  = min((gamma or 0) * 500, 1.0)
                     score = round((delta_score * 0.3 + spread_score * 0.35 + vol_score * 0.2 + gamma_score * 0.15) * 100)
 
                     rows.append({
                         "type":       label,
                         "strike":     K,
-                        "bid":        round(bid, 2),
-                        "ask":        round(ask, 2),
+                        "bid":        bid,
+                        "ask":        ask,
                         "mid":        round(mid, 2),
                         "spread_pct": spread_pct,
-                        "delta":      delta,
-                        "gamma":      gamma,
-                        "theta":      theta,
-                        "vega":       vega,
+                        "delta":      delta or 0,
+                        "gamma":      gamma or 0,
+                        "theta":      theta or 0,
+                        "vega":       vega or 0,
                         "iv":         round(iv * 100, 1),
                         "volume":     vol,
                         "oi":         oi,
@@ -8546,8 +8561,10 @@ def scalper_api():
         atm_iv = None
         atm_row = chain.calls.iloc[(chain.calls["strike"] - spot).abs().argsort()[:1]]
         if not atm_row.empty:
-            atm_iv = float(atm_row.iloc[0].get("impliedVolatility") or 0)
-        exp_move = round(spot * atm_iv * np.sqrt(T), 2) if atm_iv else None
+            atm_iv = _safe_f(atm_row.iloc[0].get("impliedVolatility"), 6)
+        exp_move = _safe_f(spot * atm_iv * np.sqrt(T), 2) if atm_iv else None
+        atm_iv_pct = _safe_f(atm_iv * 100, 1) if atm_iv else None
+        mp = _safe_f(max_pain_strike, 2)
 
         return jsonify({
             "ticker":      ticker,
@@ -8556,10 +8573,10 @@ def scalper_api():
             "dte":         dte,
             "expirations": list(exps[:16]),
             "rows":        rows,
-            "max_pain":    max_pain_strike,
+            "max_pain":    mp,
             "pc_ratio":    pc_ratio,
             "exp_move":    exp_move,
-            "atm_iv":      round(atm_iv * 100, 1) if atm_iv else None,
+            "atm_iv":      atm_iv_pct,
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
