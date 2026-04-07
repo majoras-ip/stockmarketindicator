@@ -2350,12 +2350,19 @@ def greeks_api():
                 "rho":   round(rho, 4),
             }
 
+        def _safe_int(v):
+            try:
+                f = float(v)
+                return 0 if np.isnan(f) else int(f)
+            except Exception:
+                return 0
+
         def row(r_ser, is_call):
             iv   = float(r_ser.get("impliedVolatility", 0) or 0)
             K    = float(r_ser["strike"])
             mid  = round((float(r_ser.get("bid", 0) or 0) + float(r_ser.get("ask", 0) or 0)) / 2, 2)
-            oi   = int(r_ser.get("openInterest", 0) or 0)
-            vol  = int(r_ser.get("volume", 0) or 0)
+            oi   = _safe_int(r_ser.get("openInterest", 0))
+            vol  = _safe_int(r_ser.get("volume", 0))
             g    = bs_greeks(spot, K, T, r, iv, is_call)
             return {
                 "strike": K,
