@@ -6219,7 +6219,7 @@ function drawChart(d) {
   const layout = {
     paper_bgcolor: '#0d1117', plot_bgcolor: '#0d1117',
     font: { color: '#e6edf3', family: 'monospace' },
-    xaxis: { gridcolor: '#21262d', tickformat: '%H:%M' },
+    xaxis: { gridcolor: '#21262d', tickformat: (d.interval === '1h') ? '%m/%d' : '%m/%d %H:%M' },
     yaxis: { gridcolor: '#21262d', title: 'Realised Volatility' },
     legend: { bgcolor: '#161b22', bordercolor: '#30363d', borderwidth: 1 },
     margin: { t: 20, r: 20, b: 40, l: 60 },
