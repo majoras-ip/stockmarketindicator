@@ -2755,7 +2755,10 @@ def _fetch_trump_news():
 
 
 @app.route("/trump")
+@login_required
 def trump_page():
+    if _get_user_plan(session.get("user_id")) == "free":
+        return redirect("/pricing?upgrade=trump")
     return render_template_string(TRUMP_HTML, current_user=current_user())
 
 
@@ -3119,24 +3122,26 @@ _NAV_LINKS = """
         <a href="/generate">Forecast</a>
         <a href="/dashboard">Live Chart</a>
         <a href="/heatmap">Market Heatmap</a>
-        <a href="/trump">Trump Tracker</a>
         <a href="/earnings">Earnings Calendar</a>
         <a href="/dividends">Dividends Calendar</a>
         <a href="/volume">Unusual Volume</a>
         <a href="/news">News</a>
         {% if nav_plan == 'free' %}
+        <a href="/pricing?upgrade=trump" style="opacity:.4;">Trump Tracker 🔒</a>
         <a href="/pricing?upgrade=gamma" style="opacity:.4;">Gamma Exposure 🔒</a>
         <a href="/pricing?upgrade=greeks" style="opacity:.4;">Greeks Dashboard 🔒</a>
         <a href="/pricing?upgrade=flow" style="opacity:.4;">Options Flow 🔒</a>
         <a href="/pricing?upgrade=insider" style="opacity:.4;">Insider Trading 🔒</a>
         <a href="/pricing?upgrade=premarket" style="opacity:.4;">Pre-Market Scanner 🔒</a>
         {% elif nav_plan == 'basic' %}
+        <a href="/trump">Trump Tracker</a>
         <a href="/gamma">Gamma Exposure</a>
         <a href="/greeks">Greeks Dashboard</a>
         <a href="/pricing?upgrade=flow" style="opacity:.4;">Options Flow 🔒</a>
         <a href="/pricing?upgrade=insider" style="opacity:.4;">Insider Trading 🔒</a>
         <a href="/pricing?upgrade=premarket" style="opacity:.4;">Pre-Market Scanner 🔒</a>
         {% else %}
+        <a href="/trump">Trump Tracker</a>
         <a href="/gamma">Gamma Exposure</a>
         <a href="/greeks">Greeks Dashboard</a>
         <a href="/flow">Options Flow</a>
@@ -3545,7 +3550,7 @@ PRICING_HTML = """<!DOCTYPE html>
         <li>Earnings calendar</li>
         <li>Market heatmap</li>
         <li>Dividends calendar</li>
-        <li>Trump tracker</li>
+        <li class="no">Trump tracker</li>
         <li class="no">Ticker news</li>
         <li class="no">Gamma exposure</li>
         <li class="no">Greeks dashboard</li>
