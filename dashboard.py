@@ -5884,19 +5884,6 @@ INSIDER_HTML = """<!DOCTYPE html>
         <button class="stab" data-src="sec" onclick="setSource(this)">SEC</button>
       </div>
     </div>
-    <div class="filter-row">
-      <span class="filter-label">Politicians:</span>
-      <button class="chip" onclick="setPolitician(this, 'Pelosi')">Nancy Pelosi</button>
-      <button class="chip" onclick="setPolitician(this, 'Tuberville')">Tommy Tuberville</button>
-      <button class="chip" onclick="setPolitician(this, 'Gottheimer')">Josh Gottheimer</button>
-      <button class="chip" onclick="setPolitician(this, 'Crenshaw')">Dan Crenshaw</button>
-      <button class="chip" onclick="setPolitician(this, 'Khanna')">Ro Khanna</button>
-      <button class="chip" onclick="setPolitician(this, 'McCaul')">Michael McCaul</button>
-      <button class="chip" onclick="setPolitician(this, 'Greene')">Marjorie Taylor Greene</button>
-      <button class="chip" onclick="setPolitician(this, 'Capito')">Shelley Capito</button>
-      <button class="chip" onclick="setPolitician(this, 'Collins')">Susan Collins</button>
-      <button class="chip" onclick="setPolitician(this, 'Scott')">Austin Scott</button>
-    </div>
   </div>
 
   <div id="content" class="loading">Loading filings…</div>
