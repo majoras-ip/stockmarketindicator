@@ -3508,7 +3508,7 @@ PRICING_HTML = """<!DOCTYPE html>
     <div class="toggle-track" id="billing-toggle" onclick="toggleBilling()">
       <div class="toggle-thumb"></div>
     </div>
-    <span class="toggle-label" id="lbl-yearly">Yearly <span class="save-badge">Save ~17%</span></span>
+    <span class="toggle-label" id="lbl-yearly">Yearly <span class="save-badge">Save up to 25%</span></span>
   </div>
 
   <div class="plans">
