@@ -7597,14 +7597,20 @@ function renderChart(d) {
   Plotly.react('price-chart', [{
     x: dates, y: d.prices, type: 'scatter', mode: 'lines',
     line: { color: color, width: 2 },
-    fill: 'tozeroy',
-    fillcolor: d.chg_pct >= 0 ? 'rgba(63,185,80,0.08)' : 'rgba(248,81,73,0.08)',
     name: d.ticker,
   }], {
     paper_bgcolor: '#161b22', plot_bgcolor: '#161b22',
     font: { color: '#e6edf3', family: 'monospace', size: 11 },
     xaxis: { gridcolor: '#21262d', tickformat: _curPeriod === '1D' ? '%H:%M' : '%m/%d' },
-    yaxis: { gridcolor: '#21262d', side: 'right' },
+    yaxis: {
+      gridcolor: '#21262d', side: 'right',
+      range: [Math.min.apply(null, d.prices) * 0.998, Math.max.apply(null, d.prices) * 1.002],
+    },
+    shapes: [{
+      type: 'line', xref: 'paper', x0: 0, x1: 1,
+      y0: d.prices[0], y1: d.prices[0],
+      line: { color: 'rgba(139,148,158,0.5)', width: 1, dash: 'dot' },
+    }],
     margin: { t: 12, r: 50, b: 36, l: 10 },
     showlegend: false,
   }, { responsive: true, displayModeBar: false });
