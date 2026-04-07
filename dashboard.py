@@ -2054,6 +2054,119 @@ def earnings_api():
         return jsonify({"error": str(e)}), 500
 
 
+# ── Dividends Calendar ───────────────────────────────────────────────────────
+
+_DIVIDEND_TICKERS = [
+    # Dividend Aristocrats & high-yield blue chips
+    "AAPL","MSFT","JNJ","PG","KO","PEP","WMT","MCD","V","MA","JPM","BAC","WFC",
+    "XOM","CVX","COP","VZ","T","IBM","INTC","QCOM","TXN","AVGO",
+    "MO","PM","ABBV","PFE","MRK","AMGN","ABT","LLY","TMO",
+    "HD","LOW","TGT","COST","NKE","SBUX",
+    "GS","MS","BLK","AXP","MMC","TRV",
+    "CAT","HON","GE","UPS","FDX","LMT","RTX","NOC","GD",
+    "NEE","DUK","SO","D","AEP","EXC",
+    "AMT","PLD","O","SPG","EQIX","CCI","WPC",
+    "LIN","APD","SHW","ECL",
+    # ETFs
+    "SPY","QQQ","DIA","IWM","VYM","SCHD","HDV","DVY","JEPI","JEPQ",
+]
+
+import threading as _div_threading
+import time as _div_time
+_div_cache = {"data": None, "ts": 0}
+_div_fetching = False
+
+def _fetch_dividends():
+    import yfinance as yf
+    from datetime import date, timedelta, datetime, timezone
+    from concurrent.futures import ThreadPoolExecutor
+
+    today  = date.today()
+    cutoff = today + timedelta(days=60)
+
+    def _get_one(ticker):
+        try:
+            info = yf.Ticker(ticker).info
+            ex_ts = info.get("exDividendDate")
+            if not ex_ts:
+                return None
+            ex_date = date.fromtimestamp(float(ex_ts))
+            if not (today <= ex_date <= cutoff):
+                return None
+            div_rate  = info.get("dividendRate")   or info.get("lastDividendValue")
+            div_yield = info.get("dividendYield")
+            name      = info.get("shortName") or info.get("longName") or ticker
+            price     = info.get("currentPrice") or info.get("regularMarketPrice")
+            freq_map  = {1: "Annual", 2: "Semi-annual", 4: "Quarterly", 12: "Monthly"}
+            freq      = freq_map.get(info.get("dividendFrequency") or 4, "Quarterly")
+            # Estimate next payment per period
+            per_share = None
+            if div_rate and info.get("dividendFrequency"):
+                per_share = round(div_rate / info["dividendFrequency"], 4)
+            elif div_rate:
+                per_share = round(div_rate / 4, 4)
+
+            import math
+            def _safe(v):
+                try: return None if (v is None or math.isnan(float(v))) else v
+                except: return None
+
+            return {
+                "ticker":    ticker,
+                "name":      name[:30],
+                "ex_date":   ex_date.strftime("%b %d, %Y"),
+                "ex_ord":    ex_date.toordinal(),
+                "per_share": f"${per_share:.4f}".rstrip("0").rstrip(".") if _safe(per_share) else "—",
+                "yield_pct": f"{round(float(div_yield)*100, 2)}%" if _safe(div_yield) else "—",
+                "freq":      freq,
+                "price":     f"${round(float(price),2)}" if _safe(price) else "—",
+            }
+        except Exception:
+            return None
+
+    with ThreadPoolExecutor(max_workers=20) as pool:
+        results = list(pool.map(_get_one, _DIVIDEND_TICKERS))
+
+    rows = [r for r in results if r]
+    rows.sort(key=lambda x: x["ex_ord"])
+    return rows
+
+
+def _div_refresh_bg():
+    global _div_fetching
+    if _div_fetching:
+        return
+    _div_fetching = True
+    def _run():
+        global _div_fetching
+        try:
+            data = _fetch_dividends()
+            _div_cache["data"] = data
+            _div_cache["ts"]   = _div_time.time()
+        except Exception:
+            pass
+        finally:
+            _div_fetching = False
+    _div_threading.Thread(target=_run, daemon=True).start()
+
+_div_refresh_bg()  # pre-fetch at startup
+
+
+@app.route("/dividends")
+def dividends_page():
+    return render_template_string(DIVIDENDS_HTML, current_user=current_user())
+
+
+@app.route("/api/dividends")
+def dividends_api():
+    now = _div_time.time()
+    if _div_cache["data"] is None or now - _div_cache["ts"] > 3600:
+        _div_refresh_bg()
+    if _div_cache["data"] is None:
+        return jsonify({"loading": True})
+    return jsonify({"dividends": _div_cache["data"], "ts": int(_div_cache["ts"])})
+
+
 # ── Options Flow ──────────────────────────────────────────────────────────────
 
 @app.route("/flow")
@@ -2988,6 +3101,7 @@ _NAV_LINKS = """
         <a href="/heatmap">Market Heatmap</a>
         <a href="/trump">Trump Tracker</a>
         <a href="/earnings">Earnings Calendar</a>
+        <a href="/dividends">Dividends Calendar</a>
         <a href="/flow">Options Flow</a>
         <a href="/gamma">Gamma Exposure</a>
         <a href="/greeks">Greeks Dashboard</a>
@@ -4432,6 +4546,9 @@ HOME_HTML = """<!DOCTYPE html>
     <a class="ind-pill" href="/earnings">
       <div class="cat">Calendar · Free</div><div class="iname">Earnings Calendar</div>
     </a>
+    <a class="ind-pill" href="/dividends">
+      <div class="cat">Calendar · Free</div><div class="iname">Dividends Calendar</div>
+    </a>
   </div>
   <div style="text-align:center;margin-top:24px;">
     <a class="btn-primary" href="/indicators">Browse all indicators →</a>
@@ -4951,6 +5068,108 @@ async function loadEarnings() {
   }
 }
 loadEarnings();
+""" + _THEME_JS + """
+</script>
+</body>
+</html>"""
+
+
+DIVIDENDS_HTML = """<!DOCTYPE html>
+<html data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">""" + _META + """
+  <title>Dividends Calendar · ChartEdge</title>
+  <style>
+    :root[data-theme="dark"]  { --bg:#0d1117; --bg2:#161b22; --bg3:#21262d; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --green:#3fb950; --red:#f85149; }
+    :root[data-theme="light"] { --bg:#ffffff; --bg2:#f6f8fa; --bg3:#eaeef2; --border:#d0d7de; --text:#1f2328; --muted:#636c76; --accent:#0969da; --green:#1a7f37; --red:#cf222e; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+    nav { background: var(--bg2); border-bottom: 1px solid var(--border); padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; }
+    .logo { font-size: 1.1rem; font-weight: bold; text-decoration: none; }
+    """ + _NAV_CSS + """
+    .hero { text-align: center; padding: 40px 24px 28px; border-bottom: 1px solid var(--border); }
+    .hero h1 { font-size: 1.6rem; margin-bottom: 8px; }
+    .hero h1 span { color: var(--accent); }
+    .hero p { color: var(--muted); font-size: .9rem; }
+    .container { max-width: 960px; margin: 0 auto; padding: 28px 24px; }
+    table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+    th { color: var(--muted); font-size: .72rem; text-transform: uppercase; letter-spacing: .05em; padding: 8px 14px; border-bottom: 1px solid var(--border); text-align: left; white-space: nowrap; }
+    td { padding: 11px 14px; border-bottom: 1px solid var(--border); }
+    tr:hover td { background: var(--bg2); }
+    .ticker { color: var(--accent); font-weight: 700; font-size: .92rem; }
+    .name { color: var(--muted); font-size: .78rem; }
+    .yield-val { color: var(--green); font-weight: 600; }
+    .soon { color: var(--accent); font-weight: 600; }
+    .spin { width: 32px; height: 32px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; margin: 0 auto; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .loading { text-align: center; padding: 60px; color: var(--muted); }
+    .empty { text-align: center; padding: 60px; color: var(--muted); }
+    .disclaimer { color: var(--muted); font-size: .78rem; margin-top: 20px; padding: 12px; background: var(--bg2); border-radius: 6px; border: 1px solid var(--border); }
+    footer { text-align: center; padding: 32px 24px; color: var(--muted); font-size: .8rem; border-top: 1px solid var(--border); margin-top: 40px; }
+  </style>
+</head>
+<body>
+<nav>
+  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span></a>
+  <button class="hamburger" onclick="toggleMobileNav(event)">☰</button>
+  <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
+</nav>
+<div class="hero">
+  <h1>Dividends <span>Calendar</span></h1>
+  <p>Upcoming ex-dividend dates for major stocks &amp; ETFs — next 60 days</p>
+</div>
+<div class="container">
+  <div id="div-content">
+    <div class="loading"><div class="spin"></div><p style="margin-top:14px">Loading dividend data…</p></div>
+  </div>
+</div>
+<footer>© 2026 ChartEdge · Dividend data from Yahoo Finance · Not financial advice · <a href="/privacy" style="color:inherit">Privacy</a></footer>
+<script>
+function loadDividends() {
+  fetch('/api/dividends')
+    .then(function(r){ return r.json(); })
+    .then(function(d) {
+      if (d.loading) {
+        setTimeout(loadDividends, 3000);
+        return;
+      }
+      if (d.error) {
+        document.getElementById('div-content').innerHTML = '<div class="empty">Error: ' + d.error + '</div>';
+        return;
+      }
+      if (!d.dividends || d.dividends.length === 0) {
+        document.getElementById('div-content').innerHTML = '<div class="empty">No upcoming ex-dividend dates found in the next 60 days.</div>';
+        return;
+      }
+      var today = new Date();
+      var html = '<table><thead><tr>'
+        + '<th>Ticker</th><th>Company</th><th>Ex-Date</th><th>Per Share</th><th>Yield</th><th>Frequency</th><th>Price</th>'
+        + '</tr></thead><tbody>';
+      d.dividends.forEach(function(row) {
+        var exDate  = new Date(row.ex_date);
+        var daysOut = Math.round((exDate - today) / 86400000);
+        var dateCls = daysOut <= 7 ? ' class="soon"' : '';
+        var dateStr = daysOut === 0 ? 'Today' : daysOut === 1 ? 'Tomorrow' : row.ex_date;
+        html += '<tr>'
+          + '<td><span class="ticker">' + row.ticker + '</span></td>'
+          + '<td><span class="name">' + row.name + '</span></td>'
+          + '<td><span' + dateCls + '>' + dateStr + '</span></td>'
+          + '<td>' + row.per_share + '</td>'
+          + '<td><span class="yield-val">' + row.yield_pct + '</span></td>'
+          + '<td>' + row.freq + '</td>'
+          + '<td>' + row.price + '</td>'
+          + '</tr>';
+      });
+      html += '</tbody></table>';
+      html += '<div class="disclaimer">⚠ Ex-dividend dates and amounts from Yahoo Finance. Always verify before trading. Dates may shift.</div>';
+      document.getElementById('div-content').innerHTML = html;
+    })
+    .catch(function(){
+      document.getElementById('div-content').innerHTML = '<div class="empty">Failed to load dividend data.</div>';
+    });
+}
+loadDividends();
 """ + _THEME_JS + """
 </script>
 </body>
