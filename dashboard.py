@@ -3144,26 +3144,26 @@ _NAV_LINKS = """
         <a href="/pricing?upgrade=trump" style="opacity:.4;">Trump Tracker 🔒</a>
         <a href="/pricing?upgrade=gamma" style="opacity:.4;">Gamma Exposure 🔒</a>
         <a href="/pricing?upgrade=greeks" style="opacity:.4;">Greeks Dashboard 🔒</a>
+        <a href="/pricing?upgrade=volforecast" style="opacity:.4;">Volatility Forecast 🔒</a>
         <a href="/pricing?upgrade=flow" style="opacity:.4;">Options Flow 🔒</a>
         <a href="/pricing?upgrade=insider" style="opacity:.4;">Insider Trading 🔒</a>
         <a href="/pricing?upgrade=premarket" style="opacity:.4;">Pre-Market Scanner 🔒</a>
-        <a href="/pricing?upgrade=scalper" style="opacity:.4;">Options Scalper 🔒</a>
         {% elif nav_plan == 'basic' %}
         <a href="/trump">Trump Tracker</a>
         <a href="/gamma">Gamma Exposure</a>
         <a href="/greeks">Greeks Dashboard</a>
+        <a href="/volforecast">Volatility Forecast</a>
         <a href="/pricing?upgrade=flow" style="opacity:.4;">Options Flow 🔒</a>
         <a href="/pricing?upgrade=insider" style="opacity:.4;">Insider Trading 🔒</a>
         <a href="/pricing?upgrade=premarket" style="opacity:.4;">Pre-Market Scanner 🔒</a>
-        <a href="/pricing?upgrade=scalper" style="opacity:.4;">Options Scalper 🔒</a>
         {% else %}
         <a href="/trump">Trump Tracker</a>
         <a href="/gamma">Gamma Exposure</a>
         <a href="/greeks">Greeks Dashboard</a>
+        <a href="/volforecast">Volatility Forecast</a>
         <a href="/flow">Options Flow</a>
         <a href="/insider">Insider Trading</a>
         <a href="/premarket">Pre-Market Scanner</a>
-        <a href="/scalper">Options Scalper</a>
         {% endif %}
       </div>
     </div>
@@ -3571,6 +3571,7 @@ PRICING_HTML = """<!DOCTYPE html>
         <li class="no">Ticker news</li>
         <li class="no">Gamma exposure</li>
         <li class="no">Greeks dashboard</li>
+        <li class="no">Volatility forecast</li>
         <li class="no">LSTM forecast</li>
         <li class="no">Options flow</li>
         <li class="no">Insider trading</li>
@@ -3597,6 +3598,7 @@ PRICING_HTML = """<!DOCTYPE html>
         <li>Ticker news</li>
         <li>Gamma exposure</li>
         <li>Greeks dashboard</li>
+        <li>Volatility forecast</li>
         <li class="no">LSTM forecast</li>
         <li class="no">Options flow</li>
         <li class="no">Insider trading</li>
@@ -3628,6 +3630,7 @@ PRICING_HTML = """<!DOCTYPE html>
         <li>Ticker news</li>
         <li>Gamma exposure</li>
         <li>Greeks dashboard</li>
+        <li>Volatility forecast</li>
         <li>LSTM forecast</li>
         <li>Options flow</li>
         <li>Insider trading</li>
@@ -8408,6 +8411,281 @@ function copyLink() {
   });
 }
 """ + _THEME_JS + """
+</script>
+</body>
+</html>"""
+
+
+# ── Volatility Forecast ───────────────────────────────────────────────────────
+
+@app.route("/volforecast")
+@login_required
+def volforecast_page():
+    if _get_user_plan(session.get("user_id")) == "free":
+        return redirect("/pricing?upgrade=volforecast")
+    return render_template_string(VOLFORECAST_HTML, current_user=current_user())
+
+
+@app.route("/api/volforecast")
+@login_required
+def volforecast_api():
+    if _get_user_plan(session.get("user_id")) == "free":
+        return jsonify({"error": "upgrade_required"}), 403
+    import yfinance as yf
+    import numpy as np
+    from datetime import date
+
+    ticker  = request.args.get("ticker", "SPY").upper()[:10]
+    horizon = int(request.args.get("horizon", 10))
+
+    try:
+        raw = yf.download(ticker, period="1y", interval="1d", progress=False, auto_adjust=True)
+        if raw is None or len(raw) < 30:
+            return jsonify({"error": "Not enough data for " + ticker}), 404
+
+        if isinstance(raw.columns, __import__("pandas").MultiIndex):
+            raw.columns = raw.columns.get_level_values(0)
+
+        closes = raw["Close"].dropna()
+        prices = closes.values.flatten().astype(float)
+        dates  = [str(d.date()) for d in closes.index]
+
+        # Daily log returns
+        rets = np.diff(np.log(prices))
+
+        # Rolling 20-day realized vol (annualized)
+        window = 20
+        rv = []
+        for i in range(window, len(rets) + 1):
+            rv.append(float(np.std(rets[i - window:i]) * np.sqrt(252) * 100))
+        rv_dates = dates[window:]
+
+        # EWMA volatility forecast (lambda=0.94, RiskMetrics standard)
+        lam = 0.94
+        ewma_var = float(np.var(rets[-30:]))
+        ewma_series = []
+        for r_t in rets[-(len(rv)):]:
+            ewma_var = lam * ewma_var + (1 - lam) * r_t ** 2
+            ewma_series.append(float(np.sqrt(ewma_var) * np.sqrt(252) * 100))
+
+        # Forecast next N days (EWMA mean-reverts toward long-run vol)
+        long_run_vol = float(np.std(rets) * np.sqrt(252) * 100)
+        reversion_speed = 0.05
+        forecast = []
+        v = ewma_series[-1]
+        for _ in range(horizon):
+            v = v + reversion_speed * (long_run_vol - v)
+            forecast.append(round(v, 2))
+
+        # Volatility percentile rank (where current IV sits vs past year)
+        current_rv = rv[-1]
+        pct_rank = round(float(np.mean(np.array(rv) <= current_rv)) * 100, 1)
+
+        # Regime
+        p25, p75 = np.percentile(rv, 25), np.percentile(rv, 75)
+        if current_rv <= p25:
+            regime, regime_color = "Low", "#3fb950"
+        elif current_rv <= p75:
+            regime, regime_color = "Medium", "#e3b341"
+        else:
+            regime, regime_color = "High", "#f85149"
+        if current_rv > np.percentile(rv, 90):
+            regime, regime_color = "Extreme", "#ff4444"
+
+        # IV from options (ATM, nearest expiry)
+        iv_current = None
+        try:
+            t = yf.Ticker(ticker)
+            exps = t.options
+            if exps:
+                chain = t.option_chain(exps[0])
+                spot  = float(t.fast_info.last_price)
+                atm   = chain.calls.iloc[(chain.calls["strike"] - spot).abs().argsort()[:1]]
+                if not atm.empty:
+                    iv_val = float(atm.iloc[0].get("impliedVolatility") or 0)
+                    if iv_val > 0 and iv_val == iv_val:
+                        iv_current = round(iv_val * 100, 1)
+        except Exception:
+            pass
+
+        return jsonify({
+            "ticker":       ticker,
+            "dates":        rv_dates,
+            "rv":           [round(v, 2) for v in rv],
+            "ewma":         [round(v, 2) for v in ewma_series],
+            "forecast":     forecast,
+            "horizon":      horizon,
+            "current_rv":   round(current_rv, 2),
+            "long_run_vol": round(long_run_vol, 2),
+            "pct_rank":     pct_rank,
+            "regime":       regime,
+            "regime_color": regime_color,
+            "iv_current":   iv_current,
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+VOLFORECAST_HTML = """<!DOCTYPE html>
+<html data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">""" + _META + """
+  <title>Volatility Forecast · ChartEdge</title>
+  <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+  <style>
+    :root[data-theme="dark"]  { --bg:#0d1117; --bg2:#161b22; --bg3:#21262d; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --green:#3fb950; --red:#f85149; }
+    :root[data-theme="light"] { --bg:#ffffff; --bg2:#f6f8fa; --bg3:#eaeef2; --border:#d0d7de; --text:#1f2328; --muted:#636c76; --accent:#0969da; --green:#1a7f37; --red:#cf222e; }
+    * { box-sizing:border-box; margin:0; padding:0; }
+    body { font-family:-apple-system,sans-serif; background:var(--bg); color:var(--text); min-height:100vh; }
+    nav { background:var(--bg2); border-bottom:1px solid var(--border); padding:14px 24px; display:flex; align-items:center; justify-content:space-between; }
+    .logo { font-size:1.1rem; font-weight:bold; text-decoration:none; }
+    """ + _NAV_CSS + """
+    .tv-banner { background:#1c2333; border:1px solid #2d3a52; border-left:3px solid #58a6ff; border-radius:8px; padding:10px 16px; margin:16px 0; display:flex; align-items:center; gap:10px; font-size:.83rem; color:#8b949e; }
+    .tv-banner strong { color:#e6edf3; }
+    .tv-logo { font-size:1rem; }
+    .page { max-width:960px; margin:0 auto; padding:28px 20px 60px; }
+    h1 { font-size:1.5rem; margin-bottom:4px; } h1 span { color:var(--accent); }
+    .sub { color:var(--muted); font-size:.83rem; margin-bottom:8px; }
+    .controls { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:16px; }
+    .controls input, .controls select { background:var(--bg2); border:1px solid var(--border); color:var(--text); padding:8px 12px; border-radius:7px; font-size:.9rem; outline:none; }
+    .controls input:focus, .controls select:focus { border-color:var(--accent); }
+    .controls input { width:110px; }
+    .btn-load { background:var(--accent); color:#fff; border:none; border-radius:7px; padding:8px 20px; font-size:.9rem; font-weight:600; cursor:pointer; }
+    .btn-load:hover { opacity:.85; }
+    .stats-bar { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:16px; }
+    .stat { background:var(--bg2); border:1px solid var(--border); border-radius:8px; padding:12px 16px; flex:1; min-width:120px; }
+    .stat .sv { font-size:1.2rem; font-weight:800; }
+    .stat .sl { font-size:.68rem; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; margin-top:3px; }
+    #vol-chart { background:var(--bg2); border:1px solid var(--border); border-radius:8px; margin-bottom:16px; }
+    .loading { color:var(--muted); padding:40px; text-align:center; }
+    .err { color:var(--red); padding:20px; }
+    footer { text-align:center; padding:32px 24px; color:var(--muted); font-size:.8rem; border-top:1px solid var(--border); margin-top:20px; }
+  </style>
+</head>
+<body>
+<nav>
+  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span></a>
+  <button class="hamburger" onclick="toggleMobileNav(event)">☰</button>
+  <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
+</nav>
+<div class="page">
+  <h1>Volatility <span>Forecast</span></h1>
+  <p class="sub">Realized volatility, EWMA forecast &amp; regime detection</p>
+
+  <div class="tv-banner">
+    <span class="tv-logo">📊</span>
+    <span><strong>TradingView subscription required</strong> — For best results, use alongside TradingView's charting tools. A paid TradingView plan is needed to access the indicators this forecast is designed to complement.</span>
+  </div>
+
+  <div class="controls">
+    <input type="text" id="ticker-in" value="SPY" placeholder="Ticker" onkeydown="if(event.key==='Enter')load()">
+    <select id="horizon-sel">
+      <option value="5">5-day forecast</option>
+      <option value="10" selected>10-day forecast</option>
+      <option value="20">20-day forecast</option>
+    </select>
+    <button class="btn-load" onclick="load()">Load</button>
+  </div>
+
+  <div class="stats-bar" id="stats-bar" style="display:none">
+    <div class="stat"><div class="sv" id="st-rv">—</div><div class="sl">Current RV (20d)</div></div>
+    <div class="stat"><div class="sv" id="st-iv">—</div><div class="sl">Implied Vol (ATM)</div></div>
+    <div class="stat"><div class="sv" id="st-fcast">—</div><div class="sl">Forecast End</div></div>
+    <div class="stat"><div class="sv" id="st-lrv">—</div><div class="sl">1-Year Avg Vol</div></div>
+    <div class="stat"><div class="sv" id="st-pct">—</div><div class="sl">Vol Percentile</div></div>
+    <div class="stat"><div class="sv" id="st-regime">—</div><div class="sl">Regime</div></div>
+  </div>
+
+  <div id="vol-chart" style="min-height:360px"><div class="loading">Enter a ticker and click Load</div></div>
+</div>
+<footer>© 2026 ChartEdge · Not financial advice</footer>
+<script>""" + _THEME_JS + """
+function load() {
+  var ticker  = document.getElementById('ticker-in').value.trim().toUpperCase();
+  var horizon = document.getElementById('horizon-sel').value;
+  if (!ticker) return;
+  document.getElementById('vol-chart').innerHTML = '<div class="loading">Loading ' + ticker + '…</div>';
+  document.getElementById('stats-bar').style.display = 'none';
+  fetch('/api/volforecast?ticker=' + encodeURIComponent(ticker) + '&horizon=' + horizon)
+    .then(function(r){ return r.json(); })
+    .then(function(d) {
+      if (d.error) { document.getElementById('vol-chart').innerHTML = '<div class="err">Error: ' + d.error + '</div>'; return; }
+      render(d);
+    })
+    .catch(function(){ document.getElementById('vol-chart').innerHTML = '<div class="err">Failed to load.</div>'; });
+}
+
+function render(d) {
+  // Stats
+  document.getElementById('st-rv').textContent     = d.current_rv + '%';
+  document.getElementById('st-iv').textContent     = d.iv_current != null ? d.iv_current + '%' : '—';
+  document.getElementById('st-fcast').textContent  = d.forecast[d.forecast.length - 1] + '%';
+  document.getElementById('st-lrv').textContent    = d.long_run_vol + '%';
+  document.getElementById('st-pct').textContent    = d.pct_rank + 'th %ile';
+  document.getElementById('st-regime').textContent = d.regime;
+  document.getElementById('st-regime').style.color = d.regime_color;
+  document.getElementById('st-fcast').style.color  = d.forecast[d.forecast.length-1] > d.current_rv ? 'var(--red)' : 'var(--green)';
+  document.getElementById('stats-bar').style.display = 'flex';
+
+  // Build forecast dates (business days approx)
+  var lastDate = new Date(d.dates[d.dates.length - 1]);
+  var fcastDates = [];
+  var d2 = new Date(lastDate);
+  for (var i = 0; i < d.horizon; i++) {
+    d2.setDate(d2.getDate() + 1);
+    if (d2.getDay() === 0) d2.setDate(d2.getDate() + 1);
+    if (d2.getDay() === 6) d2.setDate(d2.getDate() + 1);
+    fcastDates.push(new Date(d2).toISOString().slice(0,10));
+  }
+
+  var traces = [
+    {
+      x: d.dates, y: d.rv, name: 'Realized Vol (20d)',
+      type: 'scatter', mode: 'lines',
+      line: { color: '#58a6ff', width: 2 },
+    },
+    {
+      x: d.dates, y: d.ewma, name: 'EWMA Vol',
+      type: 'scatter', mode: 'lines',
+      line: { color: '#e3b341', width: 1.5, dash: 'dot' },
+    },
+    {
+      x: [d.dates[d.dates.length-1]].concat(fcastDates),
+      y: [d.ewma[d.ewma.length-1]].concat(d.forecast),
+      name: 'Forecast',
+      type: 'scatter', mode: 'lines+markers',
+      line: { color: '#f85149', width: 2, dash: 'dash' },
+      marker: { size: 4 },
+    },
+  ];
+
+  if (d.iv_current != null) {
+    traces.push({
+      x: d.dates, y: Array(d.dates.length).fill(d.iv_current),
+      name: 'Implied Vol (ATM)',
+      type: 'scatter', mode: 'lines',
+      line: { color: '#3fb950', width: 1.5, dash: 'dot' },
+    });
+  }
+
+  Plotly.react('vol-chart', traces, {
+    paper_bgcolor: '#161b22', plot_bgcolor: '#161b22',
+    font: { color: '#e6edf3', family: 'monospace', size: 11 },
+    xaxis: { gridcolor: '#21262d', tickformat: '%m/%d/%y' },
+    yaxis: { gridcolor: '#21262d', title: 'Annualized Vol %', side: 'right' },
+    legend: { orientation: 'h', y: -0.15, font: { size: 11 } },
+    shapes: [{
+      type: 'line', xref: 'x', yref: 'y',
+      x0: d.dates[d.dates.length-1], x1: d.dates[d.dates.length-1],
+      y0: 0, y1: Math.max.apply(null, d.rv) * 1.1,
+      line: { color: 'rgba(139,148,158,0.4)', width: 1, dash: 'dot' },
+    }],
+    margin: { t: 20, r: 60, b: 60, l: 10 },
+  }, { responsive: true, displayModeBar: false });
+}
+
+load();
 </script>
 </body>
 </html>"""
