@@ -1,127 +1,119 @@
-# Stock Volatility Project — Claude Progress Log
+# ChartEdge · Claude Progress Log
 
-## Status: FUNCTIONAL — OPEN ITEMS REMAIN
-
----
-
-## What was built
-
-A full LightGBM-GRU hybrid model for 10-minute stock volatility prediction,
-based on Liao, Chen & Cai (2024).
-
-### File inventory
-
-| File | Status | Notes |
-|------|--------|-------|
-| `config.py` | ✅ | All hyperparameters, paths, thresholds centralised here |
-| `data/collector.py` | ✅ | yfinance download with auto interval selection + CSV loader |
-| `data/features.py` | ✅ | 42 engineered features across 6 categories |
-| `data/preprocessor.py` | ✅ | Cleaning, market-hours filter, outlier removal, RV target, MinMaxScaler |
-| `models/lightgbm_model.py` | ✅ | k-fold LightGBM, ensemble predict, save/load per fold |
-| `models/gru_model.py` | ✅ | 2-layer GRU, Apple Silicon + CUDA detection, sequence builder |
-| `models/robust_model.py` | ✅ | Combined pipeline: augment → sequence → GRU |
-| `training/trainer.py` | ✅ | End-to-end orchestration with val split, saves all artefacts, auto-generates charts |
-| `training/evaluator.py` | ✅ | MSE/MAE/RMSE/RMSPE/R² table for both models, adaptive number formatting |
-| `prediction/predictor.py` | ⚠️ | Written but never run end-to-end through menu |
-| `utils/logger.py` | ✅ | Centralised logging to stdout |
-| `utils/visualizer.py` | ✅ | 5 chart types saved as PNG |
-| `main.py` | ✅ | 9-option interactive menu |
-| `requirements.txt` | ✅ | Pinned dependencies |
-| `README.md` | ✅ | Full setup, usage, config, file map |
-| `LIMITATIONS.md` | ✅ | Honest model limitations |
+## Status: LIVE ON RAILWAY — chartedge.trade
 
 ---
 
-## Changes (2026-04-06)
+## Stack
 
-### Basic plan copy limit
-- Changed from 10 → 8 copies/day in `STRIPE_PLAN_LIMITS` (line ~48)
-- Updated all UI references: plan status badge, pricing cards, CTA button
-
-### Insider Trading revamp
-- Added `_SP500_MAJOR` set (~80 tickers) to filter SEC filings to big companies only
-- Rewrote `api_insider` to extract **insider name**, **company**, **ticker**, and **role** from Form 4 XML
-- Added congressional trades from House STOCK Act disclosures via `house-stock-watcher-data.s3-us-west-2.amazonaws.com`
-- Updated table columns: Insider · Company · Role · Action · Value · Date · Link
-- CONGRESS badge (blue) for political trades, SEC badge (green) for corporate filings
+- **Backend:** Flask + gunicorn on Railway, auto-deploys from GitHub (`majoras-ip/stockmarketindicator`)
+- **DB:** PostgreSQL (Railway)
+- **Payments:** Stripe (Basic $9.99/mo, Pro $15.99/mo · yearly saves up to 25%)
+- **Python:** 3.13 · Key deps: yfinance, lightgbm, tensorflow, scipy, feedparser
 
 ---
 
-## Known open items (as of 2026-03-30)
+## Plan tiers & access gates
 
-### 1. GRU never fully validated
-Every test run used reduced epochs (50–300). The GRU needs the full
-1,000-epoch run from config.py to converge and improve on LightGBM.
-In all smoke tests the GRU underperformed LightGBM significantly.
-**Root cause**: lr=1e-5 requires ~500–800 epochs to meaningfully move weights.
-With CPU-only training this takes ~20–60 min depending on dataset size.
-
-### 2. Predictor (menu option 4) untested end-to-end
-`prediction/predictor.py` is written and logically correct but has never
-been exercised through the full menu → download → load → predict flow.
-
-### 3. `training_metrics.json` may not save correctly
-`Trainer._save_all()` calls `self.evaluator.save()` but the evaluator's
-`results` dict is only populated if `evaluate_all()` was called. Need to
-verify the file is non-empty after a full training run.
-
-### 4. Chart auto-generation wired but unverified
-Chart generation was added to `trainer.py` Step 5/5 but has not been
-run through the menu to confirm it completes without error.
-
-### 5. Model selection not integrated
-Benchmarking on SPY (730d, 1h) showed:
-
-| Rank | Model | RMSE | R² | Time |
-|------|-------|------|----|------|
-| 1 | Gradient Boosting (sklearn, 500 trees) | 0.000145 | 0.9992 | 12s |
-| 2 | Extra Trees (100) | 0.000185 | 0.9986 | 0.3s |
-| 3 | Random Forest (100) | 0.000236 | 0.9978 | 0.5s |
-| 4 | Linear Regression | 0.000436 | 0.9923 | 0.0s |
-| 8 | LightGBM (5-fold, 3000 trees) | 0.001383 | 0.9229 | 12s |
-| 15 | GRU standalone | 0.015052 | -8.00 | 65s |
-
-Decision pending: keep app as paper-faithful LightGBM-GRU only, add
-model selection to menu, or replace LightGBM with sklearn GBM.
-**User has not decided yet.**
+| Feature | Free | Basic | Pro |
+|---------|------|-------|-----|
+| Copies/day | 3 | 8 | Unlimited |
+| All indicators | ✓ | ✓ | ✓ |
+| Live chart & forecast | ✓ | ✓ | ✓ |
+| Unusual volume | ✓ | ✓ | ✓ |
+| Market news | ✓ | ✓ | ✓ |
+| Earnings calendar | ✓ | ✓ | ✓ |
+| Market heatmap | ✓ | ✓ | ✓ |
+| Dividends calendar | ✓ | ✓ | ✓ |
+| Trump tracker | ✗ | ✓ | ✓ |
+| Ticker news | ✗ | ✓ | ✓ |
+| Gamma exposure | ✗ | ✓ | ✓ |
+| Greeks dashboard | ✗ | ✓ | ✓ |
+| Volatility forecast | ✗ | ✓ | ✓ |
+| LSTM forecast | ✗ | ✗ | ✓ |
+| Options flow | ✗ | ✗ | ✓ |
+| Insider trading | ✗ | ✗ | ✓ |
+| Pre-market scanner | ✗ | ✗ | ✓ |
 
 ---
 
-## Environment (macOS, 2026-03-30)
+## File inventory
 
-- Python 3.13 via `/Library/Frameworks/Python.framework/`
-- LightGBM 4.6.0 — libomp rpath already fixed via install_name_tool
-- TensorFlow 2.21.0 — CPU only (tensorflow-macos not available for Python 3.13)
-- All other deps installed via pip3
-
----
-
-## Key design decisions made
-
-1. **LightGBM k-fold ensemble** — predictions averaged across all fold models
-2. **GRU input = original features + LightGBM prediction** — paper's "robust learning" augmentation
-3. **Scaler fitted on training set only** — no leakage
-4. **Market-hours filter** — Eastern Time, 9:30–16:00 only
-5. **Batch size auto-scaled** — paper's 30,096 capped at 4,096 for typical hardware
-6. **Evaluator uses adaptive formatting** — scientific notation for large/small values
+| File | Notes |
+|------|-------|
+| `dashboard.py` | Single-file Flask app, ~8500+ lines |
+| `Dockerfile` | python:3.13-slim + libgomp1, exposes 5000 |
+| `requirements.txt` | Pinned deps |
 
 ---
 
-## Data limits (yfinance free tier)
+## Key features & routes
 
-| Resolution | Max window | Used for |
-|------------|------------|---------|
-| 1-min | 7 days | Not used (too short for training) |
-| 5-min | 60 days | Smoke tests, live prediction |
-| 1-hour | ~730 days | **Training (recommended)** |
-| 1-day | Unlimited | Not used (too coarse for 10-min vol) |
+| Route | Description | Plan |
+|-------|-------------|------|
+| `/indicators` | Pine Script generator — all indicators | Free+ |
+| `/generate` | LSTM forecast | Pro |
+| `/dashboard` | Live chart | Free+ |
+| `/heatmap` | D3 squarified treemap, S&P 500 sectors | Free+ |
+| `/earnings` | Earnings calendar w/ EPS/revenue estimates | Free+ |
+| `/dividends` | Upcoming ex-dividend dates (~140 tickers) | Free+ |
+| `/trump` | Trump Tracker — BTC default, 1D default, event markers | Basic+ |
+| `/volforecast` | Volatility forecast (RV, EWMA, regime) | Basic+ |
+| `/gamma` | Gamma exposure chart | Basic+ |
+| `/greeks` | Greeks dashboard (Delta/Gamma/Theta/Vega/Rho) | Basic+ |
+| `/flow` | Options flow | Pro |
+| `/insider` | Insider trading — SEC + Congress, name/source filter | Pro |
+| `/premarket` | Pre-market scanner | Pro |
+| `/volume` | Unusual volume scanner | Free+ |
+| `/news` | Market news feed | Free+ |
 
 ---
 
-## How to run
+## Important implementation details
 
-```bash
-cd /Users/ayden/code/stock_volatility
-python3 main.py
-# → 1 (Download, use 730d/1h) → 2 (Train, ~30-60 min full run) → 4 (Predict)
-```
+### Pine Script expiry injection
+Every generated Pine Script goes through `_inject_expiry(script, username)` before being returned. This embeds **4 expiry checks** at different positions (after indicator(), ~33%, ~66%, end) using 3 different syntactic forms so they're hard to find and remove all at once. Scripts break the day after generation with `runtime.error("Expired · Regenerate at chartedge.trade")`. Username watermarked in comments.
+
+### Nav dropdown plan-gating
+`_NAV_LINKS` uses `{{ nav_plan }}` (injected via `@app.context_processor`) to grey out locked tools at 40% opacity with 🔒 icon. Free users see Trump/Gamma/Greeks/VolForecast/Flow/Insider/Premarket locked. Basic users see Flow/Insider/Premarket locked.
+
+### Background pre-fetch pattern
+Heatmap and dividends use daemon threads pre-fetched at startup. Returns `{"loading": true}` if cache empty, triggers background refresh if stale (>1h).
+
+### Dividends calendar
+~140 tickers across dividend aristocrats, banks, insurance, energy MLPs, industrials, REITs, BDCs, income ETFs. Shows ex-dates within next 60 days only.
+
+### Trump Tracker
+- Default ticker: BTC-USD, default period: 1D
+- Event markers (📰) on chart at news article timestamps
+- Gold uses GC=F (futures ~$3000), not GLD ETF
+- Prices >$999 formatted with commas
+
+### Insider Trading
+- SEC Form 4 filings (major SP500 companies) + House STOCK Act via QuiverQuant
+- Filters: All/Congress/SEC tabs + name search + ticker search (all client-side)
+
+### Volatility Forecast
+- Banner at top: "TradingView subscription required"
+- Shows: realized vol (20d), EWMA vol, IV vs RV chart, forecast N days ahead
+- Regime detection: Low/Medium/High/Extreme
+
+---
+
+## Known patterns & gotchas
+
+- **JS string escaping in triple-quoted Python:** Use `&quot;` for string args in onclick, or data attributes + event delegation. `\'x\'` → `'x'` breaks JS string literals.
+- **Plotly fill:'tozeroy'** makes financial charts flat when price >> 0. Always use tight y-axis range `[min*0.998, max*1.002]`.
+- **yfinance NaN in jsonify:** Python's JSON encoder rejects NaN. Always sanitize with `_safe_f()` / `_safe_i()` before returning.
+- **pandas itertuples()** returns named tuples — use attribute access (`r.strike`) not string indexing (`r["strike"]`). Or use `.astype()` directly on the column.
+- **MultiIndex columns** from `yf.download()` multi-ticker: flatten with `raw.columns = raw.columns.get_level_values(0)`.
+
+---
+
+## Environment
+
+- Python 3.13
+- LightGBM 4.6.0 — libomp rpath fixed via install_name_tool (macOS dev)
+- TensorFlow 2.21.0 — CPU only
+- Deployed: Railway · Domain: chartedge.trade
+- GitHub: majoras-ip/stockmarketindicator
