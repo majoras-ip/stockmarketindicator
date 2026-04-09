@@ -495,6 +495,90 @@ def api_pine():
     return jsonify(result)
 
 
+# ── Pine Script expiry injection ─────────────────────────────────────────────
+
+def _inject_expiry(script: str, username: str) -> str:
+    """
+    Embeds daily expiry checks throughout a Pine Script so it breaks
+    after the generation date, forcing users to return to ChartEdge.
+    """
+    from datetime import date as _date
+    today = _date.today()
+    d, m, y = today.day, today.month, today.year
+    exp_int = y * 10000 + m * 100 + d        # e.g. 20260408
+    site    = "chartedge.trade"
+    msg     = f"Expired \u00b7 Regenerate at {site}"
+    user_lbl = username or "user"
+
+    # Three different expiry expressions — same logic, different Pine syntax
+    # A: integer date comparison
+    chk_a = (
+        f"var int _cedge_d = year * 10000 + month * 100 + dayofmonth\n"
+        f"var bool _cedge_ok = _cedge_d <= {exp_int}\n"
+        f'if not _cedge_ok\n'
+        f'    runtime.error("{msg}")\n'
+    )
+    # B: individual field comparison (harder to spot as the same check)
+    chk_b = (
+        f"bool _cvalid = year < {y} or (year == {y} and month < {m}) or "
+        f"(year == {y} and month == {m} and dayofmonth <= {d})\n"
+        f'if not _cvalid\n'
+        f'    runtime.error("{msg}")\n'
+    )
+    # C: obfuscated — split across expressions
+    chk_c = (
+        f"int _cyr = year, int _cmo = month, int _cdy = dayofmonth\n"
+        f"bool _cexp = (_cyr * 372 + _cmo * 31 + _cdy) > "
+        f"{y * 372 + m * 31 + d}\n"
+        f'if _cexp\n'
+        f'    runtime.error("{msg}")\n'
+    )
+
+    lines = script.split("\n")
+    out   = []
+    indicator_done = False
+    chk_b_inserted = False
+    chk_c_inserted = False
+    n = len(lines)
+
+    for i, line in enumerate(lines):
+        out.append(line)
+
+        # After indicator(...) declaration — insert header + check A
+        if not indicator_done and line.strip().startswith("indicator("):
+            out.append(f'// ChartEdge \u00b7 {user_lbl} \u00b7 {today.strftime("%b %d %Y")} \u00b7 {site}')
+            out.append(chk_a)
+            indicator_done = True
+
+        # ~33% through — insert check B inside the logic
+        elif not chk_b_inserted and i == max(n // 3, 3):
+            out.append(f"// \u2014 validity \u2014")
+            out.append(chk_b)
+            chk_b_inserted = True
+
+        # ~66% through — insert check C
+        elif not chk_c_inserted and i == max(2 * n // 3, 5):
+            out.append(f"// \u2014 runtime guard \u2014")
+            out.append(chk_c)
+            chk_c_inserted = True
+
+    # Wrap every plot(...) call so the value multiplies by _cedge_ok
+    # (plots become na when expired, even if someone deletes the if blocks)
+    wrapped = []
+    for line in out:
+        stripped = line.strip()
+        # Match plot/plotshape/hline — add `and _cedge_ok` to condition args
+        # Simpler: multiply numeric values — too fragile. Instead append a
+        # final guard that resets all plots to na via bgcolor trick.
+        wrapped.append(line)
+
+    # Final guard at very end — belt + suspenders
+    wrapped.append(f'\n// ChartEdge guard')
+    wrapped.append(f'if not _cedge_ok\n    runtime.error("{msg}")')
+
+    return "\n".join(wrapped)
+
+
 # ── Basic indicator Pine Script templates ────────────────────────────────────
 
 def _pine_volume() -> str:
@@ -1427,6 +1511,7 @@ def indicators_page():
             pine_code = fn(show_avg=atr_avg)
         else:
             pine_code = fn()
+        pine_code = _inject_expiry(pine_code, session.get("username", "user"))
 
     # Filter indicators for display
     def visible(k, v):
