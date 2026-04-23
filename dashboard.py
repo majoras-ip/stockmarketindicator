@@ -8993,7 +8993,7 @@ VOLFORECAST_HTML = """<!DOCTYPE html>
 
   <div class="tv-banner">
     <span class="tv-logo">📊</span>
-    <span><strong>TradingView subscription required</strong> — For best results, use alongside TradingView's charting tools. A paid TradingView plan is needed to access the indicators this forecast is designed to complement.</span>
+    <span><strong>TradingView Plus subscription required</strong> — This forecast is designed to complement TradingView's advanced charting tools. A TradingView Plus plan or higher is needed to access the indicators it pairs with.</span>
   </div>
 
   <div class="controls">
