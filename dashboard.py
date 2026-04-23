@@ -3178,6 +3178,336 @@ def ipo_api():
     return jsonify({"ipos": _ipo_cache["data"]})
 
 
+# ── Crypto Tools ──────────────────────────────────────────────────────────────
+
+_CRYPTO_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Accept": "application/json",
+}
+_crypto_fg_cache       = {"data": None, "ts": 0}
+_crypto_dom_cache      = {"data": None, "ts": 0}
+_crypto_hm_cache       = {"data": None, "ts": 0}
+_crypto_fund_cache     = {"data": None, "ts": 0}
+_crypto_onchain_cache  = {"data": None, "ts": 0}
+_crypto_liq_cache      = {}   # keyed by symbol
+_crypto_upcoming_cache = {"data": None, "ts": 0}
+
+
+# ─ Fear & Greed ───────────────────────────────────────────────────────────────
+
+def _fetch_crypto_fg():
+    import requests
+    r = requests.get("https://api.alternative.me/fng/?limit=30&format=json",
+                     headers=_CRYPTO_HEADERS, timeout=8)
+    r.raise_for_status()
+    return [{"value": int(d["value"]), "label": d["value_classification"],
+             "ts": int(d["timestamp"])} for d in r.json()["data"]]
+
+@app.route("/crypto/feargreed")
+def crypto_feargreed_page():
+    return render_template_string(CRYPTO_FEARGREED_HTML, current_user=current_user())
+
+@app.route("/api/crypto/feargreed")
+def crypto_feargreed_api():
+    import time
+    now = time.time()
+    if _crypto_fg_cache["data"] is None or now - _crypto_fg_cache["ts"] > 3600:
+        try:
+            _crypto_fg_cache["data"] = _fetch_crypto_fg()
+            _crypto_fg_cache["ts"] = now
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+    return jsonify({"data": _crypto_fg_cache["data"]})
+
+
+# ─ BTC Dominance ──────────────────────────────────────────────────────────────
+
+def _fetch_crypto_dom():
+    import requests
+    r = requests.get("https://api.coingecko.com/api/v3/global",
+                     headers=_CRYPTO_HEADERS, timeout=8)
+    r.raise_for_status()
+    d = r.json()["data"]
+    pcts = d.get("market_cap_percentage", {})
+    top = sorted(pcts.items(), key=lambda x: -x[1])[:10]
+    return {
+        "btc": round(pcts.get("btc", 0), 2),
+        "eth": round(pcts.get("eth", 0), 2),
+        "total_mcap": d.get("total_market_cap", {}).get("usd", 0),
+        "total_volume": d.get("total_volume", {}).get("usd", 0),
+        "active_coins": d.get("active_cryptocurrencies", 0),
+        "top": [{"symbol": s.upper(), "pct": round(p, 2)} for s, p in top],
+    }
+
+@app.route("/crypto/dominance")
+@login_required
+def crypto_dominance_page():
+    if _get_user_plan(session.get("user_id")) == "free":
+        return redirect("/pricing?upgrade=crypto")
+    return render_template_string(CRYPTO_DOMINANCE_HTML, current_user=current_user())
+
+@app.route("/api/crypto/dominance")
+@login_required
+def crypto_dominance_api():
+    if _get_user_plan(session.get("user_id")) == "free":
+        return jsonify({"error": "upgrade_required"}), 403
+    import time
+    now = time.time()
+    if _crypto_dom_cache["data"] is None or now - _crypto_dom_cache["ts"] > 1800:
+        try:
+            _crypto_dom_cache["data"] = _fetch_crypto_dom()
+            _crypto_dom_cache["ts"] = now
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+    return jsonify(_crypto_dom_cache["data"])
+
+
+# ─ Crypto Heatmap ─────────────────────────────────────────────────────────────
+
+def _fetch_crypto_hm():
+    import requests
+    r = requests.get(
+        "https://api.coingecko.com/api/v3/coins/markets"
+        "?vs_currency=usd&order=market_cap_desc&per_page=100&page=1"
+        "&price_change_percentage=24h&sparkline=false",
+        headers=_CRYPTO_HEADERS, timeout=10)
+    r.raise_for_status()
+    out = []
+    for c in r.json():
+        chg = c.get("price_change_percentage_24h") or 0
+        out.append({
+            "symbol": (c.get("symbol") or "").upper(),
+            "name":   c.get("name", ""),
+            "mcap":   c.get("market_cap") or 0,
+            "price":  c.get("current_price") or 0,
+            "chg":    round(float(chg), 2),
+        })
+    return out
+
+@app.route("/crypto/heatmap")
+def crypto_heatmap_page():
+    return render_template_string(CRYPTO_HEATMAP_HTML, current_user=current_user())
+
+@app.route("/api/crypto/heatmap")
+def crypto_heatmap_api():
+    import time
+    now = time.time()
+    if _crypto_hm_cache["data"] is None or now - _crypto_hm_cache["ts"] > 1800:
+        try:
+            _crypto_hm_cache["data"] = _fetch_crypto_hm()
+            _crypto_hm_cache["ts"] = now
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+    return jsonify({"coins": _crypto_hm_cache["data"]})
+
+
+# ─ Funding Rates ──────────────────────────────────────────────────────────────
+
+def _fetch_crypto_funding():
+    import requests
+    r = requests.get("https://fapi.binance.com/fapi/v1/premiumIndex",
+                     headers=_CRYPTO_HEADERS, timeout=8)
+    r.raise_for_status()
+    out = []
+    for d in r.json():
+        sym = d.get("symbol", "")
+        if not sym.endswith("USDT"):
+            continue
+        rate = float(d.get("lastFundingRate", 0))
+        out.append({
+            "symbol": sym.replace("USDT", ""),
+            "rate":   round(rate * 100, 4),
+            "price":  round(float(d.get("markPrice", 0)), 4),
+        })
+    out.sort(key=lambda x: abs(x["rate"]), reverse=True)
+    return out[:60]
+
+@app.route("/crypto/funding")
+@login_required
+def crypto_funding_page():
+    if _get_user_plan(session.get("user_id")) == "free":
+        return redirect("/pricing?upgrade=crypto")
+    return render_template_string(CRYPTO_FUNDING_HTML, current_user=current_user())
+
+@app.route("/api/crypto/funding")
+@login_required
+def crypto_funding_api():
+    if _get_user_plan(session.get("user_id")) == "free":
+        return jsonify({"error": "upgrade_required"}), 403
+    import time
+    now = time.time()
+    if _crypto_fund_cache["data"] is None or now - _crypto_fund_cache["ts"] > 300:
+        try:
+            _crypto_fund_cache["data"] = _fetch_crypto_funding()
+            _crypto_fund_cache["ts"] = now
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+    return jsonify({"rates": _crypto_fund_cache["data"]})
+
+
+# ─ On-chain Metrics ───────────────────────────────────────────────────────────
+
+def _fetch_crypto_onchain():
+    import requests
+    result = {}
+    try:
+        r = requests.get("https://api.blockchain.info/stats",
+                         headers=_CRYPTO_HEADERS, timeout=8)
+        if r.status_code == 200:
+            b = r.json()
+            result["btc_chain"] = {
+                "hash_rate":    round(b.get("hash_rate", 0) / 1e9, 2),
+                "difficulty":   b.get("difficulty", 0),
+                "n_tx":         b.get("n_tx", 0),
+                "fees_btc":     round(b.get("total_fees_btc", 0) / 1e8, 4),
+                "block_time":   round(b.get("minutes_between_blocks", 0), 2),
+                "blocks_mined": b.get("n_blocks_mined", 0),
+            }
+    except Exception:
+        pass
+    try:
+        r2 = requests.get(
+            "https://api.coingecko.com/api/v3/coins/markets"
+            "?vs_currency=usd&ids=bitcoin,ethereum&order=market_cap_desc"
+            "&sparkline=false&price_change_percentage=24h,7d",
+            headers=_CRYPTO_HEADERS, timeout=8)
+        if r2.status_code == 200:
+            for c in r2.json():
+                result[c["id"]] = {
+                    "price":    c.get("current_price", 0),
+                    "mcap":     c.get("market_cap", 0),
+                    "vol_24h":  c.get("total_volume", 0),
+                    "chg_24h":  round(c.get("price_change_percentage_24h") or 0, 2),
+                    "chg_7d":   round(c.get("price_change_percentage_7d_in_currency") or 0, 2),
+                    "ath":      c.get("ath", 0),
+                    "ath_chg":  round(c.get("ath_change_percentage") or 0, 2),
+                    "supply":   c.get("circulating_supply", 0),
+                    "max_supply": c.get("max_supply"),
+                }
+    except Exception:
+        pass
+    return result
+
+@app.route("/crypto/onchain")
+@login_required
+def crypto_onchain_page():
+    if _get_user_plan(session.get("user_id")) == "free":
+        return redirect("/pricing?upgrade=crypto")
+    return render_template_string(CRYPTO_ONCHAIN_HTML, current_user=current_user())
+
+@app.route("/api/crypto/onchain")
+@login_required
+def crypto_onchain_api():
+    if _get_user_plan(session.get("user_id")) == "free":
+        return jsonify({"error": "upgrade_required"}), 403
+    import time
+    now = time.time()
+    if _crypto_onchain_cache["data"] is None or now - _crypto_onchain_cache["ts"] > 1800:
+        try:
+            _crypto_onchain_cache["data"] = _fetch_crypto_onchain()
+            _crypto_onchain_cache["ts"] = now
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+    return jsonify(_crypto_onchain_cache["data"])
+
+
+# ─ Liquidation Map ────────────────────────────────────────────────────────────
+
+def _fetch_crypto_liq(symbol="BTC"):
+    import requests
+    # Long/short ratio as liquidation proxy (Binance public)
+    r = requests.get(
+        f"https://fapi.binance.com/futures/data/globalLongShortAccountRatio"
+        f"?symbol={symbol}USDT&period=1h&limit=48",
+        headers=_CRYPTO_HEADERS, timeout=8)
+    r.raise_for_status()
+    rows = r.json()
+    out = []
+    for row in rows:
+        out.append({
+            "ts":    row["timestamp"],
+            "long":  round(float(row["longAccount"]) * 100, 2),
+            "short": round(float(row["shortAccount"]) * 100, 2),
+        })
+    # Also grab open interest
+    r2 = requests.get(
+        f"https://fapi.binance.com/futures/data/openInterestHist"
+        f"?symbol={symbol}USDT&period=1h&limit=48",
+        headers=_CRYPTO_HEADERS, timeout=8)
+    oi = {}
+    if r2.status_code == 200:
+        for row in r2.json():
+            oi[row["timestamp"]] = round(float(row["sumOpenInterest"]), 2)
+    for row in out:
+        row["oi"] = oi.get(row["ts"], 0)
+    return out
+
+@app.route("/crypto/liquidations")
+@login_required
+def crypto_liquidations_page():
+    if _get_user_plan(session.get("user_id")) not in ("basic", "pro"):
+        return redirect("/pricing?upgrade=crypto")
+    return render_template_string(CRYPTO_LIQUIDATIONS_HTML, current_user=current_user())
+
+@app.route("/api/crypto/liquidations")
+@login_required
+def crypto_liquidations_api():
+    if _get_user_plan(session.get("user_id")) not in ("basic", "pro"):
+        return jsonify({"error": "upgrade_required"}), 403
+    symbol = request.args.get("symbol", "BTC").upper()[:10]
+    import time
+    now = time.time()
+    entry = _crypto_liq_cache.get(symbol, {"data": None, "ts": 0})
+    if entry["data"] is None or now - entry["ts"] > 600:
+        try:
+            entry = {"data": _fetch_crypto_liq(symbol), "ts": now}
+            _crypto_liq_cache[symbol] = entry
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+    return jsonify({"data": entry["data"], "symbol": symbol})
+
+
+# ─ Upcoming Coins ─────────────────────────────────────────────────────────────
+
+def _fetch_crypto_upcoming():
+    import requests
+    from datetime import datetime
+    r = requests.get("https://api.coingecko.com/api/v3/coins/list/new",
+                     headers=_CRYPTO_HEADERS, timeout=8)
+    r.raise_for_status()
+    out = []
+    for c in r.json()[:60]:
+        ts = c.get("activated_at", 0)
+        try:
+            date_str = datetime.utcfromtimestamp(ts).strftime("%b %d, %Y") if ts else "—"
+        except Exception:
+            date_str = "—"
+        out.append({
+            "symbol": (c.get("symbol") or "").upper(),
+            "name":   c.get("name", ""),
+            "date":   date_str,
+            "ts":     ts,
+        })
+    out.sort(key=lambda x: x["ts"], reverse=True)
+    return out
+
+@app.route("/crypto/upcoming")
+def crypto_upcoming_page():
+    return render_template_string(CRYPTO_UPCOMING_HTML, current_user=current_user())
+
+@app.route("/api/crypto/upcoming")
+def crypto_upcoming_api():
+    import time
+    now = time.time()
+    if _crypto_upcoming_cache["data"] is None or now - _crypto_upcoming_cache["ts"] > 3600:
+        try:
+            _crypto_upcoming_cache["data"] = _fetch_crypto_upcoming()
+            _crypto_upcoming_cache["ts"] = now
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+    return jsonify({"coins": _crypto_upcoming_cache["data"]})
+
+
 # ── FAQ ───────────────────────────────────────────────────────────────────────
 
 @app.route("/faq")
@@ -3401,6 +3731,29 @@ _NAV_LINKS = """
         <a href="/flow">Options Flow</a>
         <a href="/insider">Insider Trading</a>
         <a href="/premarket">Pre-Market Scanner</a>
+        {% endif %}
+      </div>
+    </div>
+    <div class="dropdown">
+      <button class="drop-btn" onclick="toggleDrop(this, event)">Crypto ▾</button>
+      <div class="drop-menu">
+        <a href="/crypto/feargreed">Fear &amp; Greed</a>
+        <a href="/crypto/heatmap">Crypto Heatmap</a>
+        <a href="/crypto/upcoming">Upcoming Coins</a>
+        {% if nav_plan == 'free' %}
+        <a href="/pricing?upgrade=crypto" style="opacity:.4;">BTC Dominance 🔒</a>
+        <a href="/pricing?upgrade=crypto" style="opacity:.4;">Funding Rates 🔒</a>
+        <a href="/pricing?upgrade=crypto" style="opacity:.4;">On-Chain Metrics 🔒</a>
+        <a href="/pricing?upgrade=crypto" style="opacity:.4;">Liquidation Map 🔒</a>
+        {% else %}
+        <a href="/crypto/dominance">BTC Dominance</a>
+        <a href="/crypto/funding">Funding Rates</a>
+        <a href="/crypto/onchain">On-Chain Metrics</a>
+        {% if nav_plan == 'pro' %}
+        <a href="/crypto/liquidations">Liquidation Map</a>
+        {% else %}
+        <a href="/pricing?upgrade=crypto" style="opacity:.4;">Liquidation Map 🔒</a>
+        {% endif %}
         {% endif %}
       </div>
     </div>
@@ -3804,17 +4157,22 @@ PRICING_HTML = """<!DOCTYPE html>
         <li>Earnings calendar</li>
         <li>Market heatmap</li>
         <li>Dividends calendar</li>
+        <li>Crypto fear &amp; greed</li>
+        <li>Crypto heatmap</li>
+        <li>Upcoming coins</li>
         <li class="no">Trump tracker</li>
         <li class="no">Ticker news</li>
         <li class="no">Gamma exposure</li>
         <li class="no">Greeks dashboard</li>
         <li class="no">Volatility forecast</li>
+        <li class="no">BTC dominance</li>
+        <li class="no">Funding rates</li>
+        <li class="no">On-chain metrics</li>
         <li class="no">LSTM forecast</li>
         <li class="no">Options flow</li>
         <li class="no">Insider trading</li>
         <li class="no">Pre-market scanner</li>
-        <li class="no">Options scalper</li>
-
+        <li class="no">Liquidation map</li>
       </ul>
       <a href="/indicators" class="btn-plan btn-free">Start Free</a>
     </div>
@@ -3831,17 +4189,22 @@ PRICING_HTML = """<!DOCTYPE html>
         <li>Earnings calendar</li>
         <li>Market heatmap</li>
         <li>Dividends calendar</li>
+        <li>Crypto fear &amp; greed</li>
+        <li>Crypto heatmap</li>
+        <li>Upcoming coins</li>
         <li>Trump tracker</li>
         <li>Ticker news</li>
         <li>Gamma exposure</li>
         <li>Greeks dashboard</li>
         <li>Volatility forecast</li>
+        <li>BTC dominance</li>
+        <li>Funding rates</li>
+        <li>On-chain metrics</li>
         <li class="no">LSTM forecast</li>
         <li class="no">Options flow</li>
         <li class="no">Insider trading</li>
         <li class="no">Pre-market scanner</li>
-        <li class="no">Options scalper</li>
-
+        <li class="no">Liquidation map</li>
       </ul>
       {% if current_user %}
       <a href="/subscribe/basic" class="btn-plan btn-basic" id="btn-basic">Get Basic</a>
@@ -3863,17 +4226,22 @@ PRICING_HTML = """<!DOCTYPE html>
         <li>Earnings calendar</li>
         <li>Market heatmap</li>
         <li>Dividends calendar</li>
+        <li>Crypto fear &amp; greed</li>
+        <li>Crypto heatmap</li>
+        <li>Upcoming coins</li>
         <li>Trump tracker</li>
         <li>Ticker news</li>
         <li>Gamma exposure</li>
         <li>Greeks dashboard</li>
         <li>Volatility forecast</li>
+        <li>BTC dominance</li>
+        <li>Funding rates</li>
+        <li>On-chain metrics</li>
         <li>LSTM forecast</li>
         <li>Options flow</li>
         <li>Insider trading</li>
         <li>Pre-market scanner</li>
-        <li>Options scalper</li>
-
+        <li>Liquidation map</li>
       </ul>
       {% if current_user %}
       <a href="/subscribe/pro" class="btn-plan btn-pro" id="btn-pro">Get Pro</a>
@@ -5550,6 +5918,518 @@ loadDividends();
 </script>
 </body>
 </html>"""
+
+
+# ── Crypto HTML shared CSS ────────────────────────────────────────────────────
+
+_CRYPTO_PAGE_CSS = """
+    :root[data-theme="dark"]  { --bg:#0d1117; --bg2:#161b22; --bg3:#21262d; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --green:#3fb950; --red:#f85149; --orange:#e3b341; }
+    :root[data-theme="light"] { --bg:#ffffff; --bg2:#f6f8fa; --bg3:#eaeef2; --border:#d0d7de; --text:#1f2328; --muted:#636c76; --accent:#0969da; --green:#1a7f37; --red:#cf222e; --orange:#9a6700; }
+    * { box-sizing:border-box; margin:0; padding:0; }
+    body { font-family:-apple-system,sans-serif; background:var(--bg); color:var(--text); min-height:100vh; }
+    nav { background:var(--bg2); border-bottom:1px solid var(--border); padding:14px 24px; display:flex; align-items:center; justify-content:space-between; }
+    .logo { font-size:1.1rem; font-weight:bold; text-decoration:none; }
+    .page { max-width:1000px; margin:0 auto; padding:28px 20px 60px; }
+    h1 { font-size:1.5rem; margin-bottom:4px; } h1 span { color:var(--accent); }
+    .sub { color:var(--muted); font-size:.83rem; margin-bottom:20px; }
+    .stats-row { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:20px; }
+    .stat { background:var(--bg2); border:1px solid var(--border); border-radius:8px; padding:12px 16px; flex:1; min-width:130px; }
+    .stat .sv { font-size:1.25rem; font-weight:800; }
+    .stat .sl { font-size:.68rem; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; margin-top:3px; }
+    .card { background:var(--bg2); border:1px solid var(--border); border-radius:8px; padding:20px; margin-bottom:16px; }
+    table { width:100%; border-collapse:collapse; font-size:.88rem; }
+    th { text-align:left; padding:8px 12px; color:var(--muted); font-size:.75rem; text-transform:uppercase; letter-spacing:.05em; border-bottom:1px solid var(--border); }
+    td { padding:9px 12px; border-bottom:1px solid var(--border); }
+    tr:last-child td { border-bottom:none; }
+    tr:hover td { background:var(--bg3); }
+    .pos { color:var(--green); } .neg { color:var(--red); }
+    .badge { display:inline-block; padding:2px 8px; border-radius:4px; font-size:.75rem; font-weight:600; }
+    .badge-green { background:#1f2d1f; color:var(--green); }
+    .badge-red   { background:#2d1f1f; color:var(--red); }
+    .badge-orange{ background:#2d2510; color:var(--orange); }
+    .loading { color:var(--muted); padding:40px; text-align:center; }
+    .err { color:var(--red); padding:20px; }
+    .controls { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:16px; }
+    .controls select, .controls input { background:var(--bg2); border:1px solid var(--border); color:var(--text); padding:7px 12px; border-radius:7px; font-size:.88rem; outline:none; }
+    .controls select:focus, .controls input:focus { border-color:var(--accent); }
+    .btn { background:var(--accent); color:#fff; border:none; border-radius:7px; padding:8px 18px; font-size:.88rem; font-weight:600; cursor:pointer; }
+    .btn:hover { opacity:.85; }
+    footer { text-align:center; padding:32px 24px; color:var(--muted); font-size:.8rem; border-top:1px solid var(--border); margin-top:20px; }
+"""
+
+# ── Fear & Greed HTML ─────────────────────────────────────────────────────────
+
+CRYPTO_FEARGREED_HTML = """<!DOCTYPE html>
+<html data-theme="dark">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">""" + _META + """
+  <title>Crypto Fear &amp; Greed · ChartEdge</title>
+  <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+  <style>""" + _CRYPTO_PAGE_CSS + _NAV_CSS + """
+    .gauge-wrap { display:flex; flex-direction:column; align-items:center; padding:28px 0 16px; }
+    .gauge-score { font-size:4rem; font-weight:900; line-height:1; }
+    .gauge-label { font-size:1.1rem; font-weight:600; margin-top:6px; }
+    .gauge-date  { font-size:.78rem; color:var(--muted); margin-top:4px; }
+    #gauge-arc   { width:280px; height:160px; }
+    #hist-chart  { min-height:260px; }
+  </style>
+</head>
+<body>
+<nav>
+  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span></a>
+  <button class="hamburger" onclick="toggleMobileNav(event)">☰</button>
+  <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
+</nav>
+<div class="page">
+  <h1>Crypto <span>Fear &amp; Greed</span></h1>
+  <p class="sub">Sentiment index 0–100 · sourced from alternative.me · updates daily</p>
+  <div class="card" style="text-align:center">
+    <canvas id="gauge-arc"></canvas>
+    <div class="gauge-wrap">
+      <div class="gauge-score" id="fg-score">—</div>
+      <div class="gauge-label" id="fg-label">Loading…</div>
+      <div class="gauge-date"  id="fg-date"></div>
+    </div>
+  </div>
+  <div class="card">
+    <div style="font-size:.85rem;font-weight:600;margin-bottom:12px;color:var(--muted)">30-DAY HISTORY</div>
+    <div id="hist-chart"><div class="loading">Loading…</div></div>
+  </div>
+</div>
+<footer>© 2026 ChartEdge · Not financial advice</footer>
+<script>""" + _THEME_JS + """
+fetch('/api/crypto/feargreed').then(r=>r.json()).then(d=>{
+  if(d.error){document.querySelector('.page').innerHTML='<div class="err">'+d.error+'</div>';return;}
+  var items=d.data;
+  var cur=items[0];
+  var score=cur.value;
+  var label=cur.label;
+  // color
+  var color=score<25?'#f85149':score<45?'#e3b341':score<55?'#8b949e':score<75?'#3fb950':'#00c853';
+  document.getElementById('fg-score').textContent=score;
+  document.getElementById('fg-score').style.color=color;
+  document.getElementById('fg-label').textContent=label;
+  document.getElementById('fg-label').style.color=color;
+  document.getElementById('fg-date').textContent='Updated '+new Date(cur.ts*1000).toLocaleDateString();
+  // Arc gauge via canvas
+  var canvas=document.getElementById('gauge-arc');
+  var ctx=canvas.getContext('2d');
+  canvas.width=280;canvas.height=160;
+  var cx=140,cy=150,r=120,lw=22;
+  var colors=['#f85149','#e3b341','#8b949e','#3fb950','#00c853'];
+  var segs=[0.25,0.20,0.10,0.20,0.25];
+  var start=Math.PI;
+  segs.forEach(function(s,i){
+    ctx.beginPath();ctx.arc(cx,cy,r,start,start+s*Math.PI);
+    ctx.lineWidth=lw;ctx.strokeStyle=colors[i];ctx.lineCap='butt';ctx.stroke();
+    start+=s*Math.PI;
+  });
+  // needle
+  var angle=Math.PI+(score/100)*Math.PI;
+  ctx.beginPath();
+  ctx.moveTo(cx,cy);
+  ctx.lineTo(cx+Math.cos(angle)*100,cy+Math.sin(angle)*100);
+  ctx.strokeStyle='var(--text)';ctx.lineWidth=3;ctx.lineCap='round';ctx.stroke();
+  ctx.beginPath();ctx.arc(cx,cy,8,0,2*Math.PI);ctx.fillStyle='var(--text)';ctx.fill();
+  // history chart
+  var dates=items.map(function(x){return new Date(x.ts*1000).toLocaleDateString();}).reverse();
+  var vals=items.map(function(x){return x.value;}).reverse();
+  var barColors=vals.map(function(v){return v<25?'#f85149':v<45?'#e3b341':v<55?'#8b949e':v<75?'#3fb950':'#00c853';});
+  Plotly.react('hist-chart',[{x:dates,y:vals,type:'bar',marker:{color:barColors},name:'F&G'}],{
+    paper_bgcolor:'#161b22',plot_bgcolor:'#161b22',
+    font:{color:'#e6edf3',size:11},margin:{t:10,b:40,l:40,r:10},
+    xaxis:{gridcolor:'#21262d'},
+    yaxis:{gridcolor:'#21262d',range:[0,100]},
+    showlegend:false
+  },{responsive:true,displayModeBar:false});
+});
+</script>
+</body></html>"""
+
+
+# ── BTC Dominance HTML ────────────────────────────────────────────────────────
+
+CRYPTO_DOMINANCE_HTML = """<!DOCTYPE html>
+<html data-theme="dark">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">""" + _META + """
+  <title>BTC Dominance · ChartEdge</title>
+  <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+  <style>""" + _CRYPTO_PAGE_CSS + _NAV_CSS + """
+    #dom-chart { min-height:340px; }
+  </style>
+</head>
+<body>
+<nav>
+  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span></a>
+  <button class="hamburger" onclick="toggleMobileNav(event)">☰</button>
+  <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
+</nav>
+<div class="page">
+  <h1>BTC <span>Dominance</span></h1>
+  <p class="sub">Market cap share across top cryptocurrencies · updates every 30 min</p>
+  <div class="stats-row" id="stats-row"><div class="loading">Loading…</div></div>
+  <div class="card">
+    <div id="dom-chart"><div class="loading">Loading…</div></div>
+  </div>
+</div>
+<footer>© 2026 ChartEdge · Not financial advice</footer>
+<script>""" + _THEME_JS + """
+function fmt(n){if(!n)return'—';if(n>=1e12)return'$'+(n/1e12).toFixed(2)+'T';if(n>=1e9)return'$'+(n/1e9).toFixed(2)+'B';return'$'+n.toLocaleString();}
+fetch('/api/crypto/dominance').then(r=>r.json()).then(d=>{
+  if(d.error){document.querySelector('.page').innerHTML='<div class="err">'+d.error+'</div>';return;}
+  var sr=document.getElementById('stats-row');
+  sr.innerHTML=[
+    {v:d.btc+'%',l:'BTC Dominance'},{v:d.eth+'%',l:'ETH Dominance'},
+    {v:fmt(d.total_mcap),l:'Total Mkt Cap'},{v:fmt(d.total_volume),l:'24h Volume'},
+    {v:(d.active_coins||0).toLocaleString(),l:'Active Coins'}
+  ].map(function(s){return'<div class="stat"><div class="sv">'+s.v+'</div><div class="sl">'+s.l+'</div></div>';}).join('');
+  var labels=d.top.map(function(x){return x.symbol;});
+  var vals=d.top.map(function(x){return x.pct;});
+  var others=Math.max(0,100-vals.reduce(function(a,b){return a+b;},0));
+  if(others>0.1){labels.push('OTHERS');vals.push(parseFloat(others.toFixed(2)));}
+  Plotly.react('dom-chart',[{labels:labels,values:vals,type:'pie',hole:.45,
+    textinfo:'label+percent',textfont:{size:12},
+    marker:{colors:['#f7931a','#627eea','#26a17b','#e84142','#2775ca','#f0b90b','#8247e5','#00adef','#d9534f','#6f42c1','#aaaaaa']}}],{
+    paper_bgcolor:'#161b22',plot_bgcolor:'#161b22',
+    font:{color:'#e6edf3',size:12},margin:{t:20,b:20,l:20,r:20},
+    showlegend:true,legend:{orientation:'v',x:1.02,y:.5,font:{size:11}}
+  },{responsive:true,displayModeBar:false});
+});
+</script>
+</body></html>"""
+
+
+# ── Crypto Heatmap HTML ───────────────────────────────────────────────────────
+
+CRYPTO_HEATMAP_HTML = """<!DOCTYPE html>
+<html data-theme="dark">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">""" + _META + """
+  <title>Crypto Heatmap · ChartEdge</title>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <style>""" + _CRYPTO_PAGE_CSS + _NAV_CSS + """
+    #hm-wrap { width:100%; min-height:520px; background:var(--bg2); border:1px solid var(--border); border-radius:8px; overflow:hidden; position:relative; }
+    .hm-cell { position:absolute; display:flex; flex-direction:column; align-items:center; justify-content:center; overflow:hidden; cursor:default; border:1px solid var(--bg); border-radius:3px; transition:opacity .15s; }
+    .hm-cell:hover { opacity:.82; }
+    .hm-sym { font-size:.78rem; font-weight:700; color:#fff; text-shadow:0 1px 2px rgba(0,0,0,.5); }
+    .hm-chg { font-size:.7rem; color:rgba(255,255,255,.85); }
+    .legend { display:flex; gap:6px; align-items:center; margin-top:10px; font-size:.75rem; color:var(--muted); }
+    .lsq { width:14px; height:14px; border-radius:2px; }
+  </style>
+</head>
+<body>
+<nav>
+  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span></a>
+  <button class="hamburger" onclick="toggleMobileNav(event)">☰</button>
+  <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
+</nav>
+<div class="page">
+  <h1>Crypto <span>Heatmap</span></h1>
+  <p class="sub">Top 100 coins by market cap · sized by market cap · colored by 24h change</p>
+  <div id="hm-wrap"><div class="loading">Loading…</div></div>
+  <div class="legend">
+    <div class="lsq" style="background:#b91c1c"></div>≤−5%
+    <div class="lsq" style="background:#f85149"></div>−2 to −5%
+    <div class="lsq" style="background:#3d2b2b"></div>~0%
+    <div class="lsq" style="background:#3fb950"></div>+2 to +5%
+    <div class="lsq" style="background:#22c55e"></div>≥+5%
+  </div>
+</div>
+<footer>© 2026 ChartEdge · Not financial advice</footer>
+<script>""" + _THEME_JS + """
+function chgColor(v){
+  if(v<=-5)return'#b91c1c';if(v<=-2)return'#f85149';if(v<0)return'#6b2020';
+  if(v===0)return'#2d2d2d';if(v<=2)return'#1a3d1a';if(v<=5)return'#3fb950';return'#22c55e';
+}
+fetch('/api/crypto/heatmap').then(r=>r.json()).then(d=>{
+  var coins=d.coins;
+  var wrap=document.getElementById('hm-wrap');
+  wrap.innerHTML='';
+  var W=wrap.offsetWidth||960, H=Math.max(520,window.innerHeight*0.55);
+  wrap.style.height=H+'px';
+  var root=d3.hierarchy({children:coins}).sum(function(c){return c.mcap||0;});
+  d3.treemap().size([W,H]).paddingInner(2)(root);
+  root.leaves().forEach(function(node){
+    var c=node.data;
+    var w=node.x1-node.x0, h=node.y1-node.y0;
+    if(w<4||h<4)return;
+    var el=document.createElement('div');
+    el.className='hm-cell';
+    el.style.cssText='left:'+node.x0+'px;top:'+node.y0+'px;width:'+w+'px;height:'+h+'px;background:'+chgColor(c.chg)+';';
+    el.title=c.name+' | '+c.chg+'% | $'+c.price;
+    if(w>30&&h>22){
+      el.innerHTML='<span class="hm-sym">'+c.symbol+'</span>'+(h>36?'<span class="hm-chg">'+(c.chg>=0?'+':'')+c.chg+'%</span>':'');
+    }
+    wrap.appendChild(el);
+  });
+});
+</script>
+</body></html>"""
+
+
+# ── Funding Rates HTML ────────────────────────────────────────────────────────
+
+CRYPTO_FUNDING_HTML = """<!DOCTYPE html>
+<html data-theme="dark">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">""" + _META + """
+  <title>Funding Rates · ChartEdge</title>
+  <style>""" + _CRYPTO_PAGE_CSS + _NAV_CSS + """
+    .rate-pos { color:var(--green); font-weight:700; }
+    .rate-neg { color:var(--red);   font-weight:700; }
+    .rate-neu { color:var(--muted); }
+    input#search { width:220px; }
+  </style>
+</head>
+<body>
+<nav>
+  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span></a>
+  <button class="hamburger" onclick="toggleMobileNav(event)">☰</button>
+  <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
+</nav>
+<div class="page">
+  <h1>Funding <span>Rates</span></h1>
+  <p class="sub">Binance perpetual futures · positive = longs pay shorts · negative = shorts pay longs · refreshes every 5 min</p>
+  <div class="controls">
+    <input id="search" type="text" placeholder="Search symbol…" oninput="filterTable()">
+  </div>
+  <div class="card" style="padding:0">
+    <div id="tbl-wrap"><div class="loading">Loading…</div></div>
+  </div>
+</div>
+<footer>© 2026 ChartEdge · Not financial advice</footer>
+<script>""" + _THEME_JS + """
+var _rows=[];
+function filterTable(){
+  var q=document.getElementById('search').value.trim().toUpperCase();
+  var filtered=q?_rows.filter(function(r){return r.symbol.includes(q);}):_rows;
+  renderTable(filtered);
+}
+function renderTable(rows){
+  if(!rows.length){document.getElementById('tbl-wrap').innerHTML='<div class="loading">No results.</div>';return;}
+  var html='<table><thead><tr><th>#</th><th>Symbol</th><th>Funding Rate</th><th>Mark Price</th><th>Sentiment</th></tr></thead><tbody>';
+  rows.forEach(function(r,i){
+    var cls=r.rate>0?'rate-pos':r.rate<0?'rate-neg':'rate-neu';
+    var sign=r.rate>0?'+':'';
+    var sentiment=r.rate>0.05?'<span class="badge badge-red">Overleveraged Long</span>':r.rate<-0.05?'<span class="badge badge-green">Overleveraged Short</span>':'<span class="badge badge-orange">Neutral</span>';
+    html+='<tr><td style="color:var(--muted)">'+(i+1)+'</td><td><strong>'+r.symbol+'</strong></td>'
+      +'<td class="'+cls+'">'+sign+r.rate+'%</td>'
+      +'<td>$'+r.price.toLocaleString()+'</td>'
+      +'<td>'+sentiment+'</td></tr>';
+  });
+  html+='</tbody></table>';
+  document.getElementById('tbl-wrap').innerHTML=html;
+}
+fetch('/api/crypto/funding').then(r=>r.json()).then(d=>{
+  if(d.error){document.getElementById('tbl-wrap').innerHTML='<div class="err">'+d.error+'</div>';return;}
+  _rows=d.rates;
+  renderTable(_rows);
+});
+</script>
+</body></html>"""
+
+
+# ── On-chain Metrics HTML ─────────────────────────────────────────────────────
+
+CRYPTO_ONCHAIN_HTML = """<!DOCTYPE html>
+<html data-theme="dark">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">""" + _META + """
+  <title>On-Chain Metrics · ChartEdge</title>
+  <style>""" + _CRYPTO_PAGE_CSS + _NAV_CSS + """
+    .section-title { font-size:.75rem; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); margin:24px 0 10px; }
+    .coin-header { display:flex; align-items:center; gap:10px; margin-bottom:12px; }
+    .coin-logo { width:32px; height:32px; border-radius:50%; }
+    .chg-pos { color:var(--green); } .chg-neg { color:var(--red); }
+    .supply-bar-wrap { background:var(--bg3); border-radius:4px; height:8px; margin-top:6px; overflow:hidden; }
+    .supply-bar { height:100%; background:var(--accent); border-radius:4px; }
+  </style>
+</head>
+<body>
+<nav>
+  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span></a>
+  <button class="hamburger" onclick="toggleMobileNav(event)">☰</button>
+  <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
+</nav>
+<div class="page">
+  <h1>On-Chain <span>Metrics</span></h1>
+  <p class="sub">Bitcoin network stats + BTC &amp; ETH market data · updates every 30 min</p>
+  <div id="content"><div class="loading">Loading…</div></div>
+</div>
+<footer>© 2026 ChartEdge · Not financial advice</footer>
+<script>""" + _THEME_JS + """
+function fmt(n){if(!n)return'—';if(n>=1e12)return'$'+(n/1e12).toFixed(2)+'T';if(n>=1e9)return'$'+(n/1e9).toFixed(2)+'B';if(n>=1e6)return'$'+(n/1e6).toFixed(2)+'M';return'$'+n.toLocaleString();}
+function fmtN(n){if(!n)return'—';if(n>=1e9)return(n/1e9).toFixed(2)+'B';if(n>=1e6)return(n/1e6).toFixed(2)+'M';if(n>=1e3)return(n/1e3).toFixed(1)+'K';return n.toLocaleString();}
+function chgHtml(v){var c=v>=0?'chg-pos':'chg-neg';var s=v>=0?'+':'';return'<span class="'+c+'">'+s+v+'%</span>';}
+fetch('/api/crypto/onchain').then(r=>r.json()).then(d=>{
+  if(d.error){document.getElementById('content').innerHTML='<div class="err">'+d.error+'</div>';return;}
+  var html='';
+  // BTC network
+  if(d.btc_chain){
+    var b=d.btc_chain;
+    html+='<div class="section-title">⛏ Bitcoin Network</div>';
+    html+='<div class="stats-row">';
+    [{v:b.hash_rate+'B GH/s',l:'Hash Rate'},{v:fmtN(b.difficulty),l:'Difficulty'},
+     {v:fmtN(b.n_tx),l:"Today's Transactions"},{v:b.fees_btc+' BTC',l:'Total Fees (24h)'},
+     {v:b.block_time+' min',l:'Avg Block Time'},{v:b.blocks_mined,l:'Blocks Mined (24h)'}
+    ].forEach(function(s){html+='<div class="stat"><div class="sv">'+s.v+'</div><div class="sl">'+s.l+'</div></div>';});
+    html+='</div>';
+  }
+  // BTC market
+  if(d.bitcoin){
+    var btc=d.bitcoin;
+    var supplyPct=btc.max_supply?Math.round(btc.supply/btc.max_supply*100):null;
+    html+='<div class="section-title">₿ Bitcoin Market</div>';
+    html+='<div class="stats-row">';
+    [{v:'$'+btc.price.toLocaleString(),l:'Price'},{v:fmt(btc.mcap),l:'Market Cap'},
+     {v:fmt(btc.vol_24h),l:'24h Volume'},{v:chgHtml(btc.chg_24h),l:'24h Change'},
+     {v:chgHtml(btc.chg_7d),l:'7d Change'},{v:btc.ath_chg+'%',l:'From ATH'}
+    ].forEach(function(s){html+='<div class="stat"><div class="sv">'+s.v+'</div><div class="sl">'+s.l+'</div></div>';});
+    html+='</div>';
+    if(supplyPct!==null){
+      html+='<div class="card" style="padding:14px 16px"><div style="display:flex;justify-content:space-between;font-size:.83rem"><span>Circulating Supply</span><span>'+fmtN(btc.supply)+' / 21M BTC ('+supplyPct+'%)</span></div><div class="supply-bar-wrap"><div class="supply-bar" style="width:'+supplyPct+'%"></div></div></div>';
+    }
+  }
+  // ETH market
+  if(d.ethereum){
+    var eth=d.ethereum;
+    html+='<div class="section-title">Ξ Ethereum Market</div>';
+    html+='<div class="stats-row">';
+    [{v:'$'+eth.price.toLocaleString(),l:'Price'},{v:fmt(eth.mcap),l:'Market Cap'},
+     {v:fmt(eth.vol_24h),l:'24h Volume'},{v:chgHtml(eth.chg_24h),l:'24h Change'},
+     {v:chgHtml(eth.chg_7d),l:'7d Change'},{v:eth.ath_chg+'%',l:'From ATH'}
+    ].forEach(function(s){html+='<div class="stat"><div class="sv">'+s.v+'</div><div class="sl">'+s.l+'</div></div>';});
+    html+='</div>';
+  }
+  document.getElementById('content').innerHTML=html||'<div class="err">No data available.</div>';
+});
+</script>
+</body></html>"""
+
+
+# ── Liquidation Map HTML ──────────────────────────────────────────────────────
+
+CRYPTO_LIQUIDATIONS_HTML = """<!DOCTYPE html>
+<html data-theme="dark">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">""" + _META + """
+  <title>Liquidation Map · ChartEdge</title>
+  <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+  <style>""" + _CRYPTO_PAGE_CSS + _NAV_CSS + """
+    #liq-chart { min-height:360px; }
+  </style>
+</head>
+<body>
+<nav>
+  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span></a>
+  <button class="hamburger" onclick="toggleMobileNav(event)">☰</button>
+  <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
+</nav>
+<div class="page">
+  <h1>Liquidation <span>Map</span></h1>
+  <p class="sub">Long/short ratio &amp; open interest · Binance perpetuals · last 48 hours</p>
+  <div class="controls">
+    <select id="sym-sel" onchange="load()">
+      <option>BTC</option><option>ETH</option><option>SOL</option><option>BNB</option><option>XRP</option>
+    </select>
+  </div>
+  <div class="stats-row" id="stats-row"></div>
+  <div class="card"><div id="liq-chart"><div class="loading">Loading…</div></div></div>
+</div>
+<footer>© 2026 ChartEdge · Not financial advice</footer>
+<script>""" + _THEME_JS + """
+function load(){
+  var sym=document.getElementById('sym-sel').value;
+  document.getElementById('liq-chart').innerHTML='<div class="loading">Loading '+sym+'…</div>';
+  document.getElementById('stats-row').innerHTML='';
+  fetch('/api/crypto/liquidations?symbol='+sym).then(r=>r.json()).then(d=>{
+    if(d.error){document.getElementById('liq-chart').innerHTML='<div class="err">'+d.error+'</div>';return;}
+    var rows=d.data;
+    var times=rows.map(function(r){return new Date(r.ts).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});});
+    var longs=rows.map(function(r){return r.long;});
+    var shorts=rows.map(function(r){return r.short;});
+    var ois=rows.map(function(r){return r.oi;});
+    var cur=rows[rows.length-1]||{};
+    var sr=document.getElementById('stats-row');
+    sr.innerHTML=[
+      {v:cur.long+'%',l:'Current Long Ratio'},{v:cur.short+'%',l:'Current Short Ratio'},
+      {v:cur.long>cur.short?'<span class="pos">Long Dominant</span>':'<span class="neg">Short Dominant</span>',l:'Sentiment'},
+      {v:(cur.oi||0).toLocaleString(),l:'Open Interest (coins)'}
+    ].map(function(s){return'<div class="stat"><div class="sv">'+s.v+'</div><div class="sl">'+s.l+'</div></div>';}).join('');
+    Plotly.react('liq-chart',[
+      {x:times,y:longs,name:'Long %',type:'scatter',mode:'lines',fill:'tozeroy',
+       line:{color:'#3fb950',width:2},fillcolor:'rgba(63,185,80,.15)'},
+      {x:times,y:shorts,name:'Short %',type:'scatter',mode:'lines',fill:'tozeroy',
+       line:{color:'#f85149',width:2},fillcolor:'rgba(248,81,73,.15)'},
+    ],{
+      paper_bgcolor:'#161b22',plot_bgcolor:'#161b22',
+      font:{color:'#e6edf3',size:11},margin:{t:10,b:40,l:50,r:10},
+      xaxis:{gridcolor:'#21262d'},
+      yaxis:{gridcolor:'#21262d',title:'Ratio %',range:[0,100]},
+      legend:{orientation:'h',y:-0.15}
+    },{responsive:true,displayModeBar:false});
+  });
+}
+load();
+</script>
+</body></html>"""
+
+
+# ── Upcoming Coins HTML ───────────────────────────────────────────────────────
+
+CRYPTO_UPCOMING_HTML = """<!DOCTYPE html>
+<html data-theme="dark">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">""" + _META + """
+  <title>Upcoming Crypto · ChartEdge</title>
+  <style>""" + _CRYPTO_PAGE_CSS + _NAV_CSS + """
+    input#search { width:220px; }
+  </style>
+</head>
+<body>
+<nav>
+  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span></a>
+  <button class="hamburger" onclick="toggleMobileNav(event)">☰</button>
+  <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
+</nav>
+<div class="page">
+  <h1>Upcoming <span>Crypto</span></h1>
+  <p class="sub">Recently listed coins on CoinGecko · sourced from CoinGecko · updates hourly</p>
+  <div class="controls">
+    <input id="search" type="text" placeholder="Search name or symbol…" oninput="filterTable()">
+  </div>
+  <div class="card" style="padding:0">
+    <div id="tbl-wrap"><div class="loading">Loading…</div></div>
+  </div>
+</div>
+<footer>© 2026 ChartEdge · Not financial advice</footer>
+<script>""" + _THEME_JS + """
+var _rows=[];
+function filterTable(){
+  var q=document.getElementById('search').value.trim().toUpperCase();
+  var filtered=q?_rows.filter(function(r){return r.symbol.includes(q)||r.name.toUpperCase().includes(q);}):_rows;
+  renderTable(filtered);
+}
+function renderTable(rows){
+  if(!rows.length){document.getElementById('tbl-wrap').innerHTML='<div class="loading">No results.</div>';return;}
+  var html='<table><thead><tr><th>#</th><th>Symbol</th><th>Name</th><th>Listed On</th></tr></thead><tbody>';
+  rows.forEach(function(r,i){
+    html+='<tr><td style="color:var(--muted)">'+(i+1)+'</td>'
+      +'<td><strong>'+r.symbol+'</strong></td>'
+      +'<td>'+r.name+'</td>'
+      +'<td style="color:var(--muted)">'+r.date+'</td></tr>';
+  });
+  html+='</tbody></table>';
+  document.getElementById('tbl-wrap').innerHTML=html;
+}
+fetch('/api/crypto/upcoming').then(r=>r.json()).then(d=>{
+  if(d.error){document.getElementById('tbl-wrap').innerHTML='<div class="err">'+d.error+'</div>';return;}
+  _rows=d.coins;
+  renderTable(_rows);
+});
+</script>
+</body></html>"""
 
 
 # ── FAQ HTML ──────────────────────────────────────────────────────────────────
