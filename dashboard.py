@@ -3305,27 +3305,25 @@ def crypto_heatmap_api():
 
 def _fetch_crypto_funding():
     import requests
-    # Bybit linear perpetuals (no geo restrictions)
-    r = requests.get("https://api.bybit.com/v5/market/tickers?category=linear",
-                     headers=_CRYPTO_HEADERS, timeout=10)
+    # Hyperliquid — decentralized perps, fully open API, no IP blocks
+    r = requests.post("https://api.hyperliquid.xyz/info",
+                      json={"type": "metaAndAssetCtxs"},
+                      headers={**_CRYPTO_HEADERS, "Content-Type": "application/json"},
+                      timeout=10)
     r.raise_for_status()
-    items = r.json().get("result", {}).get("list", [])
+    payload = r.json()
+    universe = payload[0].get("universe", [])
+    ctxs     = payload[1]
     out = []
-    for d in items:
-        sym = d.get("symbol", "")
-        if not sym.endswith("USDT"):
-            continue
-        rate_str = d.get("fundingRate", "")
-        price_str = d.get("markPrice", "0")
-        if not rate_str:
-            continue
+    for meta, ctx in zip(universe, ctxs):
+        sym = meta.get("name", "")
         try:
-            rate = float(rate_str)
-            price = float(price_str)
+            rate  = float(ctx.get("funding", 0))
+            price = float(ctx.get("markPx", 0))
         except (ValueError, TypeError):
             continue
         out.append({
-            "symbol": sym.replace("USDT", ""),
+            "symbol": sym,
             "rate":   round(rate * 100, 4),
             "price":  round(price, 4),
         })
@@ -3424,35 +3422,47 @@ def crypto_onchain_api():
 # ─ Liquidation Map ────────────────────────────────────────────────────────────
 
 def _fetch_crypto_liq(symbol="BTC"):
-    import requests
-    # Bybit long/short ratio (no geo restrictions)
-    r = requests.get(
-        f"https://api.bybit.com/v5/market/account-ratio"
-        f"?category=linear&symbol={symbol}USDT&period=1h&limit=48",
-        headers=_CRYPTO_HEADERS, timeout=10)
+    import requests, time as _time
+    # Hyperliquid — funding history as liquidation proxy (open API, no IP blocks)
+    now_ms = int(_time.time() * 1000)
+    start_ms = now_ms - 48 * 3600 * 1000
+    r = requests.post("https://api.hyperliquid.xyz/info",
+                      json={"type": "fundingHistory", "coin": symbol,
+                            "startTime": start_ms, "endTime": now_ms},
+                      headers={**_CRYPTO_HEADERS, "Content-Type": "application/json"},
+                      timeout=10)
     r.raise_for_status()
-    rows = r.json().get("result", {}).get("list", [])
+    rows = r.json()
     out = []
     for row in rows:
         try:
-            long_r  = round(float(row.get("buyRatio",  0)) * 100, 2)
-            short_r = round(float(row.get("sellRatio", 0)) * 100, 2)
-            ts      = int(row.get("timestamp", 0))
+            ts   = int(row.get("time", 0))
+            rate = round(float(row.get("fundingRate", 0)) * 100, 4)
+            px   = round(float(row.get("premium", 0)) * 100, 4)
         except (ValueError, TypeError):
             continue
-        out.append({"ts": ts, "long": long_r, "short": short_r, "oi": 0})
-    # Open interest from Bybit
-    r2 = requests.get(
-        f"https://api.bybit.com/v5/market/open-interest"
-        f"?category=linear&symbol={symbol}USDT&intervalTime=1h&limit=48",
-        headers=_CRYPTO_HEADERS, timeout=10)
+        out.append({"ts": ts, "rate": rate, "premium": px})
+    # Also grab current OI + mark price
+    r2 = requests.post("https://api.hyperliquid.xyz/info",
+                       json={"type": "metaAndAssetCtxs"},
+                       headers={**_CRYPTO_HEADERS, "Content-Type": "application/json"},
+                       timeout=10)
+    oi = 0
+    price = 0
     if r2.status_code == 200:
-        oi_list = r2.json().get("result", {}).get("list", [])
-        oi_map = {int(x["timestamp"]): round(float(x.get("openInterest", 0)), 2) for x in oi_list}
-        for row in out:
-            row["oi"] = oi_map.get(row["ts"], 0)
+        payload = r2.json()
+        universe = payload[0].get("universe", [])
+        ctxs     = payload[1]
+        for meta, ctx in zip(universe, ctxs):
+            if meta.get("name", "").upper() == symbol.upper():
+                try:
+                    oi    = round(float(ctx.get("openInterest", 0)), 2)
+                    price = round(float(ctx.get("markPx", 0)), 4)
+                except (ValueError, TypeError):
+                    pass
+                break
     out.sort(key=lambda x: x["ts"])
-    return out
+    return {"history": out, "oi": oi, "price": price, "symbol": symbol}
 
 @app.route("/crypto/liquidations")
 @login_required
@@ -3476,7 +3486,10 @@ def crypto_liquidations_api():
             _crypto_liq_cache[symbol] = entry
         except Exception as e:
             return jsonify({"error": str(e)}), 500
-    return jsonify({"data": entry["data"], "symbol": symbol})
+    result = entry["data"]
+    if isinstance(result, dict):
+        return jsonify(result)
+    return jsonify({"history": result, "symbol": symbol})
 
 
 # ─ Upcoming Coins ─────────────────────────────────────────────────────────────
@@ -6354,29 +6367,27 @@ function load(){
   document.getElementById('stats-row').innerHTML='';
   fetch('/api/crypto/liquidations?symbol='+sym).then(r=>r.json()).then(d=>{
     if(d.error){document.getElementById('liq-chart').innerHTML='<div class="err">'+d.error+'</div>';return;}
-    var rows=d.data;
-    var times=rows.map(function(r){return new Date(r.ts).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});});
-    var longs=rows.map(function(r){return r.long;});
-    var shorts=rows.map(function(r){return r.short;});
-    var ois=rows.map(function(r){return r.oi;});
-    var cur=rows[rows.length-1]||{};
+    var rows=d.history||[];
     var sr=document.getElementById('stats-row');
+    var curRate=rows.length?rows[rows.length-1].rate:0;
     sr.innerHTML=[
-      {v:cur.long+'%',l:'Current Long Ratio'},{v:cur.short+'%',l:'Current Short Ratio'},
-      {v:cur.long>cur.short?'<span class="pos">Long Dominant</span>':'<span class="neg">Short Dominant</span>',l:'Sentiment'},
-      {v:(cur.oi||0).toLocaleString(),l:'Open Interest (coins)'}
+      {v:(d.price||0).toLocaleString(),l:'Mark Price ($)'},
+      {v:(d.oi||0).toLocaleString(),l:'Open Interest'},
+      {v:(curRate>=0?'+':'')+curRate+'%',l:'Latest Funding Rate'},
+      {v:curRate>0?'<span class="pos">Longs Pay</span>':'<span class="neg">Shorts Pay</span>',l:'Sentiment'}
     ].map(function(s){return'<div class="stat"><div class="sv">'+s.v+'</div><div class="sl">'+s.l+'</div></div>';}).join('');
+    if(!rows.length){document.getElementById('liq-chart').innerHTML='<div class="loading">No history available.</div>';return;}
+    var times=rows.map(function(r){return new Date(r.ts).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});});
+    var rates=rows.map(function(r){return r.rate;});
+    var colors=rates.map(function(v){return v>=0?'#3fb950':'#f85149';});
     Plotly.react('liq-chart',[
-      {x:times,y:longs,name:'Long %',type:'scatter',mode:'lines',fill:'tozeroy',
-       line:{color:'#3fb950',width:2},fillcolor:'rgba(63,185,80,.15)'},
-      {x:times,y:shorts,name:'Short %',type:'scatter',mode:'lines',fill:'tozeroy',
-       line:{color:'#f85149',width:2},fillcolor:'rgba(248,81,73,.15)'},
+      {x:times,y:rates,type:'bar',marker:{color:colors},name:'Funding Rate %'},
     ],{
       paper_bgcolor:'#161b22',plot_bgcolor:'#161b22',
-      font:{color:'#e6edf3',size:11},margin:{t:10,b:40,l:50,r:10},
-      xaxis:{gridcolor:'#21262d'},
-      yaxis:{gridcolor:'#21262d',title:'Ratio %',range:[0,100]},
-      legend:{orientation:'h',y:-0.15}
+      font:{color:'#e6edf3',size:11},margin:{t:10,b:60,l:60,r:10},
+      xaxis:{gridcolor:'#21262d',tickangle:-30},
+      yaxis:{gridcolor:'#21262d',title:'Funding Rate %'},
+      showlegend:false
     },{responsive:true,displayModeBar:false});
   });
 }
