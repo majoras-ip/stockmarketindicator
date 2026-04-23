@@ -5277,8 +5277,8 @@ GENERATOR_HTML = """<!DOCTYPE html>
 
 <div class="hero">
   <h1>TradingView<br><span>Volatility Forecast</span> Indicator</h1>
-  <p>Generate a custom Pine Script indicator with an LSTM-powered volatility forecast — a TradingView subscription is required to use this tool.</p>
-  <span class="badge-free">⚡ TradingView subscription required</span>
+  <p>Generate a custom Pine Script indicator with an LSTM-powered volatility forecast — a TradingView Plus subscription or higher is required to use this tool.</p>
+  <span class="badge-free">⚡ TradingView Plus required</span>
 </div>
 
 <div class="card">
