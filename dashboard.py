@@ -4622,9 +4622,9 @@ HOME_HTML = """<!DOCTYPE html>
     .faq-item { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; margin-bottom: 8px; overflow: hidden; }
     .faq-q { padding: 16px 20px; cursor: pointer; font-size: 0.9rem; font-weight: 600; display: flex; justify-content: space-between; align-items: center; user-select: none; }
     .faq-q:hover { background: var(--bg3); }
-    .faq-chevron { color: var(--muted); font-size: 0.8rem; transition: transform .2s; }
-    .faq-a { display: none; padding: 0 20px 16px; color: var(--muted); font-size: 0.85rem; line-height: 1.65; }
-    .faq-item.open .faq-a { display: block; }
+    .faq-chevron { color: var(--muted); font-size: 0.8rem; transition: transform 0.28s cubic-bezier(0.4,0,0.2,1); }
+    .faq-a { max-height: 0; overflow: hidden; padding: 0 20px; color: var(--muted); font-size: 0.85rem; line-height: 1.65; transition: max-height 0.32s cubic-bezier(0.4,0,0.2,1), padding 0.2s ease; }
+    .faq-item.open .faq-a { max-height: 400px; padding: 0 20px 16px; }
     .faq-item.open .faq-chevron { transform: rotate(180deg); }
 
     footer { text-align: center; padding: 32px 24px; color: var(--muted); font-size: 0.8rem; border-top: 1px solid var(--border); }
