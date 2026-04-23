@@ -48,6 +48,10 @@ STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
 STRIPE_PLAN_LIMITS    = {"free": 3, "basic": 8, "pro": -1}  # -1 = unlimited
 APP_URL               = "https://chartedge.trade"
 
+# ── hCaptcha ──────────────────────────────────────────────────────────────────
+HCAPTCHA_SITE_KEY   = "b06c575c-981a-4884-bbc0-5aa8c1d8aaa0"
+HCAPTCHA_SECRET_KEY = os.environ.get("HCAPTCHA_SECRET", "")
+
 # ── Resend email ──────────────────────────────────────────────────────────────
 resend.api_key = os.environ.get("RESEND_API_KEY", "")
 
@@ -1372,41 +1376,62 @@ def register():
         password   = request.form.get("password", "")
         email      = request.form.get("email", "").strip()
         ref        = request.form.get("ref", "").strip()
-        if not username or not password:
+        hcaptcha_token = request.form.get("h-captcha-response", "")
+        if not hcaptcha_token:
+            error = "Please complete the CAPTCHA."
+        elif not username or not password:
             error = "Username and password are required."
         elif len(password) < 6:
             error = "Password must be at least 6 characters."
         else:
+            # Verify hCaptcha token
+            import urllib.request, urllib.parse
             try:
-                ref_code = secrets.token_urlsafe(6).upper()
-                _run(
-                    "INSERT INTO users (username, pw_hash, email, referral_code, referred_by) VALUES (%s, %s, %s, %s, %s)",
-                    (username, generate_password_hash(password), email or None, ref_code, ref or None)
-                )
-                row = _one("SELECT id FROM users WHERE username=%s", (username,))
-                user_id = row["id"]
-                session["user_id"] = user_id
-                session["username"] = username
+                data = urllib.parse.urlencode({
+                    "secret":   HCAPTCHA_SECRET_KEY,
+                    "response": hcaptcha_token,
+                    "remoteip": request.remote_addr,
+                    "sitekey":  HCAPTCHA_SITE_KEY,
+                }).encode()
+                req = urllib.request.Request("https://api.hcaptcha.com/siteverify",
+                                             data=data, method="POST")
+                with urllib.request.urlopen(req, timeout=5) as resp:
+                    result = __import__("json").loads(resp.read())
+                if not result.get("success"):
+                    error = "CAPTCHA verification failed. Please try again."
+            except Exception:
+                error = "CAPTCHA check failed. Please try again."
+            if not error:
+                try:
+                    ref_code = secrets.token_urlsafe(6).upper()
+                    _run(
+                        "INSERT INTO users (username, pw_hash, email, referral_code, referred_by) VALUES (%s, %s, %s, %s, %s)",
+                        (username, generate_password_hash(password), email or None, ref_code, ref or None)
+                    )
+                    row = _one("SELECT id FROM users WHERE username=%s", (username,))
+                    user_id = row["id"]
+                    session["user_id"] = user_id
+                    session["username"] = username
 
-                # If referred by someone, give new user 7 days Pro trial + reward referrer
-                if ref:
-                    referrer = _one("SELECT id, plan FROM users WHERE referral_code=%s", (ref,))
-                    if referrer:
-                        _run("UPDATE users SET plan='pro' WHERE id=%s", (user_id,))
-                        ref_count = _scalar("SELECT COUNT(*) FROM users WHERE referred_by=%s", (ref,))
-                        referrer_plan = referrer["plan"]
-                        if ref_count >= 4 and referrer_plan != "pro":
-                            _run("UPDATE users SET plan='pro' WHERE id=%s", (referrer["id"],))
-                        elif ref_count >= 2 and referrer_plan == "free":
-                            _run("UPDATE users SET plan='basic' WHERE id=%s", (referrer["id"],))
+                    # If referred by someone, give new user 7 days Pro trial + reward referrer
+                    if ref:
+                        referrer = _one("SELECT id, plan FROM users WHERE referral_code=%s", (ref,))
+                        if referrer:
+                            _run("UPDATE users SET plan='pro' WHERE id=%s", (user_id,))
+                            ref_count = _scalar("SELECT COUNT(*) FROM users WHERE referred_by=%s", (ref,))
+                            referrer_plan = referrer["plan"]
+                            if ref_count >= 4 and referrer_plan != "pro":
+                                _run("UPDATE users SET plan='pro' WHERE id=%s", (referrer["id"],))
+                            elif ref_count >= 2 and referrer_plan == "free":
+                                _run("UPDATE users SET plan='basic' WHERE id=%s", (referrer["id"],))
 
-                # Send welcome email
-                if email:
-                    send_welcome_email(email, username, ref_code)
+                    # Send welcome email
+                    if email:
+                        send_welcome_email(email, username, ref_code)
 
-                return redirect("/indicators")
-            except psycopg2.errors.UniqueViolation:
-                error = "Username already taken."
+                    return redirect("/indicators")
+                except psycopg2.errors.UniqueViolation:
+                    error = "Username already taken."
     return render_template_string(AUTH_HTML, mode="register", error=error, ref=ref)
 
 
@@ -4312,6 +4337,7 @@ AUTH_HTML = """<!DOCTYPE html>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">""" + _META + """
   <title>{{ 'Register' if mode == 'register' else 'Login' }} — ChartEdge</title>
+  {% if mode == 'register' %}<script src="https://js.hcaptcha.com/1/api.js" async defer></script>{% endif %}
   <style>
     :root[data-theme="dark"]  { --bg:#0d1117; --bg2:#161b22; --bg3:#21262d; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --red:#f85149; }
     :root[data-theme="light"] { --bg:#ffffff; --bg2:#f6f8fa; --bg3:#eaeef2; --border:#d0d7de; --text:#1f2328; --muted:#636c76; --accent:#0969da; --red:#cf222e; }
@@ -4387,6 +4413,9 @@ AUTH_HTML = """<!DOCTYPE html>
       <div style="background:#1f2d1f;border:1px solid #3fb950;border-radius:6px;padding:8px 12px;font-size:.82rem;color:#3fb950;margin-bottom:12px;">
         ✓ Referral code applied — you'll get 7 days of Pro free!
       </div>
+      {% endif %}
+      {% if mode == 'register' %}
+      <div class="h-captcha" data-sitekey="b06c575c-981a-4884-bbc0-5aa8c1d8aaa0" style="margin-bottom:12px;"></div>
       {% endif %}
       <button class="btn-submit" type="submit">{{ 'Create account' if mode == 'register' else 'Sign in' }}</button>
     </form>
