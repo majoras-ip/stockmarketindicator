@@ -345,6 +345,63 @@ def api_copy():
     return jsonify({"ok": True, "remaining": limit - used - 1, "plan": plan})
 
 
+# ── Indicator API ─────────────────────────────────────────────────────────────
+
+@app.route("/api/indicator")
+def api_indicator():
+    kind = request.args.get("kind", "")
+    if not kind or kind not in INDICATORS:
+        return jsonify({"ok": False, "error": "unknown"})
+
+    band1   = request.args.get("band1",   "on")  == "on"
+    band2   = request.args.get("band2",   "on")  == "on"
+    band3   = request.args.get("band3",   "off") == "on"
+    atr_avg = request.args.get("atr_avg", "off") == "on"
+
+    name, fn, description, cat, how_to, tag = INDICATORS[kind]
+    if kind == "vwap":
+        pine_code = fn(band1=band1, band2=band2, band3=band3)
+    elif kind == "atr":
+        pine_code = fn(show_avg=atr_avg)
+    else:
+        pine_code = fn()
+    pine_code = _inject_expiry(pine_code, session.get("username", "user"))
+
+    user_id   = session.get("user_id")
+    user_plan = _get_user_plan(user_id)
+    if user_plan == "pro":
+        copies_remaining = -1
+    elif user_id:
+        limit = STRIPE_PLAN_LIMITS.get(user_plan, 3)
+        copies_remaining = max(0, limit - _copies_used_today(user_id))
+    else:
+        today = date.today().isoformat()
+        if session.get("copy_date") != today:
+            session["copy_date"] = today
+            session["copy_count"] = 0
+        copies_remaining = max(0, 3 - session.get("copy_count", 0))
+
+    is_favorited = False
+    if user_id and kind:
+        row = _one("SELECT 1 FROM favorites WHERE user_id=%s AND indicator_key=%s",
+                   (user_id, kind))
+        is_favorited = bool(row)
+
+    return jsonify({
+        "ok":               True,
+        "kind":             kind,
+        "name":             name,
+        "pine_code":        pine_code,
+        "description":      description or "",
+        "how_to":           how_to or "",
+        "copies_remaining": copies_remaining,
+        "user_plan":        user_plan,
+        "is_favorited":     is_favorited,
+        "has_vwap_options": kind == "vwap",
+        "has_atr_options":  kind == "atr",
+    })
+
+
 # ── Forecast API ──────────────────────────────────────────────────────────────
 
 @app.route("/api/forecast")
@@ -4168,6 +4225,17 @@ INDICATORS_HTML = """<!DOCTYPE html>
     .how-to-body { color: var(--muted); font-size: 0.85rem; line-height: 1.6; display: none; }
     .how-to-body.open { display: block; }
 
+    /* Smooth output panel */
+    .output-wrap {
+      max-height: 0; overflow: hidden;
+      transition: max-height 0.38s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.25s ease;
+      opacity: 0;
+    }
+    .output-wrap.visible { max-height: 1400px; opacity: 1; }
+    .output-loading { text-align: center; padding: 28px; color: var(--muted); font-size: 0.85rem; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; vertical-align: middle; margin-right: 8px; }
+
     footer { text-align: center; padding: 32px 24px; color: var(--muted); font-size: 0.8rem; border-top: 1px solid var(--border); margin-top: 40px; }
   </style>
 </head>
@@ -4199,7 +4267,8 @@ INDICATORS_HTML = """<!DOCTYPE html>
     {% for key, (iname, _, idesc, icat, _, itag) in indicators.items() %}
     <a class="ind-card {{ 'active' if key == kind else '' }}"
        href="/indicators?kind={{ key }}&cat={{ category }}{{ ('&q=' + search) if search else '' }}"
-       data-name="{{ iname.lower() }}" data-desc="{{ idesc.lower() }}">
+       data-key="{{ key }}" data-name="{{ iname.lower() }}" data-desc="{{ idesc.lower() }}"
+       onclick="selectIndicator(event, '{{ key }}')">
       <div class="cat-tag">{{ icat }}{% if itag %} <span class="ind-tag ind-tag-{{ itag }}">{{ itag.upper() }}</span>{% endif %}</div>
       <div class="ind-name">{{ iname }}</div>
       <div class="ind-desc">{{ idesc[:65] }}…</div>
@@ -4210,93 +4279,10 @@ INDICATORS_HTML = """<!DOCTYPE html>
     {% endif %}
   </div>
 
-  <!-- VWAP options -->
-  {% if kind == 'vwap' %}
-  <div class="card options">
-    <form method="GET" action="/indicators" style="display:flex; gap:20px; align-items:center; flex-wrap:wrap;">
-      <input type="hidden" name="kind" value="vwap">
-      <input type="hidden" name="cat" value="{{ category }}">
-      <span style="color:var(--muted); font-size:0.85rem;">Bands:</span>
-      <label style="color:var(--green);">
-        <input type="checkbox" name="band1" value="on" {% if band1 %}checked{% endif %} onchange="this.form.submit()"> ±1 StDev
-      </label>
-      <label style="color:var(--red);">
-        <input type="checkbox" name="band2" value="on" {% if band2 %}checked{% endif %} onchange="this.form.submit()"> ±2 StDev
-      </label>
-      <label style="color:var(--purple);">
-        <input type="checkbox" name="band3" value="on" {% if band3 %}checked{% endif %} onchange="this.form.submit()"> ±3 StDev
-      </label>
-    </form>
+  <!-- Smooth output panel (always in DOM, revealed via JS) -->
+  <div class="output-wrap" id="output-wrap">
+    <div id="output-inner"></div>
   </div>
-  {% endif %}
-
-  <!-- ATR options -->
-  {% if kind == 'atr' %}
-  <div class="card options">
-    <form method="GET" action="/indicators" style="display:flex; gap:20px; align-items:center; flex-wrap:wrap;">
-      <input type="hidden" name="kind" value="atr">
-      <input type="hidden" name="cat" value="{{ category }}">
-      <span style="color:var(--muted); font-size:0.85rem;">Options:</span>
-      <label style="color:var(--orange);">
-        <input type="checkbox" name="atr_avg" value="on" {% if atr_avg %}checked{% endif %} onchange="this.form.submit()"> Show 20-bar avg (orange)
-      </label>
-    </form>
-  </div>
-  {% endif %}
-
-  <!-- Shareable link + favorite + ratings -->
-  {% if kind %}
-  <div style="display:flex; gap:10px; margin-bottom:12px; align-items:center; flex-wrap:wrap;">
-    <button class="btn-copy" onclick="copyLink(this)">🔗 Copy link</button>
-    {% if current_user %}
-    <button class="btn-copy {{ 'copied' if is_favorited else '' }}"
-            id="heart-btn" onclick="toggleFavorite('{{ kind }}')">
-      {{ '♥ Saved' if is_favorited else '♡ Save' }}
-    </button>
-    {% else %}
-    <a href="/login" class="btn-copy" style="text-decoration:none;">♡ Save (login)</a>
-    {% endif %}
-  </div>
-  {% endif %}
-
-  <!-- Pine Script output -->
-  {% if pine_code %}
-  <div class="card {{ 'output' if kind in ['vwap', 'atr'] else '' }}">
-    <div class="pine-label">
-      <span>Pine Script v6 — works on any chart, no ticker needed</span>
-      {% if user_plan != 'pro' %}
-      <span class="copies-badge" id="copies-badge">
-        {% if copies_remaining == 0 %}0 copies left{% else %}{{ copies_remaining }} copies left today{% endif %}
-      </span>
-      {% endif %}
-      <button class="btn-copy" id="copy-btn" onclick="copyPine()">Copy</button>
-    </div>
-    <div class="pine-wrap{% if user_plan == 'free' %} pine-blur{% endif %}" id="pine-wrap">
-      <textarea id="pine-out" readonly>{{ pine_code }}</textarea>
-      {% if user_plan == 'free' %}
-      <div class="pine-overlay" id="pine-overlay">
-        <div class="overlay-icon">🔒</div>
-        <div class="overlay-msg"><strong id="overlay-count">{{ copies_remaining }}</strong> free copies left today</div>
-        <button class="btn-copy" onclick="copyPine()">Reveal & Copy</button>
-        <a href="/pricing" class="overlay-upgrade">Upgrade for more →</a>
-      </div>
-      {% endif %}
-    </div>
-
-    {% if how_to %}
-    <div class="how-to">
-      <div class="how-to-title" onclick="toggleHowTo()">▶ How to use</div>
-      <div class="how-to-body" id="howto-body">{{ how_to }}</div>
-    </div>
-    {% endif %}
-    {% if description %}
-    <div style="margin-top:14px;border-top:1px solid var(--border);padding-top:14px;">
-      <div style="font-size:0.75rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;">About this indicator</div>
-      <div style="color:var(--muted);font-size:0.85rem;line-height:1.65;">{{ description }}</div>
-    </div>
-    {% endif %}
-  </div>
-  {% endif %}
 </div>
 
 <!-- Upgrade modal -->
@@ -4318,34 +4304,128 @@ INDICATORS_HTML = """<!DOCTYPE html>
 <footer>© 2026 ChartEdge · Free Pine Script indicators · Not financial advice · <a href="/privacy" style="color:inherit">Privacy</a> · <a href="/terms" style="color:inherit">Terms</a></footer>
 
 <script>
+let _currentKind = '{{ kind }}';
+let _vwapOpts = {band1: true, band2: true, band3: false};
+let _atrOpts  = {atr_avg: false};
+
+async function selectIndicator(e, key) {
+  e.preventDefault();
+  if (key === _currentKind) return;
+  _currentKind = key;
+  history.pushState({}, '', '/indicators?kind=' + key);
+  document.querySelectorAll('.ind-card').forEach(c => c.classList.toggle('active', c.dataset.key === key));
+  await loadOutput(key);
+}
+
+async function loadOutput(key, extraParams) {
+  const wrap = document.getElementById('output-wrap');
+  const inner = document.getElementById('output-inner');
+  inner.innerHTML = '<div class="output-loading"><span class="spinner"></span>Loading…</div>';
+  if (!wrap.classList.contains('visible')) {
+    wrap.classList.add('visible');
+    wrap.scrollIntoView({behavior: 'smooth', block: 'nearest'});
+  }
+  let url = '/api/indicator?kind=' + encodeURIComponent(key);
+  if (extraParams) url += '&' + extraParams;
+  const data = await fetch(url).then(r => r.json());
+  if (!data.ok) { inner.innerHTML = '<div class="output-loading">Error loading indicator.</div>'; return; }
+  inner.innerHTML = buildOutput(data);
+  wrap.scrollIntoView({behavior: 'smooth', block: 'nearest'});
+}
+
+function buildOutput(d) {
+  const blurred = d.user_plan === 'free';
+  const badge   = d.copies_remaining < 0 ? '' :
+    `<span class="copies-badge" id="copies-badge">${d.copies_remaining === 0 ? '0 copies left' : d.copies_remaining + ' copies left today'}</span>`;
+  const overlay = blurred ? `
+    <div class="pine-overlay" id="pine-overlay">
+      <div class="overlay-icon">🔒</div>
+      <div class="overlay-msg"><strong id="overlay-count">${d.copies_remaining}</strong> free copies left today</div>
+      <button class="btn-copy" onclick="copyPine()">Reveal &amp; Copy</button>
+      <a href="/pricing" class="overlay-upgrade">Upgrade for more →</a>
+    </div>` : '';
+
+  const vwapOpts = d.has_vwap_options ? `
+    <div class="card options">
+      <span style="color:var(--muted);font-size:.85rem;">Bands:</span>
+      <label style="color:var(--green);margin-left:16px;"><input type="checkbox" id="band1" ${_vwapOpts.band1?'checked':''} onchange="reloadVwap()"> ±1 StDev</label>
+      <label style="color:var(--red);margin-left:16px;"><input type="checkbox" id="band2" ${_vwapOpts.band2?'checked':''} onchange="reloadVwap()"> ±2 StDev</label>
+      <label style="color:var(--purple);margin-left:16px;"><input type="checkbox" id="band3" ${_vwapOpts.band3?'checked':''} onchange="reloadVwap()"> ±3 StDev</label>
+    </div>` : '';
+
+  const atrOpts = d.has_atr_options ? `
+    <div class="card options">
+      <span style="color:var(--muted);font-size:.85rem;">Options:</span>
+      <label style="color:var(--orange);margin-left:16px;"><input type="checkbox" id="atr_avg" ${_atrOpts.atr_avg?'checked':''} onchange="reloadAtr()"> Show 20-bar avg (orange)</label>
+    </div>` : '';
+
+  const howTo = d.how_to ? `
+    <div class="how-to">
+      <div class="how-to-title" onclick="toggleHowTo()">▶ How to use</div>
+      <div class="how-to-body" id="howto-body">${d.how_to}</div>
+    </div>` : '';
+
+  const about = d.description ? `
+    <div style="margin-top:14px;border-top:1px solid var(--border);padding-top:14px;">
+      <div style="font-size:.75rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;">About this indicator</div>
+      <div style="color:var(--muted);font-size:.85rem;line-height:1.65;">${d.description}</div>
+    </div>` : '';
+
+  const heartBtn = `<button class="btn-copy ${d.is_favorited?'copied':''}" id="heart-btn" onclick="toggleFavorite('${d.kind}')">${d.is_favorited?'♥ Saved':'♡ Save'}</button>`;
+
+  return `
+    ${vwapOpts}${atrOpts}
+    <div style="display:flex;gap:10px;margin-bottom:12px;align-items:center;flex-wrap:wrap;">
+      <button class="btn-copy" onclick="copyLink(this)">🔗 Copy link</button>
+      ${heartBtn}
+    </div>
+    <div class="card ${d.has_vwap_options||d.has_atr_options?'output':''}">
+      <div class="pine-label">
+        <span>Pine Script v6 — works on any chart, no ticker needed</span>
+        ${badge}
+        <button class="btn-copy" id="copy-btn" onclick="copyPine()">Copy</button>
+      </div>
+      <div class="pine-wrap${blurred?' pine-blur':''}" id="pine-wrap">
+        <textarea id="pine-out" readonly>${escHtml(d.pine_code)}</textarea>
+        ${overlay}
+      </div>
+      ${howTo}${about}
+    </div>`;
+}
+
+function escHtml(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+async function reloadVwap() {
+  _vwapOpts.band1 = document.getElementById('band1').checked;
+  _vwapOpts.band2 = document.getElementById('band2').checked;
+  _vwapOpts.band3 = document.getElementById('band3').checked;
+  const p = `band1=${_vwapOpts.band1?'on':'off'}&band2=${_vwapOpts.band2?'on':'off'}&band3=${_vwapOpts.band3?'on':'off'}`;
+  await loadOutput('vwap', p);
+}
+async function reloadAtr() {
+  _atrOpts.atr_avg = document.getElementById('atr_avg').checked;
+  await loadOutput('atr', `atr_avg=${_atrOpts.atr_avg?'on':'off'}`);
+}
+
 async function copyPine() {
   const res  = await fetch('/api/copy', {method: 'POST'});
   const data = await res.json();
-  if (!data.ok) {
-    document.getElementById('upgrade-modal').style.display = 'flex';
-    return;
-  }
-  // Remove blur/overlay for free users
-  const wrap = document.getElementById('pine-wrap');
+  if (!data.ok) { document.getElementById('upgrade-modal').style.display = 'flex'; return; }
+  const wrap    = document.getElementById('pine-wrap');
   const overlay = document.getElementById('pine-overlay');
-  if (wrap) wrap.classList.remove('pine-blur');
+  if (wrap)    wrap.classList.remove('pine-blur');
   if (overlay) overlay.style.display = 'none';
-  // Copy text
   const ta = document.getElementById('pine-out');
-  ta.select();
-  document.execCommand('copy');
+  ta.select(); document.execCommand('copy');
   const btn = document.getElementById('copy-btn');
   btn.textContent = 'Copied!'; btn.classList.add('copied');
   setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
-  // Update badge
   const badge = document.getElementById('copies-badge');
-  const oc = document.getElementById('overlay-count');
+  const oc    = document.getElementById('overlay-count');
   if (data.remaining >= 0) {
     if (badge) badge.textContent = data.remaining + ' copies left today';
-    if (oc) oc.textContent = data.remaining;
-  } else {
-    if (badge) badge.textContent = '∞';
-  }
+    if (oc)    oc.textContent    = data.remaining;
+  } else { if (badge) badge.textContent = '∞'; }
 }
 function copyLink(btn) {
   navigator.clipboard.writeText(window.location.href);
@@ -4360,7 +4440,7 @@ async function toggleFavorite(key) {
   btn.classList.toggle('copied', data.favorited);
 }
 function toggleHowTo() {
-  const body = document.getElementById('howto-body');
+  const body  = document.getElementById('howto-body');
   const title = document.querySelector('.how-to-title');
   body.classList.toggle('open');
   title.textContent = body.classList.contains('open') ? '▼ How to use' : '▶ How to use';
@@ -4371,6 +4451,8 @@ function filterCards() {
     card.style.display = (card.dataset.name.includes(q) || card.dataset.desc.includes(q)) ? '' : 'none';
   });
 }
+// Auto-load if a kind was pre-selected via URL on page load
+if (_currentKind) { loadOutput(_currentKind); }
 """ + _THEME_JS + """
 </script>
 </body>
