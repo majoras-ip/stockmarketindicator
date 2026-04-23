@@ -5142,7 +5142,7 @@ GENERATOR_HTML = """<!DOCTYPE html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">""" + _META + """
-  <title>Volatility Forecast — Free TradingView Pine Script Generator</title>
+  <title>Volatility Forecast — TradingView Pine Script Generator</title>
   <style>
     :root[data-theme="dark"]  { --bg:#0d1117; --bg2:#161b22; --bg3:#21262d; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --green:#3fb950; --red:#f85149; }
     :root[data-theme="light"] { --bg:#ffffff; --bg2:#f6f8fa; --bg3:#eaeef2; --border:#d0d7de; --text:#1f2328; --muted:#636c76; --accent:#0969da; --green:#1a7f37; --red:#cf222e; }
@@ -5276,9 +5276,9 @@ GENERATOR_HTML = """<!DOCTYPE html>
 </nav>
 
 <div class="hero">
-  <h1>Free TradingView<br><span>Volatility Forecast</span> Indicator</h1>
-  <p>Generate a custom Pine Script indicator with an LSTM-powered volatility forecast — no paid TradingView plan required.</p>
-  <span class="badge-free">✓ Works on free TradingView accounts</span>
+  <h1>TradingView<br><span>Volatility Forecast</span> Indicator</h1>
+  <p>Generate a custom Pine Script indicator with an LSTM-powered volatility forecast — a TradingView subscription is required to use this tool.</p>
+  <span class="badge-free">⚡ TradingView subscription required</span>
 </div>
 
 <div class="card">
