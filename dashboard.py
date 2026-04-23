@@ -3087,6 +3087,93 @@ def volume_ticker_api():
         return jsonify({"error": str(e)}), 500
 
 
+# ── IPO Calendar ─────────────────────────────────────────────────────────────
+
+_ipo_cache = {"data": None, "ts": 0}
+
+def _fetch_ipos() -> list[dict]:
+    import time, requests
+    from datetime import datetime, timedelta
+    results = []
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "application/json, text/plain, */*",
+    }
+    # Fetch current and next month
+    today = datetime.today()
+    months = [today, today + timedelta(days=32)]
+    seen = set()
+    for dt in months:
+        url = f"https://api.nasdaq.com/api/ipo/calendar?date={dt.strftime('%Y-%m')}"
+        try:
+            r = requests.get(url, headers=headers, timeout=8)
+            if r.status_code != 200:
+                continue
+            payload = r.json()
+            rows_data = payload.get("data", {})
+            for section in ("upcoming", "priced"):
+                section_data = rows_data.get(section, {})
+                rows = section_data.get("rows", []) if isinstance(section_data, dict) else []
+                for row in rows:
+                    company = row.get("companyName", "")
+                    ticker  = row.get("proposedTickerSymbol", "") or row.get("symbol", "")
+                    key     = company + ticker
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    price_range = row.get("proposedSharePrice", "—") or "—"
+                    shares      = row.get("sharesOffered", "—") or "—"
+                    exchange    = row.get("proposedExchange", "—") or "—"
+                    ipo_date    = row.get("expectedPriceDate", "") or row.get("pricedDate", "")
+                    status      = "Priced" if section == "priced" else "Upcoming"
+                    # parse date for sorting
+                    try:
+                        d = datetime.strptime(ipo_date, "%m/%d/%Y")
+                        date_str = d.strftime("%b %d, %Y")
+                        date_ord = d.toordinal()
+                    except Exception:
+                        date_str = ipo_date or "TBD"
+                        date_ord = 0
+                    # format shares
+                    try:
+                        sh = float(str(shares).replace(",", ""))
+                        shares_fmt = f"{sh/1e6:.1f}M" if sh >= 1e6 else f"{sh/1e3:.0f}K"
+                    except Exception:
+                        shares_fmt = shares
+                    results.append({
+                        "company":    company,
+                        "ticker":     ticker or "—",
+                        "date":       date_str,
+                        "date_ord":   date_ord,
+                        "price":      price_range,
+                        "shares":     shares_fmt,
+                        "exchange":   exchange,
+                        "status":     status,
+                    })
+        except Exception:
+            continue
+    results.sort(key=lambda x: (x["status"] != "Upcoming", x["date_ord"]))
+    return results
+
+
+@app.route("/ipo")
+def ipo_page():
+    return render_template_string(IPO_HTML, current_user=current_user())
+
+
+@app.route("/api/ipo")
+def ipo_api():
+    import time
+    now = time.time()
+    if _ipo_cache["data"] is None or now - _ipo_cache["ts"] > 3600:
+        try:
+            _ipo_cache["data"] = _fetch_ipos()
+            _ipo_cache["ts"]   = now
+        except Exception as e:
+            return jsonify({"error": str(e), "ipos": []}), 500
+    return jsonify({"ipos": _ipo_cache["data"]})
+
+
 # ── FAQ ───────────────────────────────────────────────────────────────────────
 
 @app.route("/faq")
@@ -3285,6 +3372,7 @@ _NAV_LINKS = """
         <a href="/dividends">Dividends Calendar</a>
         <a href="/volume">Unusual Volume</a>
         <a href="/news">News</a>
+        <a href="/ipo">IPO Calendar</a>
         {% if nav_plan == 'free' %}
         <a href="/pricing?upgrade=trump" style="opacity:.4;">Trump Tracker 🔒</a>
         <a href="/pricing?upgrade=gamma" style="opacity:.4;">Gamma Exposure 🔒</a>
@@ -5461,6 +5549,153 @@ loadDividends();
 
 
 # ── FAQ HTML ──────────────────────────────────────────────────────────────────
+
+IPO_HTML = """<!DOCTYPE html>
+<html data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">""" + _META + """
+  <title>Upcoming IPOs — ChartEdge</title>
+  <style>
+    :root[data-theme="dark"]  { --bg:#0d1117; --bg2:#161b22; --bg3:#21262d; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --green:#3fb950; --red:#f85149; --orange:#e3b341; }
+    :root[data-theme="light"] { --bg:#ffffff; --bg2:#f6f8fa; --bg3:#eaeef2; --border:#d0d7de; --text:#1f2328; --muted:#636c76; --accent:#0969da; --green:#1a7f37; --red:#cf222e; --orange:#bc4c00; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: monospace; background: var(--bg); color: var(--text); min-height: 100vh; }
+    nav { background: var(--bg2); border-bottom: 1px solid var(--border); padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; }
+    .logo { color: var(--accent); font-size: 1.1rem; font-weight: bold; text-decoration: none; }
+    """ + _NAV_CSS + """
+    .hero { text-align: center; padding: 44px 24px 28px; border-bottom: 1px solid var(--border); }
+    .hero h1 { font-size: 1.7rem; margin-bottom: 8px; }
+    .hero h1 span { color: var(--accent); }
+    .hero p { color: var(--muted); font-size: 0.9rem; max-width: 480px; margin: 0 auto; }
+    .container { max-width: 960px; margin: 0 auto; padding: 28px 24px; }
+
+    /* Filter tabs */
+    .tabs { display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; }
+    .tab { background: var(--bg2); border: 1px solid var(--border); color: var(--muted); padding: 5px 16px; border-radius: 20px; font-size: 0.8rem; cursor: pointer; font-family: monospace; }
+    .tab:hover { border-color: var(--accent); color: var(--text); }
+    .tab.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+    /* IPO table */
+    .ipo-table { width: 100%; border-collapse: collapse; }
+    .ipo-table th { text-align: left; padding: 8px 14px; font-size: 0.72rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); border-bottom: 1px solid var(--border); }
+    .ipo-table td { padding: 13px 14px; border-bottom: 1px solid var(--border); font-size: 0.87rem; vertical-align: middle; }
+    .ipo-table tr:last-child td { border-bottom: none; }
+    .ipo-table tr:hover td { background: var(--bg2); }
+    .company-name { color: var(--text); font-weight: 600; }
+    .ticker-badge { display: inline-block; background: var(--bg3); border: 1px solid var(--border); color: var(--accent); padding: 2px 8px; border-radius: 5px; font-size: 0.78rem; font-weight: 700; margin-top: 3px; }
+    .status-upcoming { display: inline-block; background: #0d3349; border: 1px solid #1f6feb; color: #58a6ff; padding: 2px 8px; border-radius: 10px; font-size: 0.7rem; font-weight: 700; }
+    .status-priced   { display: inline-block; background: #0d2a14; border: 1px solid #238636; color: #3fb950; padding: 2px 8px; border-radius: 10px; font-size: 0.7rem; font-weight: 700; }
+    .exch { color: var(--muted); font-size: 0.8rem; }
+
+    /* Loading / empty */
+    .state-box { text-align: center; padding: 60px 24px; color: var(--muted); }
+    .state-box .icon { font-size: 2rem; margin-bottom: 12px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner { display: inline-block; width: 18px; height: 18px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; }
+
+    /* Mobile */
+    @media (max-width: 600px) {
+      .ipo-table th:nth-child(4), .ipo-table td:nth-child(4),
+      .ipo-table th:nth-child(5), .ipo-table td:nth-child(5) { display: none; }
+    }
+
+    footer { text-align: center; padding: 32px 24px; color: var(--muted); font-size: 0.8rem; border-top: 1px solid var(--border); margin-top: 40px; }
+  </style>
+</head>
+<body>
+<nav>
+  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span></a>
+  <button class="hamburger" onclick="toggleMobileNav(event)">☰</button>
+  <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
+</nav>
+
+<div class="hero">
+  <h1>Upcoming <span>IPOs</span></h1>
+  <p>Newly public and soon-to-price companies. Data sourced from NASDAQ's IPO calendar.</p>
+</div>
+
+<div class="container">
+  <div class="tabs">
+    <button class="tab active" onclick="filterTab(this,'all')">All</button>
+    <button class="tab" onclick="filterTab(this,'Upcoming')">Upcoming</button>
+    <button class="tab" onclick="filterTab(this,'Priced')">Recently Priced</button>
+  </div>
+
+  <div id="ipo-body">
+    <div class="state-box"><div class="spinner"></div></div>
+  </div>
+</div>
+
+<footer>© 2026 ChartEdge · Not financial advice · <a href="/privacy" style="color:inherit">Privacy</a> · <a href="/terms" style="color:inherit">Terms</a></footer>
+
+<script>
+let _ipos = [];
+let _filter = 'all';
+
+async function loadIpos() {
+  const res  = await fetch('/api/ipo');
+  const data = await res.json();
+  if (data.error || !data.ipos.length) {
+    document.getElementById('ipo-body').innerHTML =
+      '<div class="state-box"><div class="icon">📭</div><div>No IPO data available right now. Check back soon.</div></div>';
+    return;
+  }
+  _ipos = data.ipos;
+  render();
+}
+
+function filterTab(btn, val) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  btn.classList.add('active');
+  _filter = val;
+  render();
+}
+
+function render() {
+  const rows = _filter === 'all' ? _ipos : _ipos.filter(i => i.status === _filter);
+  if (!rows.length) {
+    document.getElementById('ipo-body').innerHTML =
+      '<div class="state-box"><div class="icon">🔍</div><div>No IPOs in this category.</div></div>';
+    return;
+  }
+  let html = `<table class="ipo-table">
+    <thead><tr>
+      <th>Company</th>
+      <th>Date</th>
+      <th>Status</th>
+      <th>Price Range</th>
+      <th>Shares</th>
+      <th>Exchange</th>
+    </tr></thead><tbody>`;
+  rows.forEach(r => {
+    const badge = r.status === 'Priced'
+      ? `<span class="status-priced">Priced</span>`
+      : `<span class="status-upcoming">Upcoming</span>`;
+    html += `<tr>
+      <td>
+        <div class="company-name">${esc(r.company)}</div>
+        ${r.ticker !== '—' ? `<div class="ticker-badge">${esc(r.ticker)}</div>` : ''}
+      </td>
+      <td>${esc(r.date)}</td>
+      <td>${badge}</td>
+      <td>${esc(r.price)}</td>
+      <td>${esc(r.shares)}</td>
+      <td><span class="exch">${esc(r.exchange)}</span></td>
+    </tr>`;
+  });
+  html += '</tbody></table>';
+  document.getElementById('ipo-body').innerHTML = html;
+}
+
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+loadIpos();
+""" + _THEME_JS + """
+</script>
+</body>
+</html>"""
+
 
 FAQ_HTML = """<!DOCTYPE html>
 <html data-theme="dark">
