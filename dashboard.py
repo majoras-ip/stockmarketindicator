@@ -3111,9 +3111,13 @@ def _fetch_ipos() -> list[dict]:
                 continue
             payload = r.json()
             rows_data = payload.get("data", {})
-            for section in ("upcomingTable", "priced"):
-                section_data = rows_data.get(section, {})
-                rows = section_data.get("rows", []) if isinstance(section_data, dict) else []
+            # upcoming: data.upcoming.upcomingTable.rows
+            # priced:   data.priced.rows
+            section_rows = [
+                ("Upcoming", (rows_data.get("upcoming", {}) or {}).get("upcomingTable", {}).get("rows") or []),
+                ("Priced",   (rows_data.get("priced", {}) or {}).get("rows") or []),
+            ]
+            for status, rows in section_rows:
                 for row in rows:
                     company = row.get("companyName", "")
                     ticker  = row.get("proposedTickerSymbol", "") or row.get("symbol", "")
@@ -3124,8 +3128,7 @@ def _fetch_ipos() -> list[dict]:
                     price_range = row.get("proposedSharePrice", "—") or "—"
                     shares      = row.get("sharesOffered", "—") or "—"
                     exchange    = row.get("proposedExchange", "—") or "—"
-                    status      = "Priced" if section == "priced" else "Upcoming"
-                    ipo_date    = (row.get("pricedDate", "") or row.get("expectedPriceDate", "")) if section == "priced" else (row.get("expectedPriceDate", "") or row.get("pricedDate", ""))
+                    ipo_date    = (row.get("pricedDate", "") or row.get("expectedPriceDate", "")) if status == "Priced" else (row.get("expectedPriceDate", "") or row.get("pricedDate", ""))
                     # parse date for sorting — NASDAQ returns M/D/YYYY (no zero-padding)
                     try:
                         parts = ipo_date.strip().split("/")
