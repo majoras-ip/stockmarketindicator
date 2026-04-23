@@ -3111,7 +3111,7 @@ def _fetch_ipos() -> list[dict]:
                 continue
             payload = r.json()
             rows_data = payload.get("data", {})
-            for section in ("upcoming", "priced"):
+            for section in ("upcomingTable", "priced"):
                 section_data = rows_data.get(section, {})
                 rows = section_data.get("rows", []) if isinstance(section_data, dict) else []
                 for row in rows:
@@ -3124,11 +3124,12 @@ def _fetch_ipos() -> list[dict]:
                     price_range = row.get("proposedSharePrice", "—") or "—"
                     shares      = row.get("sharesOffered", "—") or "—"
                     exchange    = row.get("proposedExchange", "—") or "—"
-                    ipo_date    = row.get("expectedPriceDate", "") or row.get("pricedDate", "")
                     status      = "Priced" if section == "priced" else "Upcoming"
-                    # parse date for sorting
+                    ipo_date    = (row.get("pricedDate", "") or row.get("expectedPriceDate", "")) if section == "priced" else (row.get("expectedPriceDate", "") or row.get("pricedDate", ""))
+                    # parse date for sorting — NASDAQ returns M/D/YYYY (no zero-padding)
                     try:
-                        d = datetime.strptime(ipo_date, "%m/%d/%Y")
+                        parts = ipo_date.strip().split("/")
+                        d = datetime(int(parts[2]), int(parts[0]), int(parts[1]))
                         date_str = d.strftime("%b %d, %Y")
                         date_ord = d.toordinal()
                     except Exception:
