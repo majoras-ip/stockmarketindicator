@@ -3305,19 +3305,29 @@ def crypto_heatmap_api():
 
 def _fetch_crypto_funding():
     import requests
-    r = requests.get("https://fapi.binance.com/fapi/v1/premiumIndex",
-                     headers=_CRYPTO_HEADERS, timeout=8)
+    # Bybit linear perpetuals (no geo restrictions)
+    r = requests.get("https://api.bybit.com/v5/market/tickers?category=linear",
+                     headers=_CRYPTO_HEADERS, timeout=10)
     r.raise_for_status()
+    items = r.json().get("result", {}).get("list", [])
     out = []
-    for d in r.json():
+    for d in items:
         sym = d.get("symbol", "")
         if not sym.endswith("USDT"):
             continue
-        rate = float(d.get("lastFundingRate", 0))
+        rate_str = d.get("fundingRate", "")
+        price_str = d.get("markPrice", "0")
+        if not rate_str:
+            continue
+        try:
+            rate = float(rate_str)
+            price = float(price_str)
+        except (ValueError, TypeError):
+            continue
         out.append({
             "symbol": sym.replace("USDT", ""),
             "rate":   round(rate * 100, 4),
-            "price":  round(float(d.get("markPrice", 0)), 4),
+            "price":  round(price, 4),
         })
     out.sort(key=lambda x: abs(x["rate"]), reverse=True)
     return out[:60]
@@ -3415,31 +3425,33 @@ def crypto_onchain_api():
 
 def _fetch_crypto_liq(symbol="BTC"):
     import requests
-    # Long/short ratio as liquidation proxy (Binance public)
+    # Bybit long/short ratio (no geo restrictions)
     r = requests.get(
-        f"https://fapi.binance.com/futures/data/globalLongShortAccountRatio"
-        f"?symbol={symbol}USDT&period=1h&limit=48",
-        headers=_CRYPTO_HEADERS, timeout=8)
+        f"https://api.bybit.com/v5/market/account-ratio"
+        f"?category=linear&symbol={symbol}USDT&period=1h&limit=48",
+        headers=_CRYPTO_HEADERS, timeout=10)
     r.raise_for_status()
-    rows = r.json()
+    rows = r.json().get("result", {}).get("list", [])
     out = []
     for row in rows:
-        out.append({
-            "ts":    row["timestamp"],
-            "long":  round(float(row["longAccount"]) * 100, 2),
-            "short": round(float(row["shortAccount"]) * 100, 2),
-        })
-    # Also grab open interest
+        try:
+            long_r  = round(float(row.get("buyRatio",  0)) * 100, 2)
+            short_r = round(float(row.get("sellRatio", 0)) * 100, 2)
+            ts      = int(row.get("timestamp", 0))
+        except (ValueError, TypeError):
+            continue
+        out.append({"ts": ts, "long": long_r, "short": short_r, "oi": 0})
+    # Open interest from Bybit
     r2 = requests.get(
-        f"https://fapi.binance.com/futures/data/openInterestHist"
-        f"?symbol={symbol}USDT&period=1h&limit=48",
-        headers=_CRYPTO_HEADERS, timeout=8)
-    oi = {}
+        f"https://api.bybit.com/v5/market/open-interest"
+        f"?category=linear&symbol={symbol}USDT&intervalTime=1h&limit=48",
+        headers=_CRYPTO_HEADERS, timeout=10)
     if r2.status_code == 200:
-        for row in r2.json():
-            oi[row["timestamp"]] = round(float(row["sumOpenInterest"]), 2)
-    for row in out:
-        row["oi"] = oi.get(row["ts"], 0)
+        oi_list = r2.json().get("result", {}).get("list", [])
+        oi_map = {int(x["timestamp"]): round(float(x.get("openInterest", 0)), 2) for x in oi_list}
+        for row in out:
+            row["oi"] = oi_map.get(row["ts"], 0)
+    out.sort(key=lambda x: x["ts"])
     return out
 
 @app.route("/crypto/liquidations")
