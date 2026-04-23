@@ -3247,8 +3247,9 @@ def crypto_dominance_page():
     return render_template_string(CRYPTO_DOMINANCE_HTML, current_user=current_user())
 
 @app.route("/api/crypto/dominance")
-@login_required
 def crypto_dominance_api():
+    if "user_id" not in session:
+        return jsonify({"error": "login_required"}), 401
     if _get_user_plan(session.get("user_id")) == "free":
         return jsonify({"error": "upgrade_required"}), 403
     import time
@@ -3338,8 +3339,9 @@ def crypto_funding_page():
     return render_template_string(CRYPTO_FUNDING_HTML, current_user=current_user())
 
 @app.route("/api/crypto/funding")
-@login_required
 def crypto_funding_api():
+    if "user_id" not in session:
+        return jsonify({"error": "login_required"}), 401
     if _get_user_plan(session.get("user_id")) == "free":
         return jsonify({"error": "upgrade_required"}), 403
     import time
@@ -3404,8 +3406,9 @@ def crypto_onchain_page():
     return render_template_string(CRYPTO_ONCHAIN_HTML, current_user=current_user())
 
 @app.route("/api/crypto/onchain")
-@login_required
 def crypto_onchain_api():
+    if "user_id" not in session:
+        return jsonify({"error": "login_required"}), 401
     if _get_user_plan(session.get("user_id")) == "free":
         return jsonify({"error": "upgrade_required"}), 403
     import time
@@ -3472,8 +3475,9 @@ def crypto_liquidations_page():
     return render_template_string(CRYPTO_LIQUIDATIONS_HTML, current_user=current_user())
 
 @app.route("/api/crypto/liquidations")
-@login_required
 def crypto_liquidations_api():
+    if "user_id" not in session:
+        return jsonify({"error": "login_required"}), 401
     if _get_user_plan(session.get("user_id")) not in ("basic", "pro"):
         return jsonify({"error": "upgrade_required"}), 403
     symbol = request.args.get("symbol", "BTC").upper()[:10]
@@ -6365,8 +6369,8 @@ function load(){
   var sym=document.getElementById('sym-sel').value;
   document.getElementById('liq-chart').innerHTML='<div class="loading">Loading '+sym+'…</div>';
   document.getElementById('stats-row').innerHTML='';
-  fetch('/api/crypto/liquidations?symbol='+sym).then(r=>r.json()).then(d=>{
-    if(d.error){document.getElementById('liq-chart').innerHTML='<div class="err">'+d.error+'</div>';return;}
+  fetch('/api/crypto/liquidations?symbol='+sym).then(function(r){return r.json();}).then(function(d){
+    if(d.error){document.getElementById('liq-chart').innerHTML='<div class="err">Error: '+d.error+'</div>';return;}
     var rows=d.history||[];
     var sr=document.getElementById('stats-row');
     var curRate=rows.length?rows[rows.length-1].rate:0;
@@ -6389,7 +6393,7 @@ function load(){
       yaxis:{gridcolor:'#21262d',title:'Funding Rate %'},
       showlegend:false
     },{responsive:true,displayModeBar:false});
-  });
+  }).catch(function(e){document.getElementById('liq-chart').innerHTML='<div class="err">Failed to load: '+e+'</div>';});
 }
 load();
 </script>
