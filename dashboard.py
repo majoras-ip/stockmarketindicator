@@ -6358,7 +6358,7 @@ CRYPTO_LIQUIDATIONS_HTML = """<!DOCTYPE html>
   <p class="sub">Long/short ratio &amp; open interest · Binance perpetuals · last 48 hours</p>
   <div class="controls">
     <select id="sym-sel" onchange="load()">
-      <option>BTC</option><option>ETH</option><option>SOL</option><option>BNB</option><option>XRP</option>
+      <option>BTC</option><option>ETH</option><option>SOL</option><option>XRP</option>
     </select>
   </div>
   <div class="stats-row" id="stats-row"></div>
