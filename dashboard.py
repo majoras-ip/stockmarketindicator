@@ -5488,10 +5488,10 @@ FAQ_HTML = """<!DOCTYPE html>
       padding: 18px 0; cursor: pointer; display: flex; justify-content: space-between; align-items: center;
     }
     .faq-q:hover { color: var(--accent); }
-    .faq-q .arrow { color: var(--muted); font-size: 0.8rem; transition: transform 0.2s; }
+    .faq-q .arrow { color: var(--muted); font-size: 0.8rem; transition: transform 0.28s cubic-bezier(0.4,0,0.2,1); }
     .faq-q.open .arrow { transform: rotate(90deg); }
-    .faq-a { color: var(--muted); font-size: 0.88rem; line-height: 1.7; padding-bottom: 18px; display: none; }
-    .faq-a.open { display: block; }
+    .faq-a { color: var(--muted); font-size: 0.88rem; line-height: 1.7; max-height: 0; overflow: hidden; transition: max-height 0.32s cubic-bezier(0.4,0,0.2,1), padding 0.2s ease; padding: 0; }
+    .faq-a.open { max-height: 600px; padding-bottom: 18px; }
     .faq-a a { color: var(--accent); text-decoration: none; }
     .section-title { color: var(--muted); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.1em; margin: 32px 0 8px; }
     footer { text-align: center; padding: 32px 24px; color: var(--muted); font-size: 0.8rem; border-top: 1px solid var(--border); margin-top: 40px; }
@@ -5513,41 +5513,42 @@ FAQ_HTML = """<!DOCTYPE html>
 
   <div class="faq-item">
     <button class="faq-q" onclick="toggleFaq(this)">What is ChartEdge? <span class="arrow">▶</span></button>
-    <div class="faq-a">ChartEdge is a free platform that provides Pine Script indicators for TradingView. All indicators work on free TradingView accounts — no paid plan required.</div>
+    <div class="faq-a">ChartEdge is a market intelligence dashboard built for retail traders. It combines 20+ free Pine Script indicators with professional-grade tools including live options flow, insider trading disclosures, gamma exposure charts, LSTM volatility forecasts, a pre-market scanner, and more — all in one place. Most tools are available free or with a 7-day trial on paid plans.</div>
+  </div>
+  <div class="faq-item">
+    <button class="faq-q" onclick="toggleFaq(this)">What is Pine Script? <span class="arrow">▶</span></button>
+    <div class="faq-a">Pine Script is TradingView's built-in scripting language for creating custom indicators and strategies directly on your charts. ChartEdge generates ready-to-use Pine Script v6 code — you just copy it and paste it into TradingView's Pine Script editor, and it appears on your chart instantly. No coding knowledge required.</div>
   </div>
   <div class="faq-item">
     <button class="faq-q" onclick="toggleFaq(this)">How do I add an indicator to TradingView? <span class="arrow">▶</span></button>
-    <div class="faq-a">1. Go to the Indicators page and pick an indicator.<br>2. Click <strong>Copy</strong> to copy the Pine Script code.<br>3. In TradingView, open the Pine Script editor (bottom of the chart).<br>4. Paste the code and click <strong>Add to chart</strong>.<br><br><strong>OR</strong><br><br>1. Go to the Indicators page and pick an indicator.<br>2. Click <strong>Source code</strong> on the indicator in TradingView.<br>3. Create a working copy and delete the original code.<br>4. Paste the code you want to use and click <strong>Add to chart</strong>.</div>
+    <div class="faq-a">1. Go to the Indicators page and pick an indicator.<br>2. Click <strong>Copy</strong> to copy the Pine Script code.<br>3. In TradingView, open the Pine Script editor (bottom of the chart).<br>4. Paste the code and click <strong>Add to chart</strong>.</div>
+  </div>
+  <div class="faq-item">
+    <button class="faq-q" onclick="toggleFaq(this)">Can I use a different trading platform? <span class="arrow">▶</span></button>
+    <div class="faq-a">The Pine Script indicators are exclusive to TradingView — they won't work on ThinkOrSwim, MetaTrader, or other platforms. However, all of ChartEdge's other tools (options flow, insider trading, gamma exposure, market heatmap, earnings calendar, etc.) run entirely in your browser and work alongside any broker or trading platform you use.</div>
   </div>
   <div class="faq-item">
     <button class="faq-q" onclick="toggleFaq(this)">Do I need a paid TradingView account? <span class="arrow">▶</span></button>
     <div class="faq-a">No. All indicators on ChartEdge are written in Pine Script v6 and work on free TradingView accounts.</div>
   </div>
 
-  <div class="section-title">Indicators</div>
+  <div class="section-title">Account & Pricing</div>
 
   <div class="faq-item">
-    <button class="faq-q" onclick="toggleFaq(this)">What is VWAP and when should I use it? <span class="arrow">▶</span></button>
-    <div class="faq-a">VWAP (Volume Weighted Average Price) is the average price weighted by volume. It resets each day at market open. Traders use it as a benchmark — price above VWAP = buyers in control, price below = sellers. Best used on intraday charts (1m–1h).</div>
+    <button class="faq-q" onclick="toggleFaq(this)">Is ChartEdge free? <span class="arrow">▶</span></button>
+    <div class="faq-a">The core features are free — all Pine Script indicators, the market heatmap, earnings calendar, dividends calendar, unusual volume scanner, and news feed are available without paying. Basic ($9.99/mo) and Pro ($15.99/mo) plans unlock advanced tools like options flow, insider trading, gamma exposure, and the LSTM forecast. Your first paid subscription includes a 7-day free trial.</div>
   </div>
   <div class="faq-item">
-    <button class="faq-q" onclick="toggleFaq(this)">What does the Fear & Greed indicator measure? <span class="arrow">▶</span></button>
-    <div class="faq-a">It combines five factors — RSI, price vs 125-day MA, Bollinger Band width, VIX, and 52-week momentum — into a single 0–100 score. Below 25 = Extreme Fear (potential buying opportunity), above 75 = Extreme Greed (market may be overheated).</div>
+    <button class="faq-q" onclick="toggleFaq(this)">Is there a free trial for paid plans? <span class="arrow">▶</span></button>
+    <div class="faq-a">Yes — your first subscription (Basic or Pro, monthly or yearly) includes a 7-day free trial. You won't be charged until the trial ends, and you can cancel any time before that with no cost.</div>
   </div>
-  <div class="faq-item">
-    <button class="faq-q" onclick="toggleFaq(this)">What is Unusual Options Volume? <span class="arrow">▶</span></button>
-    <div class="faq-a">It shows today's volume as a multiple of the recent average. A ⚡ spike (red bar) means volume is 2× or more above normal, which can signal institutional activity or an upcoming move. High spikes before earnings or news are especially significant.</div>
-  </div>
-  <div class="faq-item">
-    <button class="faq-q" onclick="toggleFaq(this)">What is the Supertrend indicator? <span class="arrow">▶</span></button>
-    <div class="faq-a">Supertrend is a trend-following indicator that uses ATR to draw a dynamic support/resistance line. When it flips from red to green, a BUY signal appears. When it flips from green to red, a SELL signal appears. It works on any timeframe but is most reliable on 1h+ charts.</div>
-  </div>
-
-  <div class="section-title">Account</div>
-
   <div class="faq-item">
     <button class="faq-q" onclick="toggleFaq(this)">Do I need an account? <span class="arrow">▶</span></button>
-    <div class="faq-a">No — all indicators are free without an account. An account lets you save favorites and vote on indicators.</div>
+    <div class="faq-a">No — all free tools work without an account. An account lets you save favorites, track your daily copy limit, and access paid plan features if you subscribe.</div>
+  </div>
+  <div class="faq-item">
+    <button class="faq-q" onclick="toggleFaq(this)">Can I cancel my subscription? <span class="arrow">▶</span></button>
+    <div class="faq-a">Absolutely. You can manage or cancel your subscription at any time from the Billing page. There are no cancellation fees and your access continues until the end of the billing period you already paid for.</div>
   </div>
   <div class="faq-item">
     <button class="faq-q" onclick="toggleFaq(this)">How do I request a new indicator? <span class="arrow">▶</span></button>
@@ -5559,10 +5560,6 @@ FAQ_HTML = """<!DOCTYPE html>
   <div class="faq-item">
     <button class="faq-q" onclick="toggleFaq(this)">Is this financial advice? <span class="arrow">▶</span></button>
     <div class="faq-a">No. ChartEdge provides tools for analysis only. Nothing on this site should be considered financial advice. Always do your own research before making trading decisions.</div>
-  </div>
-  <div class="faq-item">
-    <button class="faq-q" onclick="toggleFaq(this)">Is ChartEdge free? <span class="arrow">▶</span></button>
-    <div class="faq-a">Yes, completely free. No subscriptions, no paywalls.</div>
   </div>
 
 </div>
