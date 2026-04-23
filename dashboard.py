@@ -5007,6 +5007,27 @@ HOME_HTML = """<!DOCTYPE html>
       </div>
       <div class="faq-a">Absolutely. You can manage or cancel your subscription at any time from the Billing page. There are no cancellation fees and your access continues until the end of the billing period you already paid for.</div>
     </div>
+    <div class="faq-item">
+      <div class="faq-q" onclick="toggleFaq(this)">
+        What is Pine Script?
+        <span class="faq-chevron">▼</span>
+      </div>
+      <div class="faq-a">Pine Script is TradingView's built-in scripting language for creating custom indicators and strategies directly on your charts. ChartEdge generates ready-to-use Pine Script v6 code — you just copy it and paste it into TradingView's Pine Script editor, and it appears on your chart instantly. No coding knowledge required.</div>
+    </div>
+    <div class="faq-item">
+      <div class="faq-q" onclick="toggleFaq(this)">
+        What is ChartEdge?
+        <span class="faq-chevron">▼</span>
+      </div>
+      <div class="faq-a">ChartEdge is a market intelligence dashboard built for retail traders. It combines 20+ free Pine Script indicators with professional-grade tools including live options flow, insider trading disclosures, gamma exposure charts, LSTM volatility forecasts, a pre-market scanner, and more — all in one place. Most tools are available free or with a 7-day trial on paid plans.</div>
+    </div>
+    <div class="faq-item">
+      <div class="faq-q" onclick="toggleFaq(this)">
+        Can I use a different trading platform?
+        <span class="faq-chevron">▼</span>
+      </div>
+      <div class="faq-a">The Pine Script indicators are exclusive to TradingView — they won't work on ThinkOrSwim, MetaTrader, or other platforms. However, all of ChartEdge's other tools (options flow, insider trading, gamma exposure, market heatmap, earnings calendar, etc.) run entirely in your browser and work alongside any broker or trading platform you use.</div>
+    </div>
   </div>
 </div>
 
