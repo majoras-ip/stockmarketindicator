@@ -8993,7 +8993,7 @@ VOLFORECAST_HTML = """<!DOCTYPE html>
 
   <div class="tv-banner">
     <span class="tv-logo">📊</span>
-    <span><strong style="color:#3fb950">✓ Works on free TradingView accounts</strong> — This forecast is designed to complement TradingView's charting tools. No paid TradingView plan required.</span>
+    <span><strong>TradingView subscription required</strong> — A paid TradingView plan is required to use this tool.</span>
   </div>
 
   <div class="controls">
