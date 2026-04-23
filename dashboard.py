@@ -6024,8 +6024,8 @@ CRYPTO_FEARGREED_HTML = """<!DOCTYPE html>
 </div>
 <footer>© 2026 ChartEdge · Not financial advice</footer>
 <script>""" + _THEME_JS + """
-fetch('/api/crypto/feargreed').then(r=>r.json()).then(d=>{
-  if(d.error){document.querySelector('.page').innerHTML='<div class="err">'+d.error+'</div>';return;}
+fetch('/api/crypto/feargreed').then(function(r){return r.json();}).then(function(d){
+  if(d.error){document.querySelector('.page').innerHTML='<div class="err">Error: '+d.error+'</div>';return;}
   var items=d.data;
   var cur=items[0];
   var score=cur.value;
@@ -6068,7 +6068,7 @@ fetch('/api/crypto/feargreed').then(r=>r.json()).then(d=>{
     yaxis:{gridcolor:'#21262d',range:[0,100]},
     showlegend:false
   },{responsive:true,displayModeBar:false});
-});
+}).catch(function(e){document.querySelector('.page').innerHTML='<div class="err">Failed: '+e+'</div>';});
 </script>
 </body></html>"""
 
@@ -6102,8 +6102,8 @@ CRYPTO_DOMINANCE_HTML = """<!DOCTYPE html>
 <footer>© 2026 ChartEdge · Not financial advice</footer>
 <script>""" + _THEME_JS + """
 function fmt(n){if(!n)return'—';if(n>=1e12)return'$'+(n/1e12).toFixed(2)+'T';if(n>=1e9)return'$'+(n/1e9).toFixed(2)+'B';return'$'+n.toLocaleString();}
-fetch('/api/crypto/dominance').then(r=>r.json()).then(d=>{
-  if(d.error){document.querySelector('.page').innerHTML='<div class="err">'+d.error+'</div>';return;}
+fetch('/api/crypto/dominance').then(function(r){return r.json();}).then(function(d){
+  if(d.error){document.querySelector('.page').innerHTML='<div class="err">Error: '+d.error+'</div>';return;}
   var sr=document.getElementById('stats-row');
   sr.innerHTML=[
     {v:d.btc+'%',l:'BTC Dominance'},{v:d.eth+'%',l:'ETH Dominance'},
@@ -6121,7 +6121,7 @@ fetch('/api/crypto/dominance').then(r=>r.json()).then(d=>{
     font:{color:'#e6edf3',size:12},margin:{t:20,b:20,l:20,r:20},
     showlegend:true,legend:{orientation:'v',x:1.02,y:.5,font:{size:11}}
   },{responsive:true,displayModeBar:false});
-});
+}).catch(function(e){document.querySelector('.page').innerHTML='<div class="err">Failed: '+e+'</div>';});
 </script>
 </body></html>"""
 
@@ -6168,7 +6168,8 @@ function chgColor(v){
   if(v<=-5)return'#b91c1c';if(v<=-2)return'#f85149';if(v<0)return'#6b2020';
   if(v===0)return'#2d2d2d';if(v<=2)return'#1a3d1a';if(v<=5)return'#3fb950';return'#22c55e';
 }
-fetch('/api/crypto/heatmap').then(r=>r.json()).then(d=>{
+fetch('/api/crypto/heatmap').then(function(r){return r.json();}).then(function(d){
+  if(d.error){document.getElementById('hm-wrap').innerHTML='<div class="err">Error: '+d.error+'</div>';return;}
   var coins=d.coins;
   var wrap=document.getElementById('hm-wrap');
   wrap.innerHTML='';
@@ -6189,7 +6190,7 @@ fetch('/api/crypto/heatmap').then(r=>r.json()).then(d=>{
     }
     wrap.appendChild(el);
   });
-});
+}).catch(function(e){document.getElementById('hm-wrap').innerHTML='<div class="err">Failed: '+e+'</div>';});
 </script>
 </body></html>"""
 
@@ -6247,11 +6248,11 @@ function renderTable(rows){
   html+='</tbody></table>';
   document.getElementById('tbl-wrap').innerHTML=html;
 }
-fetch('/api/crypto/funding').then(r=>r.json()).then(d=>{
-  if(d.error){document.getElementById('tbl-wrap').innerHTML='<div class="err">'+d.error+'</div>';return;}
+fetch('/api/crypto/funding').then(function(r){return r.json();}).then(function(d){
+  if(d.error){document.getElementById('tbl-wrap').innerHTML='<div class="err">Error: '+d.error+'</div>';return;}
   _rows=d.rates;
   renderTable(_rows);
-});
+}).catch(function(e){document.getElementById('tbl-wrap').innerHTML='<div class="err">Failed: '+e+'</div>';});
 </script>
 </body></html>"""
 
@@ -6288,8 +6289,8 @@ CRYPTO_ONCHAIN_HTML = """<!DOCTYPE html>
 function fmt(n){if(!n)return'—';if(n>=1e12)return'$'+(n/1e12).toFixed(2)+'T';if(n>=1e9)return'$'+(n/1e9).toFixed(2)+'B';if(n>=1e6)return'$'+(n/1e6).toFixed(2)+'M';return'$'+n.toLocaleString();}
 function fmtN(n){if(!n)return'—';if(n>=1e9)return(n/1e9).toFixed(2)+'B';if(n>=1e6)return(n/1e6).toFixed(2)+'M';if(n>=1e3)return(n/1e3).toFixed(1)+'K';return n.toLocaleString();}
 function chgHtml(v){var c=v>=0?'chg-pos':'chg-neg';var s=v>=0?'+':'';return'<span class="'+c+'">'+s+v+'%</span>';}
-fetch('/api/crypto/onchain').then(r=>r.json()).then(d=>{
-  if(d.error){document.getElementById('content').innerHTML='<div class="err">'+d.error+'</div>';return;}
+fetch('/api/crypto/onchain').then(function(r){return r.json();}).then(function(d){
+  if(d.error){document.getElementById('content').innerHTML='<div class="err">Error: '+d.error+'</div>';return;}
   var html='';
   // BTC network
   if(d.btc_chain){
@@ -6329,7 +6330,7 @@ fetch('/api/crypto/onchain').then(r=>r.json()).then(d=>{
     html+='</div>';
   }
   document.getElementById('content').innerHTML=html||'<div class="err">No data available.</div>';
-});
+}).catch(function(e){document.getElementById('content').innerHTML='<div class="err">Failed: '+e+'</div>';});
 </script>
 </body></html>"""
 
@@ -6427,8 +6428,8 @@ CRYPTO_UPCOMING_HTML = """<!DOCTYPE html>
 </div>
 <footer>© 2026 ChartEdge · Not financial advice</footer>
 <script>""" + _THEME_JS + """
-fetch('/api/crypto/upcoming').then(r=>r.json()).then(d=>{
-  if(d.error){document.getElementById('tbl-wrap').innerHTML='<div class="err">'+d.error+'</div>';return;}
+fetch('/api/crypto/upcoming').then(function(r){return r.json();}).then(function(d){
+  if(d.error){document.getElementById('tbl-wrap').innerHTML='<div class="err">Error: '+d.error+'</div>';return;}
   var rows=d.coins;
   if(!rows.length){document.getElementById('tbl-wrap').innerHTML='<div class="loading">No data.</div>';return;}
   var html='<table><thead><tr><th>Trending</th><th>Symbol</th><th>Name</th><th>Market Cap Rank</th><th>Price (BTC)</th></tr></thead><tbody>';
@@ -6443,7 +6444,7 @@ fetch('/api/crypto/upcoming').then(r=>r.json()).then(d=>{
   });
   html+='</tbody></table>';
   document.getElementById('tbl-wrap').innerHTML=html;
-});
+}).catch(function(e){document.getElementById('tbl-wrap').innerHTML='<div class="err">Failed: '+e+'</div>';});
 </script>
 </body></html>"""
 
