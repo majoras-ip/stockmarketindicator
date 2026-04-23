@@ -5544,7 +5544,7 @@ FAQ_HTML = """<!DOCTYPE html>
   </div>
   <div class="faq-item">
     <button class="faq-q" onclick="toggleFaq(this)">Do I need an account? <span class="arrow">▶</span></button>
-    <div class="faq-a">No — all free tools work without an account. An account lets you save favorites, track your daily copy limit, and access paid plan features if you subscribe.</div>
+    <div class="faq-a">Yes — you need a free account to copy indicators. Sign up takes under a minute and gives you 3 free copies per day. An account also lets you save favorites and access paid plan features if you subscribe.</div>
   </div>
   <div class="faq-item">
     <button class="faq-q" onclick="toggleFaq(this)">Can I cancel my subscription? <span class="arrow">▶</span></button>
