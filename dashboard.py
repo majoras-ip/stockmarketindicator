@@ -6383,15 +6383,21 @@ function load(){
     ].map(function(s){return'<div class="stat"><div class="sv">'+s.v+'</div><div class="sl">'+s.l+'</div></div>';}).join('');
     if(!rows.length){document.getElementById('liq-chart').innerHTML='<div class="loading">No history available.</div>';return;}
     var times=rows.map(function(r){return new Date(r.ts).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});});
-    var rates=rows.map(function(r){return r.rate;});
+    // Convert to basis points (×10000) so values are readable (e.g. 1.2 bps instead of 0.00012%)
+    var rates=rows.map(function(r){return parseFloat((r.rate*100).toFixed(4));});
     var colors=rates.map(function(v){return v>=0?'#3fb950':'#f85149';});
-    Plotly.react('liq-chart',[
-      {x:times,y:rates,type:'bar',marker:{color:colors},name:'Funding Rate %'},
+    var absMax=Math.max.apply(null,rates.map(Math.abs))||0.01;
+    document.getElementById('liq-chart').innerHTML='';
+    Plotly.newPlot('liq-chart',[
+      {x:times,y:rates,type:'bar',marker:{color:colors},name:'Funding Rate (bps)'},
     ],{
       paper_bgcolor:'#161b22',plot_bgcolor:'#161b22',
-      font:{color:'#e6edf3',size:11},margin:{t:10,b:60,l:60,r:10},
-      xaxis:{gridcolor:'#21262d',tickangle:-30},
-      yaxis:{gridcolor:'#21262d',title:'Funding Rate %'},
+      font:{color:'#e6edf3',size:11},
+      height:360,
+      margin:{t:10,b:80,l:60,r:10},
+      xaxis:{gridcolor:'#21262d',tickangle:-45,nticks:12},
+      yaxis:{gridcolor:'#21262d',title:'Funding Rate (bps)',range:[-absMax*1.3,absMax*1.3]},
+      shapes:[{type:'line',x0:0,x1:1,xref:'paper',y0:0,y1:0,line:{color:'#8b949e',width:1,dash:'dot'}}],
       showlegend:false
     },{responsive:true,displayModeBar:false});
   }).catch(function(e){document.getElementById('liq-chart').innerHTML='<div class="err">Failed to load: '+e+'</div>';});
