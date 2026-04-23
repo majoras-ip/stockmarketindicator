@@ -4381,7 +4381,7 @@ HOME_HTML = """<!DOCTYPE html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">""" + _META + """
-  <title>ChartEdge — Free TradingView Pine Script Indicators</title>
+  <title>ChartEdge — Market Intelligence for Retail Traders</title>
   <style>
     :root[data-theme="dark"]  { --bg:#0d1117; --bg2:#161b22; --bg3:#21262d; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --green:#3fb950; --red:#f85149; }
     :root[data-theme="light"] { --bg:#ffffff; --bg2:#f6f8fa; --bg3:#eaeef2; --border:#d0d7de; --text:#1f2328; --muted:#636c76; --accent:#0969da; --green:#1a7f37; --red:#cf222e; }
@@ -4395,43 +4395,99 @@ HOME_HTML = """<!DOCTYPE html>
     .logo { color: var(--accent); font-size: 1.1rem; font-weight: bold; text-decoration: none; }
 """ + _NAV_CSS + """
 
+    /* Ticker tape */
+    .ticker-tape {
+      background: var(--bg3); border-bottom: 1px solid var(--border);
+      overflow: hidden; white-space: nowrap; padding: 7px 0; font-size: 0.75rem;
+    }
+    .ticker-inner { display: inline-block; animation: ticker-scroll 40s linear infinite; }
+    .ticker-inner:hover { animation-play-state: paused; }
+    @keyframes ticker-scroll { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
+    .tick { display: inline-block; margin: 0 28px; color: var(--muted); }
+    .tick .sym { color: var(--text); font-weight: 700; margin-right: 6px; }
+    .tick .up { color: #3fb950; }
+    .tick .down { color: #f85149; }
+
     /* Hero */
     .hero {
-      text-align: center; padding: 80px 24px 60px;
-      background: linear-gradient(180deg, var(--bg2) 0%, var(--bg) 100%);
+      text-align: center; padding: 72px 24px 56px;
+      background: radial-gradient(ellipse 80% 60% at 50% 0%, rgba(88,166,255,0.07) 0%, transparent 70%), var(--bg);
       border-bottom: 1px solid var(--border);
     }
-    .hero h1 { font-size: 2.4rem; line-height: 1.25; margin-bottom: 16px; }
+    .hero-eyebrow {
+      display: inline-flex; align-items: center; gap: 8px; margin-bottom: 24px;
+      background: var(--bg2); border: 1px solid var(--border);
+      padding: 5px 16px; border-radius: 20px; font-size: 0.75rem; color: var(--muted);
+    }
+    .hero-eyebrow .dot { width: 7px; height: 7px; border-radius: 50%; background: #3fb950; display: inline-block; animation: pulse 2s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:0.3;} }
+    .hero h1 { font-size: 2.8rem; line-height: 1.18; margin-bottom: 20px; letter-spacing: -0.02em; }
     .hero h1 span { color: var(--accent); }
-    .hero p { color: var(--muted); font-size: 1rem; max-width: 540px; margin: 0 auto 28px; line-height: 1.7; }
-    .hero-btns { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+    .hero p { color: var(--muted); font-size: 1rem; max-width: 560px; margin: 0 auto 32px; line-height: 1.75; }
+    .hero-btns { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-bottom: 52px; }
     .btn-primary {
       background: var(--accent); color: #fff; border: none;
-      padding: 11px 28px; border-radius: 8px; font-family: monospace;
+      padding: 12px 30px; border-radius: 8px; font-family: monospace;
       font-size: 0.95rem; font-weight: bold; text-decoration: none; cursor: pointer;
     }
     .btn-primary:hover { opacity: 0.88; }
     .btn-secondary {
       background: var(--bg2); color: var(--text); border: 1px solid var(--border);
-      padding: 11px 28px; border-radius: 8px; font-family: monospace;
+      padding: 12px 30px; border-radius: 8px; font-family: monospace;
       font-size: 0.95rem; text-decoration: none;
     }
-    .btn-secondary:hover { border-color: var(--accent); }
-    .badge { display: inline-block; margin-bottom: 20px; background: var(--bg3); border: 1px solid var(--border); color: var(--muted); padding: 4px 14px; border-radius: 20px; font-size: 0.8rem; }
+    .btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
 
-    /* Features */
-    .section { max-width: 860px; margin: 0 auto; padding: 60px 24px; }
+    /* Tool cards hero grid */
+    .hero-tools { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; max-width: 900px; margin: 0 auto; }
+    .hero-tool {
+      background: var(--bg2); border: 1px solid var(--border); border-radius: 10px;
+      padding: 18px 20px; text-align: left; text-decoration: none;
+      transition: border-color 0.15s, transform 0.15s; position: relative; overflow: hidden;
+    }
+    .hero-tool:hover { border-color: var(--accent); transform: translateY(-2px); }
+    .hero-tool::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; }
+    .hero-tool.blue::before  { background: linear-gradient(90deg, #58a6ff, #79c0ff); }
+    .hero-tool.green::before { background: linear-gradient(90deg, #3fb950, #56d364); }
+    .hero-tool.orange::before{ background: linear-gradient(90deg, #e3b341, #ffa657); }
+    .hero-tool.purple::before{ background: linear-gradient(90deg, #bc8cff, #d2a8ff); }
+    .hero-tool-icon { font-size: 1.4rem; margin-bottom: 8px; }
+    .hero-tool-name { font-size: 0.88rem; font-weight: 700; color: var(--text); margin-bottom: 3px; }
+    .hero-tool-desc { font-size: 0.75rem; color: var(--muted); line-height: 1.4; }
+    .hero-tool-tag { display: inline-block; font-size: 0.63rem; font-weight: 700; padding: 1px 7px; border-radius: 8px; margin-top: 8px; }
+    .tag-free   { background: #1f2d1f; color: #3fb950; }
+    .tag-basic  { background: #1a2d3d; color: #58a6ff; }
+    .tag-pro    { background: #2d1f10; color: #e3b341; }
+
+    /* Stats strip */
+    .stats-strip { display: flex; justify-content: center; gap: 0; flex-wrap: wrap; background: var(--bg2); border-bottom: 1px solid var(--border); }
+    .stat-item { padding: 18px 36px; text-align: center; border-right: 1px solid var(--border); }
+    .stat-item:last-child { border-right: none; }
+    .stat-num { font-size: 1.5rem; font-weight: 800; color: var(--accent); }
+    .stat-label { font-size: 0.74rem; color: var(--muted); margin-top: 2px; }
+
+    /* Section */
+    .section { max-width: 900px; margin: 0 auto; padding: 60px 24px; }
     .section h2 { font-size: 1.4rem; margin-bottom: 32px; text-align: center; }
     .section h2 span { color: var(--accent); }
-    .features { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 20px; }
-    .feature {
+
+    /* Intelligence grid */
+    .intel-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
+    .intel-card {
       background: var(--bg2); border: 1px solid var(--border); border-radius: 10px;
-      padding: 22px; transition: border-color 0.15s;
+      padding: 24px; position: relative; overflow: hidden; transition: border-color 0.15s;
     }
-    .feature:hover { border-color: var(--accent); }
-    .feature-icon { font-size: 1.6rem; margin-bottom: 10px; }
-    .feature h3 { font-size: 0.95rem; margin-bottom: 6px; }
-    .feature p { color: var(--muted); font-size: 0.82rem; line-height: 1.55; }
+    .intel-card:hover { border-color: var(--accent); }
+    .intel-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; }
+    .intel-card.blue::before   { background: linear-gradient(90deg, #58a6ff, #79c0ff); }
+    .intel-card.green::before  { background: linear-gradient(90deg, #3fb950, #56d364); }
+    .intel-card.orange::before { background: linear-gradient(90deg, #e3b341, #ffa657); }
+    .intel-card.purple::before { background: linear-gradient(90deg, #bc8cff, #d2a8ff); }
+    .intel-card.red::before    { background: linear-gradient(90deg, #f85149, #ff7b72); }
+    .intel-tag { display: inline-block; font-size: 0.65rem; font-weight: 700; padding: 2px 8px; border-radius: 10px; margin-bottom: 12px; }
+    .intel-card-icon { font-size: 1.6rem; margin-bottom: 10px; }
+    .intel-card h3 { font-size: 0.95rem; margin-bottom: 6px; }
+    .intel-card p { color: var(--muted); font-size: 0.82rem; line-height: 1.55; }
 
     /* Indicators preview */
     .ind-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; margin-top: 28px; }
@@ -4455,59 +4511,11 @@ HOME_HTML = """<!DOCTYPE html>
     /* Divider */
     .divider { border: none; border-top: 1px solid var(--border); margin: 0; }
 
-    /* Hero preview */
-    .hero-preview {
-      margin: 40px auto 0; max-width: 680px;
-      background: #0d1117; border: 1px solid #30363d; border-radius: 10px;
-      overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,0.5);
-    }
-    .preview-bar {
-      background: #161b22; border-bottom: 1px solid #30363d;
-      padding: 8px 14px; display: flex; align-items: center; gap: 8px;
-    }
-    .preview-dot { width: 10px; height: 10px; border-radius: 50%; }
-    .preview-title { color: #8b949e; font-size: 0.75rem; margin-left: 6px; }
-    .preview-body { padding: 16px; }
-
-    /* Stats strip */
-    .stats-strip {
-      display: flex; justify-content: center; gap: 0; flex-wrap: wrap;
-      background: var(--bg2); border-bottom: 1px solid var(--border);
-    }
-    .stat-item {
-      padding: 18px 32px; text-align: center; border-right: 1px solid var(--border);
-    }
-    .stat-item:last-child { border-right: none; }
-    .stat-num { font-size: 1.5rem; font-weight: 800; color: var(--accent); }
-    .stat-label { font-size: 0.75rem; color: var(--muted); margin-top: 2px; }
-
-    /* Pro features section */
-    .pro-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
-    .pro-card {
-      background: var(--bg2); border: 1px solid var(--border); border-radius: 10px;
-      padding: 22px; position: relative; overflow: hidden;
-    }
-    .pro-card::before {
-      content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
-      background: linear-gradient(90deg, var(--accent), #79c0ff);
-    }
-    .pro-card.green::before { background: linear-gradient(90deg, #3fb950, #56d364); }
-    .pro-card.orange::before { background: linear-gradient(90deg, #e3b341, #ffa657); }
-    .pro-card-tag {
-      display: inline-block; font-size: 0.68rem; font-weight: 700; padding: 2px 8px;
-      border-radius: 10px; margin-bottom: 10px;
-    }
-    .tag-pro { background: #1f3a5f; color: var(--accent); }
-    .tag-basic { background: #1f2d1f; color: #3fb950; }
-    .pro-card h3 { font-size: 0.95rem; margin-bottom: 6px; }
-    .pro-card p { color: var(--muted); font-size: 0.82rem; line-height: 1.55; }
-    .pro-card-icon { font-size: 1.5rem; margin-bottom: 10px; }
-
     /* Pricing teaser */
     .pricing-teaser {
       background: linear-gradient(135deg, var(--bg2) 0%, var(--bg) 100%);
       border: 1px solid var(--border); border-radius: 12px;
-      padding: 40px 32px; text-align: center; margin-top: 0;
+      padding: 40px 32px; text-align: center;
     }
     .pricing-teaser h2 { font-size: 1.4rem; margin-bottom: 8px; }
     .pricing-teaser h2 span { color: var(--accent); }
@@ -4526,21 +4534,11 @@ HOME_HTML = """<!DOCTYPE html>
 
     /* FAQ */
     .faq-list { margin-top: 0; }
-    .faq-item {
-      background: var(--bg2); border: 1px solid var(--border); border-radius: 8px;
-      margin-bottom: 8px; overflow: hidden;
-    }
-    .faq-q {
-      padding: 16px 20px; cursor: pointer; font-size: 0.9rem; font-weight: 600;
-      display: flex; justify-content: space-between; align-items: center;
-      user-select: none;
-    }
+    .faq-item { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; margin-bottom: 8px; overflow: hidden; }
+    .faq-q { padding: 16px 20px; cursor: pointer; font-size: 0.9rem; font-weight: 600; display: flex; justify-content: space-between; align-items: center; user-select: none; }
     .faq-q:hover { background: var(--bg3); }
     .faq-chevron { color: var(--muted); font-size: 0.8rem; transition: transform .2s; }
-    .faq-a {
-      display: none; padding: 0 20px 16px; color: var(--muted);
-      font-size: 0.85rem; line-height: 1.65;
-    }
+    .faq-a { display: none; padding: 0 20px 16px; color: var(--muted); font-size: 0.85rem; line-height: 1.65; }
     .faq-item.open .faq-a { display: block; }
     .faq-item.open .faq-chevron { transform: rotate(180deg); }
 
@@ -4554,136 +4552,165 @@ HOME_HTML = """<!DOCTYPE html>
   <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
 </nav>
 
+<!-- Ticker tape -->
+<div class="ticker-tape">
+  <div class="ticker-inner">
+    <span class="tick"><span class="sym">SPY</span><span class="up">592.14 +0.84%</span></span>
+    <span class="tick"><span class="sym">AAPL</span><span class="up">213.42 +1.12%</span></span>
+    <span class="tick"><span class="sym">NVDA</span><span class="up">875.30 +2.31%</span></span>
+    <span class="tick"><span class="sym">TSLA</span><span class="down">172.08 -1.44%</span></span>
+    <span class="tick"><span class="sym">MSFT</span><span class="up">418.77 +0.67%</span></span>
+    <span class="tick"><span class="sym">META</span><span class="up">521.93 +1.88%</span></span>
+    <span class="tick"><span class="sym">AMZN</span><span class="up">197.45 +0.53%</span></span>
+    <span class="tick"><span class="sym">QQQ</span><span class="up">482.11 +0.92%</span></span>
+    <span class="tick"><span class="sym">AMD</span><span class="down">162.70 -0.78%</span></span>
+    <span class="tick"><span class="sym">GOOGL</span><span class="up">171.34 +1.02%</span></span>
+    <span class="tick"><span class="sym">BTC-USD</span><span class="up">94,210 +3.14%</span></span>
+    <span class="tick"><span class="sym">GC=F</span><span class="up">3,342 +0.41%</span></span>
+    <span class="tick"><span class="sym">SPY</span><span class="up">592.14 +0.84%</span></span>
+    <span class="tick"><span class="sym">AAPL</span><span class="up">213.42 +1.12%</span></span>
+    <span class="tick"><span class="sym">NVDA</span><span class="up">875.30 +2.31%</span></span>
+    <span class="tick"><span class="sym">TSLA</span><span class="down">172.08 -1.44%</span></span>
+    <span class="tick"><span class="sym">MSFT</span><span class="up">418.77 +0.67%</span></span>
+    <span class="tick"><span class="sym">META</span><span class="up">521.93 +1.88%</span></span>
+    <span class="tick"><span class="sym">AMZN</span><span class="up">197.45 +0.53%</span></span>
+    <span class="tick"><span class="sym">QQQ</span><span class="up">482.11 +0.92%</span></span>
+    <span class="tick"><span class="sym">AMD</span><span class="down">162.70 -0.78%</span></span>
+    <span class="tick"><span class="sym">GOOGL</span><span class="up">171.34 +1.02%</span></span>
+    <span class="tick"><span class="sym">BTC-USD</span><span class="up">94,210 +3.14%</span></span>
+    <span class="tick"><span class="sym">GC=F</span><span class="up">3,342 +0.41%</span></span>
+  </div>
+</div>
+
 <!-- Hero -->
 <div class="hero">
-  <div class="badge">✓ Works on free TradingView accounts</div>
-  <h1>Free <span>Pine Script</span><br>Indicators for TradingView</h1>
-  <p>Professional-grade indicators — volume, VWAP, ATR, MA crossovers, Fear & Greed, and more. Copy and paste into any TradingView chart in seconds.</p>
-  <div class="hero-btns">
-    <a class="btn-primary" href="/indicators">Browse Indicators</a>
-    <a class="btn-secondary" href="/generate">LSTM Forecast</a>
+  <div class="hero-eyebrow">
+    <span class="dot"></span>
+    Live market data · Options · Insider trades · AI forecasts
   </div>
-
-  <!-- Chart preview mockup -->
-  <div class="hero-preview">
-    <div class="preview-bar">
-      <div class="preview-dot" style="background:#ff5f57"></div>
-      <div class="preview-dot" style="background:#febc2e"></div>
-      <div class="preview-dot" style="background:#28c840"></div>
-      <span class="preview-title">TradingView — SPY 5m · VWAP + Bands</span>
-    </div>
-    <div class="preview-body">
-      <svg viewBox="0 0 640 200" width="100%" xmlns="http://www.w3.org/2000/svg" style="display:block">
-        <!-- Grid lines -->
-        <line x1="0" y1="50"  x2="640" y2="50"  stroke="#21262d" stroke-width="1"/>
-        <line x1="0" y1="100" x2="640" y2="100" stroke="#21262d" stroke-width="1"/>
-        <line x1="0" y1="150" x2="640" y2="150" stroke="#21262d" stroke-width="1"/>
-        <!-- VWAP upper band -->
-        <polyline points="0,70 60,65 120,60 180,55 240,52 300,48 360,50 420,53 480,55 540,52 640,48"
-          fill="none" stroke="#58a6ff" stroke-width="1" stroke-dasharray="4,3" opacity="0.5"/>
-        <!-- VWAP line -->
-        <polyline points="0,100 60,95 120,92 180,88 240,85 300,82 360,84 420,86 480,88 540,84 640,80"
-          fill="none" stroke="#58a6ff" stroke-width="2"/>
-        <!-- VWAP lower band -->
-        <polyline points="0,130 60,125 120,124 180,121 240,118 300,116 360,118 420,119 480,121 540,116 640,112"
-          fill="none" stroke="#58a6ff" stroke-width="1" stroke-dasharray="4,3" opacity="0.5"/>
-        <!-- VWAP band fill -->
-        <polygon points="0,70 60,65 120,60 180,55 240,52 300,48 360,50 420,53 480,55 540,52 640,48 640,112 540,116 480,121 420,119 360,118 300,116 240,118 180,121 120,124 60,125 0,130"
-          fill="#58a6ff" opacity="0.06"/>
-        <!-- Candlesticks -->
-        <rect x="10"  y="88" width="8" height="20" fill="#3fb950" rx="1"/>
-        <line x1="14" y1="85" x2="14" y2="112" stroke="#3fb950" stroke-width="1.5"/>
-        <rect x="30"  y="84" width="8" height="16" fill="#3fb950" rx="1"/>
-        <line x1="34" y1="80" x2="34" y2="103" stroke="#3fb950" stroke-width="1.5"/>
-        <rect x="50"  y="86" width="8" height="18" fill="#f85149" rx="1"/>
-        <line x1="54" y1="82" x2="54" y2="108" stroke="#f85149" stroke-width="1.5"/>
-        <rect x="70"  y="80" width="8" height="14" fill="#3fb950" rx="1"/>
-        <line x1="74" y1="76" x2="74" y2="97"  stroke="#3fb950" stroke-width="1.5"/>
-        <rect x="90"  y="75" width="8" height="18" fill="#3fb950" rx="1"/>
-        <line x1="94" y1="71" x2="94" y2="96"  stroke="#3fb950" stroke-width="1.5"/>
-        <rect x="110" y="78" width="8" height="16" fill="#f85149" rx="1"/>
-        <line x1="114" y1="74" x2="114" y2="98" stroke="#f85149" stroke-width="1.5"/>
-        <rect x="130" y="72" width="8" height="14" fill="#3fb950" rx="1"/>
-        <line x1="134" y1="68" x2="134" y2="89" stroke="#3fb950" stroke-width="1.5"/>
-        <rect x="150" y="68" width="8" height="16" fill="#3fb950" rx="1"/>
-        <line x1="154" y1="64" x2="154" y2="88" stroke="#3fb950" stroke-width="1.5"/>
-        <rect x="170" y="70" width="8" height="18" fill="#f85149" rx="1"/>
-        <line x1="174" y1="66" x2="174" y2="92" stroke="#f85149" stroke-width="1.5"/>
-        <rect x="190" y="65" width="8" height="14" fill="#3fb950" rx="1"/>
-        <line x1="194" y1="61" x2="194" y2="82" stroke="#3fb950" stroke-width="1.5"/>
-        <rect x="210" y="62" width="8" height="16" fill="#3fb950" rx="1"/>
-        <line x1="214" y1="58" x2="214" y2="82" stroke="#3fb950" stroke-width="1.5"/>
-        <rect x="230" y="66" width="8" height="18" fill="#f85149" rx="1"/>
-        <line x1="234" y1="62" x2="234" y2="88" stroke="#f85149" stroke-width="1.5"/>
-        <!-- Volume bars at bottom -->
-        <rect x="10"  y="178" width="8" height="12" fill="#3fb950" opacity="0.5" rx="1"/>
-        <rect x="30"  y="175" width="8" height="15" fill="#3fb950" opacity="0.5" rx="1"/>
-        <rect x="50"  y="180" width="8" height="10" fill="#f85149" opacity="0.5" rx="1"/>
-        <rect x="70"  y="174" width="8" height="16" fill="#3fb950" opacity="0.5" rx="1"/>
-        <rect x="90"  y="172" width="8" height="18" fill="#3fb950" opacity="0.5" rx="1"/>
-        <rect x="110" y="177" width="8" height="13" fill="#f85149" opacity="0.5" rx="1"/>
-        <rect x="130" y="173" width="8" height="17" fill="#3fb950" opacity="0.5" rx="1"/>
-        <rect x="150" y="170" width="8" height="20" fill="#3fb950" opacity="0.5" rx="1"/>
-        <rect x="170" y="175" width="8" height="15" fill="#f85149" opacity="0.5" rx="1"/>
-        <rect x="190" y="171" width="8" height="19" fill="#3fb950" opacity="0.5" rx="1"/>
-        <rect x="210" y="169" width="8" height="21" fill="#3fb950" opacity="0.5" rx="1"/>
-        <rect x="230" y="174" width="8" height="16" fill="#f85149" opacity="0.5" rx="1"/>
-        <!-- Label -->
-        <rect x="530" y="72" width="100" height="22" rx="4" fill="#1f6feb" opacity="0.85"/>
-        <text x="580" y="87" text-anchor="middle" fill="white" font-size="10" font-family="monospace">VWAP 524.18</text>
-      </svg>
-    </div>
+  <h1>Stop trading <span>blind.</span></h1>
+  <p>ChartEdge gives retail traders the same intelligence layer used by professionals — options flow, insider activity, gamma exposure, LSTM forecasts, and 20+ Pine Script indicators in one dashboard.</p>
+  <div class="hero-btns">
+    <a class="btn-primary" href="/register">Get Started Free</a>
+    <a class="btn-secondary" href="/indicators">Browse Tools</a>
+  </div>
+  <div class="hero-tools">
+    <a class="hero-tool blue" href="/flow">
+      <div class="hero-tool-icon">🌊</div>
+      <div class="hero-tool-name">Options Flow</div>
+      <div class="hero-tool-desc">Real-time call vs put activity. See where smart money is positioning.</div>
+      <span class="hero-tool-tag tag-pro">Pro</span>
+    </a>
+    <a class="hero-tool orange" href="/insider">
+      <div class="hero-tool-icon">🏛</div>
+      <div class="hero-tool-name">Insider Trading</div>
+      <div class="hero-tool-desc">SEC Form 4 filings + Congress STOCK Act trades. Updated daily.</div>
+      <span class="hero-tool-tag tag-pro">Pro</span>
+    </a>
+    <a class="hero-tool green" href="/gamma">
+      <div class="hero-tool-icon">📊</div>
+      <div class="hero-tool-name">Gamma Exposure</div>
+      <div class="hero-tool-desc">Dealer hedging levels from live options chains. Key S/R zones.</div>
+      <span class="hero-tool-tag tag-basic">Basic</span>
+    </a>
+    <a class="hero-tool purple" href="/generate">
+      <div class="hero-tool-icon">🧠</div>
+      <div class="hero-tool-name">LSTM Forecast</div>
+      <div class="hero-tool-desc">Deep learning volatility forecast trained on years of market data.</div>
+      <span class="hero-tool-tag tag-pro">Pro</span>
+    </a>
+    <a class="hero-tool blue" href="/premarket">
+      <div class="hero-tool-icon">🌅</div>
+      <div class="hero-tool-name">Pre-Market Scanner</div>
+      <div class="hero-tool-desc">Gap ups, gap downs, and unusual movers before the open.</div>
+      <span class="hero-tool-tag tag-pro">Pro</span>
+    </a>
+    <a class="hero-tool green" href="/indicators">
+      <div class="hero-tool-icon">📈</div>
+      <div class="hero-tool-name">Pine Script Indicators</div>
+      <div class="hero-tool-desc">20+ indicators — VWAP, ATR, MA Cross, Fear & Greed, and more.</div>
+      <span class="hero-tool-tag tag-free">Free</span>
+    </a>
   </div>
 </div>
 
 <!-- Stats strip -->
 <div class="stats-strip">
   <div class="stat-item">
+    <div class="stat-num">14</div>
+    <div class="stat-label">Market intelligence tools</div>
+  </div>
+  <div class="stat-item">
     <div class="stat-num">20+</div>
     <div class="stat-label">Pine Script indicators</div>
   </div>
   <div class="stat-item">
-    <div class="stat-num">Free</div>
-    <div class="stat-label">Works on TradingView free</div>
+    <div class="stat-num">Live</div>
+    <div class="stat-label">Options & market data</div>
   </div>
   <div class="stat-item">
     <div class="stat-num">7-day</div>
-    <div class="stat-label">Free trial on Pro & Basic</div>
-  </div>
-  <div class="stat-item">
-    <div class="stat-num">v6</div>
-    <div class="stat-label">Pine Script v6</div>
+    <div class="stat-label">Free trial on paid plans</div>
   </div>
 </div>
 
-<!-- Features -->
+<!-- Intelligence tools -->
 <div class="section">
-  <h2>Why <span>ChartEdge</span>?</h2>
-  <div class="features">
-    <div class="feature">
-      <div class="feature-icon">⚡</div>
-      <h3>Instant copy & paste</h3>
-      <p>Click an indicator, copy the code, paste into TradingView's Pine Script editor — on your chart in under 30 seconds.</p>
+  <h2>Everything in one <span>dashboard</span></h2>
+  <div class="intel-grid">
+    <div class="intel-card orange">
+      <div class="intel-card-icon">🌊</div>
+      <span class="intel-tag tag-pro">Pro</span>
+      <h3>Options Flow</h3>
+      <p>Track net call vs put activity across any options chain. Visualize where large traders are positioning before the move happens.</p>
     </div>
-    <div class="feature">
-      <div class="feature-icon">🆓</div>
-      <h3>No paid plan needed</h3>
-      <p>All indicators use Pine Script v6 and work on TradingView's free tier. No Pro, no Pro+, no upgrade required.</p>
+    <div class="intel-card blue">
+      <div class="intel-card-icon">🏛</div>
+      <span class="intel-tag tag-pro">Pro</span>
+      <h3>Insider Trading</h3>
+      <p>SEC Form 4 filings from major S&P 500 companies plus Congress STOCK Act disclosures. Filter by name, ticker, or source.</p>
     </div>
-    <div class="feature">
-      <div class="feature-icon">🎯</div>
-      <h3>Any chart, any ticker</h3>
-      <p>Indicators automatically adapt to whatever symbol and timeframe you're viewing. No manual configuration needed.</p>
+    <div class="intel-card green">
+      <div class="intel-card-icon">📊</div>
+      <span class="intel-tag tag-basic">Basic</span>
+      <h3>Gamma Exposure (GEX)</h3>
+      <p>Black-Scholes powered dealer hedging calculation from live options chains. Pinpoints price levels where the market tends to stall or reverse.</p>
     </div>
-    <div class="feature">
-      <div class="feature-icon">🤖</div>
-      <h3>LSTM volatility forecast</h3>
-      <p>Powered by a deep learning model trained on real market data. Get a live 30-minute volatility forecast for any ticker.</p>
+    <div class="intel-card blue">
+      <div class="intel-card-icon">🌅</div>
+      <span class="intel-tag tag-pro">Pro</span>
+      <h3>Pre-Market Scanner</h3>
+      <p>Catch gap ups and gap downs before the open. Filter by sector, float, and volume to find the best setups before 9:30.</p>
     </div>
-    <div class="feature">
-      <div class="feature-icon">🎁</div>
-      <h3>Refer & earn</h3>
-      <p>Share your unique link — when a friend upgrades to any paid plan, you both get 7 days of that plan for free.</p>
+    <div class="intel-card purple">
+      <div class="intel-card-icon">🧮</div>
+      <span class="intel-tag tag-basic">Basic</span>
+      <h3>Greeks Dashboard</h3>
+      <p>Full options chain with Delta, Gamma, Theta, Vega, and Rho for any ticker. Understand your risk before you enter.</p>
+    </div>
+    <div class="intel-card orange">
+      <div class="intel-card-icon">📉</div>
+      <span class="intel-tag tag-basic">Basic</span>
+      <h3>Volatility Forecast</h3>
+      <p>Realized vol, EWMA, and IV vs RV comparison charts. Regime detection flags Low / Medium / High / Extreme conditions in real time.</p>
+    </div>
+    <div class="intel-card red">
+      <div class="intel-card-icon">🌍</div>
+      <span class="intel-tag tag-free">Free</span>
+      <h3>Market Heatmap</h3>
+      <p>D3 squarified treemap of S&P 500 sectors. See at a glance which sectors are leading, lagging, and rotating.</p>
+    </div>
+    <div class="intel-card green">
+      <div class="intel-card-icon">📅</div>
+      <span class="intel-tag tag-free">Free</span>
+      <h3>Earnings & Dividends</h3>
+      <p>Upcoming earnings with EPS and revenue estimates. Ex-dividend dates for 140+ income tickers across the next 60 days.</p>
+    </div>
+    <div class="intel-card blue">
+      <div class="intel-card-icon">🇺🇸</div>
+      <span class="intel-tag tag-basic">Basic</span>
+      <h3>Trump Tracker</h3>
+      <p>Chart any asset against Trump-related news events with timestamped markers. See exactly how markets reacted to each announcement.</p>
     </div>
   </div>
 </div>
@@ -4692,7 +4719,8 @@ HOME_HTML = """<!DOCTYPE html>
 
 <!-- Indicators list -->
 <div class="section">
-  <h2>Available <span>Indicators</span></h2>
+  <h2>Free <span>Pine Script</span> Indicators</h2>
+  <p style="text-align:center;color:var(--muted);font-size:0.9rem;margin-bottom:0;line-height:1.7;">All indicators use Pine Script v6 and work on TradingView's free tier. Copy and paste onto any chart in seconds.</p>
   <div class="ind-list">
     <a class="ind-pill" href="/indicators?kind=volume">
       <div class="cat">Volume</div><div class="iname">24h Volume</div>
@@ -4785,43 +4813,6 @@ HOME_HTML = """<!DOCTYPE html>
       </div>
     </div>
     <p style="text-align:center;color:var(--muted);font-size:.78rem;margin-top:32px;">Not financial advice. Past model performance does not guarantee future results.</p>
-  </div>
-</div>
-
-<!-- Pro features -->
-<div class="section">
-  <h2>More with <span>Basic & Pro</span></h2>
-  <div class="pro-grid">
-    <div class="pro-card">
-      <div class="pro-card-icon">📅</div>
-      <div class="pro-card-tag tag-basic">Basic</div>
-      <h3>Earnings Calendar</h3>
-      <p>See upcoming earnings dates for any ticker at a glance. Never get caught off-guard by a surprise earnings move again.</p>
-    </div>
-    <div class="pro-card green">
-      <div class="pro-card-icon">📊</div>
-      <div class="pro-card-tag tag-basic">Basic</div>
-      <h3>Gamma Exposure (GEX)</h3>
-      <p>Real-time gamma exposure chart calculated from live options chains. Identify key dealer-hedging price levels before the market moves.</p>
-    </div>
-    <div class="pro-card orange">
-      <div class="pro-card-icon">🌊</div>
-      <div class="pro-card-tag tag-pro">Pro</div>
-      <h3>Options Flow</h3>
-      <p>Track large call and put activity across the options chain with net flow visualization. See where the smart money is positioned.</p>
-    </div>
-    <div class="pro-card">
-      <div class="pro-card-icon">📈</div>
-      <div class="pro-card-tag tag-pro">Pro</div>
-      <h3>Unlimited Copies</h3>
-      <p>Free accounts are limited to 3 copies per day. Pro removes all limits so you can build out your full indicator setup without interruption.</p>
-    </div>
-    <div class="pro-card orange">
-      <div class="pro-card-icon">🤖</div>
-      <div class="pro-card-tag tag-pro">Pro</div>
-      <h3>Live LSTM Forecast</h3>
-      <p>Generate a real-time 30-minute volatility forecast for any ticker directly from the dashboard — no code required.</p>
-    </div>
   </div>
 </div>
 
