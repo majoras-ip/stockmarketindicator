@@ -3112,6 +3112,39 @@ def volume_ticker_api():
         return jsonify({"error": str(e)}), 500
 
 
+# ── Ticker Tape ──────────────────────────────────────────────────────────────
+
+_TAPE_TICKERS = ["SPY", "AAPL", "NVDA", "TSLA", "MSFT", "META", "AMZN", "QQQ", "AMD", "GOOGL", "BTC-USD", "GC=F"]
+_tape_cache   = {"data": None, "ts": 0}
+
+def _fetch_tape():
+    import yfinance as yf, time as _time
+    out = []
+    for sym in _TAPE_TICKERS:
+        try:
+            t    = yf.Ticker(sym)
+            info = t.fast_info
+            px   = float(info.last_price or 0)
+            prev = float(info.previous_close or px)
+            chg  = ((px - prev) / prev * 100) if prev else 0
+            out.append({"sym": sym, "price": px, "chg": round(chg, 2)})
+        except Exception:
+            pass
+    return out
+
+@app.route("/api/tickertape")
+def tickertape_api():
+    import time
+    now = time.time()
+    if _tape_cache["data"] is None or now - _tape_cache["ts"] > 300:
+        try:
+            _tape_cache["data"] = _fetch_tape()
+            _tape_cache["ts"]   = now
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+    return jsonify({"tickers": _tape_cache["data"]})
+
+
 # ── IPO Calendar ─────────────────────────────────────────────────────────────
 
 _ipo_cache = {"data": None, "ts": 0}
@@ -5154,33 +5187,33 @@ HOME_HTML = """<!DOCTYPE html>
 
 <!-- Ticker tape -->
 <div class="ticker-tape">
-  <div class="ticker-inner">
-    <span class="tick"><span class="sym">SPY</span><span class="up">592.14 +0.84%</span></span>
-    <span class="tick"><span class="sym">AAPL</span><span class="up">213.42 +1.12%</span></span>
-    <span class="tick"><span class="sym">NVDA</span><span class="up">875.30 +2.31%</span></span>
-    <span class="tick"><span class="sym">TSLA</span><span class="down">172.08 -1.44%</span></span>
-    <span class="tick"><span class="sym">MSFT</span><span class="up">418.77 +0.67%</span></span>
-    <span class="tick"><span class="sym">META</span><span class="up">521.93 +1.88%</span></span>
-    <span class="tick"><span class="sym">AMZN</span><span class="up">197.45 +0.53%</span></span>
-    <span class="tick"><span class="sym">QQQ</span><span class="up">482.11 +0.92%</span></span>
-    <span class="tick"><span class="sym">AMD</span><span class="down">162.70 -0.78%</span></span>
-    <span class="tick"><span class="sym">GOOGL</span><span class="up">171.34 +1.02%</span></span>
-    <span class="tick"><span class="sym">BTC-USD</span><span class="up">94,210 +3.14%</span></span>
-    <span class="tick"><span class="sym">GC=F</span><span class="up">3,342 +0.41%</span></span>
-    <span class="tick"><span class="sym">SPY</span><span class="up">592.14 +0.84%</span></span>
-    <span class="tick"><span class="sym">AAPL</span><span class="up">213.42 +1.12%</span></span>
-    <span class="tick"><span class="sym">NVDA</span><span class="up">875.30 +2.31%</span></span>
-    <span class="tick"><span class="sym">TSLA</span><span class="down">172.08 -1.44%</span></span>
-    <span class="tick"><span class="sym">MSFT</span><span class="up">418.77 +0.67%</span></span>
-    <span class="tick"><span class="sym">META</span><span class="up">521.93 +1.88%</span></span>
-    <span class="tick"><span class="sym">AMZN</span><span class="up">197.45 +0.53%</span></span>
-    <span class="tick"><span class="sym">QQQ</span><span class="up">482.11 +0.92%</span></span>
-    <span class="tick"><span class="sym">AMD</span><span class="down">162.70 -0.78%</span></span>
-    <span class="tick"><span class="sym">GOOGL</span><span class="up">171.34 +1.02%</span></span>
-    <span class="tick"><span class="sym">BTC-USD</span><span class="up">94,210 +3.14%</span></span>
-    <span class="tick"><span class="sym">GC=F</span><span class="up">3,342 +0.41%</span></span>
+  <div class="ticker-inner" id="ticker-inner">
+    <span class="tick" style="color:var(--muted)">Loading prices…</span>
   </div>
 </div>
+<script>
+(function(){
+  function fmtPx(p){
+    if(p>=1000)return p.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+    if(p>=10)return p.toFixed(2);
+    return p.toFixed(4);
+  }
+  fetch('/api/tickertape').then(function(r){return r.json();}).then(function(d){
+    if(!d.tickers||!d.tickers.length)return;
+    var items=d.tickers;
+    var html='';
+    // duplicate for seamless loop
+    [items,items].forEach(function(arr){
+      arr.forEach(function(t){
+        var cls=t.chg>=0?'up':'down';
+        var sign=t.chg>=0?'+':'';
+        html+='<span class="tick"><span class="sym">'+t.sym+'</span><span class="'+cls+'">'+fmtPx(t.price)+' '+sign+t.chg+'%</span></span>';
+      });
+    });
+    document.getElementById('ticker-inner').innerHTML=html;
+  }).catch(function(){});
+})();
+</script>
 
 <!-- Hero -->
 <div class="hero">
