@@ -3471,24 +3471,21 @@ def crypto_liquidations_api():
 
 def _fetch_crypto_upcoming():
     import requests
-    from datetime import datetime
-    r = requests.get("https://api.coingecko.com/api/v3/coins/list/new",
+    # CoinGecko trending (free, no key) — top 15 coins by search volume in 24h
+    r = requests.get("https://api.coingecko.com/api/v3/search/trending",
                      headers=_CRYPTO_HEADERS, timeout=8)
     r.raise_for_status()
+    data = r.json()
     out = []
-    for c in r.json()[:60]:
-        ts = c.get("activated_at", 0)
-        try:
-            date_str = datetime.utcfromtimestamp(ts).strftime("%b %d, %Y") if ts else "—"
-        except Exception:
-            date_str = "—"
+    for item in data.get("coins", []):
+        c = item.get("item", {})
         out.append({
             "symbol": (c.get("symbol") or "").upper(),
             "name":   c.get("name", ""),
-            "date":   date_str,
-            "ts":     ts,
+            "rank":   c.get("market_cap_rank") or "—",
+            "score":  c.get("score", 0) + 1,  # 1-indexed rank in trending list
+            "price_btc": c.get("price_btc", 0),
         })
-    out.sort(key=lambda x: x["ts"], reverse=True)
     return out
 
 @app.route("/crypto/upcoming")
@@ -3739,7 +3736,7 @@ _NAV_LINKS = """
       <div class="drop-menu">
         <a href="/crypto/feargreed">Fear &amp; Greed</a>
         <a href="/crypto/heatmap">Crypto Heatmap</a>
-        <a href="/crypto/upcoming">Upcoming Coins</a>
+        <a href="/crypto/upcoming">Trending Coins</a>
         {% if nav_plan == 'free' %}
         <a href="/pricing?upgrade=crypto" style="opacity:.4;">BTC Dominance 🔒</a>
         <a href="/pricing?upgrade=crypto" style="opacity:.4;">Funding Rates 🔒</a>
@@ -4159,7 +4156,7 @@ PRICING_HTML = """<!DOCTYPE html>
         <li>Dividends calendar</li>
         <li>Crypto fear &amp; greed</li>
         <li>Crypto heatmap</li>
-        <li>Upcoming coins</li>
+        <li>Trending coins</li>
         <li class="no">Trump tracker</li>
         <li class="no">Ticker news</li>
         <li class="no">Gamma exposure</li>
@@ -4191,7 +4188,7 @@ PRICING_HTML = """<!DOCTYPE html>
         <li>Dividends calendar</li>
         <li>Crypto fear &amp; greed</li>
         <li>Crypto heatmap</li>
-        <li>Upcoming coins</li>
+        <li>Trending coins</li>
         <li>Trump tracker</li>
         <li>Ticker news</li>
         <li>Gamma exposure</li>
@@ -4228,7 +4225,7 @@ PRICING_HTML = """<!DOCTYPE html>
         <li>Dividends calendar</li>
         <li>Crypto fear &amp; greed</li>
         <li>Crypto heatmap</li>
-        <li>Upcoming coins</li>
+        <li>Trending coins</li>
         <li>Trump tracker</li>
         <li>Ticker news</li>
         <li>Gamma exposure</li>
@@ -6382,9 +6379,10 @@ CRYPTO_UPCOMING_HTML = """<!DOCTYPE html>
 <html data-theme="dark">
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">""" + _META + """
-  <title>Upcoming Crypto · ChartEdge</title>
+  <title>Trending Crypto · ChartEdge</title>
   <style>""" + _CRYPTO_PAGE_CSS + _NAV_CSS + """
     input#search { width:220px; }
+    .trend-rank { font-size:1.1rem; }
   </style>
 </head>
 <body>
@@ -6394,39 +6392,30 @@ CRYPTO_UPCOMING_HTML = """<!DOCTYPE html>
   <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
 </nav>
 <div class="page">
-  <h1>Upcoming <span>Crypto</span></h1>
-  <p class="sub">Recently listed coins on CoinGecko · sourced from CoinGecko · updates hourly</p>
-  <div class="controls">
-    <input id="search" type="text" placeholder="Search name or symbol…" oninput="filterTable()">
-  </div>
+  <h1>Trending <span>Crypto</span></h1>
+  <p class="sub">Top coins by search volume in the last 24h · sourced from CoinGecko · updates hourly</p>
   <div class="card" style="padding:0">
     <div id="tbl-wrap"><div class="loading">Loading…</div></div>
   </div>
 </div>
 <footer>© 2026 ChartEdge · Not financial advice</footer>
 <script>""" + _THEME_JS + """
-var _rows=[];
-function filterTable(){
-  var q=document.getElementById('search').value.trim().toUpperCase();
-  var filtered=q?_rows.filter(function(r){return r.symbol.includes(q)||r.name.toUpperCase().includes(q);}):_rows;
-  renderTable(filtered);
-}
-function renderTable(rows){
-  if(!rows.length){document.getElementById('tbl-wrap').innerHTML='<div class="loading">No results.</div>';return;}
-  var html='<table><thead><tr><th>#</th><th>Symbol</th><th>Name</th><th>Listed On</th></tr></thead><tbody>';
-  rows.forEach(function(r,i){
-    html+='<tr><td style="color:var(--muted)">'+(i+1)+'</td>'
+fetch('/api/crypto/upcoming').then(r=>r.json()).then(d=>{
+  if(d.error){document.getElementById('tbl-wrap').innerHTML='<div class="err">'+d.error+'</div>';return;}
+  var rows=d.coins;
+  if(!rows.length){document.getElementById('tbl-wrap').innerHTML='<div class="loading">No data.</div>';return;}
+  var html='<table><thead><tr><th>Trending</th><th>Symbol</th><th>Name</th><th>Market Cap Rank</th><th>Price (BTC)</th></tr></thead><tbody>';
+  rows.forEach(function(r){
+    html+='<tr>'
+      +'<td class="trend-rank" style="color:var(--orange)">#'+r.score+'</td>'
       +'<td><strong>'+r.symbol+'</strong></td>'
       +'<td>'+r.name+'</td>'
-      +'<td style="color:var(--muted)">'+r.date+'</td></tr>';
+      +'<td style="color:var(--muted)">'+(r.rank||'—')+'</td>'
+      +'<td style="color:var(--muted)">'+parseFloat(r.price_btc).toExponential(4)+'</td>'
+      +'</tr>';
   });
   html+='</tbody></table>';
   document.getElementById('tbl-wrap').innerHTML=html;
-}
-fetch('/api/crypto/upcoming').then(r=>r.json()).then(d=>{
-  if(d.error){document.getElementById('tbl-wrap').innerHTML='<div class="err">'+d.error+'</div>';return;}
-  _rows=d.coins;
-  renderTable(_rows);
 });
 </script>
 </body></html>"""
