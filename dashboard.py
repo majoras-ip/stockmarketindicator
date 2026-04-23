@@ -3187,12 +3187,14 @@ _NAV_CSS = """
   .dropdown > .drop-btn:hover { background: var(--bg3); border-color: var(--border); color: var(--text); }
   .dropdown > .drop-btn.open { background: var(--bg3); border-color: var(--border); color: var(--text); }
   .drop-menu {
-    display: none; position: absolute; top: calc(100% + 6px); right: 0;
+    position: absolute; top: calc(100% + 6px); right: 0;
     background: var(--bg2); border: 1px solid var(--border); border-radius: 8px;
     min-width: 160px; z-index: 9999; overflow: hidden;
     box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    opacity: 0; transform: translateY(-6px); pointer-events: none;
+    transition: opacity 0.18s ease, transform 0.18s ease;
   }
-  .drop-menu.open { display: block; }
+  .drop-menu.open { opacity: 1; transform: translateY(0); pointer-events: auto; }
   .drop-menu a {
     display: block; padding: 9px 16px; color: var(--muted);
     text-decoration: none; font-size: 0.88rem; border-bottom: 1px solid var(--border);
@@ -3207,7 +3209,8 @@ _NAV_CSS = """
     .nav-links.open { display: flex; }
     .dropdown { width: 100%; }
     .dropdown > .drop-btn { width: 100%; justify-content: space-between; padding: 10px 4px; border: none; border-bottom: 1px solid var(--border); border-radius: 0; }
-    .drop-menu { position: static; box-shadow: none; border: none; border-radius: 0; background: var(--bg3); }
+    .drop-menu { position: static; box-shadow: none; border: none; border-radius: 0; background: var(--bg3); transform: none; max-height: 0; transition: opacity 0.18s ease, max-height 0.22s ease; }
+    .drop-menu.open { max-height: 600px; }
     .drop-menu a { padding: 8px 16px; font-size: 0.9rem; }
     .theme-toggle { width: 100%; margin: 8px 0 4px; }
   }
