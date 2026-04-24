@@ -3803,8 +3803,7 @@ _NAV_LINKS = """
       {% if current_user %}
       <button class="drop-btn" onclick="toggleDrop(this, event)">{{ current_user }} ▾</button>
       <div class="drop-menu">
-        <a href="/me">🏠 My Dashboard</a>
-        <a href="/profile">👤 Profile</a>
+        <a href="/me">👤 Profile</a>
         <a href="/favorites">♥ Favorites</a>
         <a href="/billing">Billing</a>
         <a href="/redeem">Redeem Code</a>
