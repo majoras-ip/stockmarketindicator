@@ -4735,6 +4735,24 @@ INDICATORS_HTML = """<!DOCTYPE html>
     .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; vertical-align: middle; margin-right: 8px; }
 
     footer { text-align: center; padding: 32px 24px; color: var(--muted); font-size: 0.8rem; border-top: 1px solid var(--border); margin-top: 40px; }
+
+    /* Page tabs */
+    .page-tabs { display: flex; gap: 4px; margin-bottom: 24px; border-bottom: 1px solid var(--border); }
+    .page-tab { background: none; border: none; color: var(--muted); font-family: monospace; font-size: .88rem; padding: 8px 16px; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+    .page-tab:hover { color: var(--text); }
+    .page-tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+
+    /* Tutorial */
+    .tutorial-wrap { display: none; }
+    .tutorial-wrap.active { display: block; }
+    .video-container { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; margin-bottom: 28px; }
+    .video-container iframe { display: block; width: 100%; aspect-ratio: 16/9; border: none; }
+    .steps { list-style: none; counter-reset: steps; display: flex; flex-direction: column; gap: 12px; }
+    .steps li { counter-increment: steps; display: flex; gap: 14px; align-items: flex-start; background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 16px; font-size: .88rem; line-height: 1.6; }
+    .steps li::before { content: counter(steps); background: var(--accent); color: #fff; font-weight: 700; font-size: .78rem; min-width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 2px; }
+    .steps li strong { display: block; margin-bottom: 2px; color: var(--text); }
+    .steps li span { color: var(--muted); }
+    .steps a { color: var(--accent); }
   </style>
 </head>
 <body>
@@ -4750,6 +4768,15 @@ INDICATORS_HTML = """<!DOCTYPE html>
 </div>
 
 <div class="container">
+
+  <!-- Tab bar -->
+  <div class="page-tabs">
+    <button class="page-tab active" id="tab-indicators-btn" onclick="switchTab('indicators')">Indicators</button>
+    <button class="page-tab" id="tab-tutorial-btn" onclick="switchTab('tutorial')">Tutorial</button>
+  </div>
+
+  <!-- Indicators tab -->
+  <div id="tab-indicators">
   <!-- Search + category filter -->
   <div class="toolbar">
     <input class="search-box" id="search" placeholder="Search indicators…"
@@ -4781,6 +4808,36 @@ INDICATORS_HTML = """<!DOCTYPE html>
   <div class="output-wrap" id="output-wrap">
     <div id="output-inner"></div>
   </div>
+  </div><!-- end #tab-indicators -->
+
+  <!-- Tutorial tab -->
+  <div id="tab-tutorial" class="tutorial-wrap">
+    <div class="video-container">
+      <!-- Replace the src below with your Loom/Vimeo/YouTube embed URL -->
+      <iframe src="about:blank" data-src="PASTE_EMBED_URL_HERE" allowfullscreen allow="autoplay; fullscreen"></iframe>
+    </div>
+    <ol class="steps">
+      <li>
+        <div><strong>Pick an indicator</strong><span>Click any card in the Indicators tab — VWAP, RSI, Bollinger Bands, etc. The script will appear below the grid.</span></div>
+      </li>
+      <li>
+        <div><strong>Copy the Pine Script</strong><span>Hit the <em>Copy</em> button on the right side of the output panel. The script is copied to your clipboard.</span></div>
+      </li>
+      <li>
+        <div><strong>Open TradingView</strong><span>Go to <a href="https://tradingview.com" target="_blank" rel="noopener">tradingview.com</a> and open any chart. A free account is all you need.</span></div>
+      </li>
+      <li>
+        <div><strong>Open the Pine Script Editor</strong><span>At the bottom of the chart, click <em>Pine Editor</em>. If you don't see it, click the <em>+</em> icon in the bottom toolbar.</span></div>
+      </li>
+      <li>
+        <div><strong>Paste &amp; Add to Chart</strong><span>Select all the existing code in the editor (Ctrl+A / Cmd+A), paste your copied script, then click <em>Add to chart</em> in the top-right of the editor.</span></div>
+      </li>
+      <li>
+        <div><strong>Done!</strong><span>The indicator will appear on your chart. You can adjust the settings by clicking the gear icon next to the indicator name.</span></div>
+      </li>
+    </ol>
+  </div>
+
 </div>
 
 <!-- Upgrade modal -->
@@ -4802,6 +4859,20 @@ INDICATORS_HTML = """<!DOCTYPE html>
 <footer>© 2026 ChartEdge · Free Pine Script indicators · Not financial advice · <a href="/privacy" style="color:inherit">Privacy</a> · <a href="/terms" style="color:inherit">Terms</a></footer>
 
 <script>
+function switchTab(name) {
+  document.getElementById('tab-indicators').style.display = name === 'indicators' ? 'block' : 'none';
+  document.getElementById('tab-tutorial').classList.toggle('active', name === 'tutorial');
+  document.getElementById('tab-indicators-btn').classList.toggle('active', name === 'indicators');
+  document.getElementById('tab-tutorial-btn').classList.toggle('active', name === 'tutorial');
+  // Lazy-load the video iframe src on first open
+  if (name === 'tutorial') {
+    const iframe = document.querySelector('#tab-tutorial iframe');
+    if (iframe && iframe.getAttribute('data-src') && iframe.src !== iframe.getAttribute('data-src')) {
+      iframe.src = iframe.getAttribute('data-src');
+    }
+  }
+}
+
 let _currentKind = '{{ kind }}';
 let _vwapOpts = {band1: true, band2: true, band3: false};
 let _atrOpts  = {atr_avg: false};
