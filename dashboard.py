@@ -248,7 +248,14 @@ def init_db():
         conn.close()
 
 def _migrate_pg():
-    for col in ["plan_expires TIMESTAMP", "trial_used INTEGER DEFAULT 0", "profile_pic TEXT"]:
+    for col in [
+        "plan_expires TIMESTAMP",
+        "trial_used INTEGER DEFAULT 0",
+        "profile_pic TEXT",
+        "theme TEXT DEFAULT 'dark'",
+        "default_ticker TEXT DEFAULT 'AAPL'",
+        "copy_toast INTEGER DEFAULT 1",
+    ]:
         try:
             _run(f"ALTER TABLE users ADD COLUMN {col}")
         except Exception:
@@ -3804,6 +3811,7 @@ _NAV_LINKS = """
       <button class="drop-btn" onclick="toggleDrop(this, event)">{{ current_user }} ▾</button>
       <div class="drop-menu">
         <a href="/me">👤 Profile</a>
+        <a href="/settings">⚙️ Settings</a>
         <a href="/favorites">♥ Favorites</a>
         <a href="/billing">Billing</a>
         <a href="/redeem">Redeem Code</a>
@@ -10087,6 +10095,353 @@ load();
 </html>"""
 
 
+SETTINGS_HTML = """<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Settings · ChartEdge</title>
+  <style>
+    :root[data-theme="dark"]  { --bg:#0d1117; --bg2:#161b22; --bg3:#21262d; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --green:#3fb950; --red:#f85149; }
+    :root[data-theme="light"] { --bg:#ffffff; --bg2:#f6f8fa; --bg3:#eaeef2; --border:#d0d7de; --text:#1f2328; --muted:#636c76; --accent:#0969da; --green:#1a7f37; --red:#cf222e; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+    nav { background: var(--bg2); border-bottom: 1px solid var(--border); padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; }
+    .logo { color: var(--accent); font-size: 1.1rem; font-weight: bold; text-decoration: none; }
+    """ + _NAV_CSS + """
+    .page { max-width: 640px; margin: 0 auto; padding: 36px 24px; }
+    h1 { font-size: 1.5rem; margin-bottom: 4px; }
+    h1 span { color: var(--accent); }
+    .sub { color: var(--muted); font-size: .88rem; margin-bottom: 32px; }
+    .section { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 20px; overflow: hidden; }
+    .section-title { font-size: .72rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .07em; padding: 14px 20px; border-bottom: 1px solid var(--border); }
+    .setting-row { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid var(--border); gap: 20px; }
+    .setting-row:last-child { border-bottom: none; }
+    .setting-label { font-size: .9rem; font-weight: 600; }
+    .setting-desc { font-size: .78rem; color: var(--muted); margin-top: 3px; }
+    /* Toggle switch */
+    .toggle { position: relative; width: 44px; height: 24px; flex-shrink: 0; }
+    .toggle input { opacity: 0; width: 0; height: 0; }
+    .toggle-track { position: absolute; inset: 0; background: var(--bg3); border: 1px solid var(--border); border-radius: 12px; cursor: pointer; transition: background .2s; }
+    .toggle input:checked + .toggle-track { background: var(--accent); border-color: var(--accent); }
+    .toggle-track::after { content: ''; position: absolute; width: 18px; height: 18px; background: #fff; border-radius: 50%; top: 2px; left: 2px; transition: transform .2s; }
+    .toggle input:checked + .toggle-track::after { transform: translateX(20px); }
+    /* Inputs */
+    .setting-input { background: var(--bg3); border: 1px solid var(--border); border-radius: 6px; padding: 8px 12px; color: var(--text); font-size: .88rem; width: 200px; outline: none; font-family: monospace; }
+    .setting-input:focus { border-color: var(--accent); }
+    .btn { background: var(--accent); color: #fff; border: none; border-radius: 6px; padding: 8px 18px; font-size: .85rem; font-weight: 600; cursor: pointer; }
+    .btn:hover { opacity: .88; }
+    .btn-danger { background: var(--red); }
+    .btn-muted { background: var(--bg3); color: var(--text); border: 1px solid var(--border); }
+    .btn-muted:hover { border-color: var(--accent); }
+    .flash { padding: 10px 14px; border-radius: 6px; font-size: .85rem; margin-bottom: 16px; display: none; }
+    .flash.ok  { background: #1a2d1a; border: 1px solid var(--green); color: var(--green); }
+    .flash.err { background: #2d1515; border: 1px solid var(--red);   color: var(--red); }
+    /* Delete modal */
+    .modal-bg { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.75); z-index: 1000; align-items: center; justify-content: center; }
+    .modal-bg.open { display: flex; }
+    .modal { background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; padding: 32px 28px; max-width: 420px; width: 90%; text-align: center; }
+    .modal h2 { margin-bottom: 10px; }
+    .modal p { color: var(--muted); font-size: .88rem; margin-bottom: 24px; line-height: 1.5; }
+    .modal-btns { display: flex; gap: 12px; justify-content: center; }
+    /* Theme selector */
+    .theme-opts { display: flex; gap: 8px; }
+    .theme-opt { padding: 7px 16px; border-radius: 6px; border: 1px solid var(--border); cursor: pointer; font-size: .83rem; background: var(--bg3); color: var(--muted); }
+    .theme-opt.active { border-color: var(--accent); color: var(--accent); background: var(--bg2); font-weight: 600; }
+  </style>
+</head>
+<body>
+<nav>
+  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span></a>
+  <button class="hamburger" onclick="toggleMobileNav(event)">☰</button>
+  <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
+</nav>
+<div class="page">
+  <h1>⚙️ <span>Settings</span></h1>
+  <p class="sub">Manage your account preferences</p>
+
+  <div id="flash" class="flash"></div>
+
+  <!-- Appearance -->
+  <div class="section">
+    <div class="section-title">Appearance</div>
+    <div class="setting-row">
+      <div>
+        <div class="setting-label">Theme</div>
+        <div class="setting-desc">Choose your preferred color scheme</div>
+      </div>
+      <div class="theme-opts">
+        <button class="theme-opt {{ 'active' if user_theme == 'dark' else '' }}" onclick="setTheme('dark')">☾ Dark</button>
+        <button class="theme-opt {{ 'active' if user_theme == 'light' else '' }}" onclick="setTheme('light')">☀ Light</button>
+      </div>
+    </div>
+    <div class="setting-row">
+      <div>
+        <div class="setting-label">Copy Confirmation Toast</div>
+        <div class="setting-desc">Show a toast notification when you copy a script</div>
+      </div>
+      <label class="toggle">
+        <input type="checkbox" id="toast-toggle" {{ 'checked' if copy_toast else '' }} onchange="savePref('copy_toast', this.checked ? 1 : 0)">
+        <span class="toggle-track"></span>
+      </label>
+    </div>
+  </div>
+
+  <!-- Chart defaults -->
+  <div class="section">
+    <div class="section-title">Chart Defaults</div>
+    <div class="setting-row">
+      <div>
+        <div class="setting-label">Default Ticker</div>
+        <div class="setting-desc">Pre-filled on Live Chart, Greeks, Gamma &amp; Trump Tracker</div>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <input class="setting-input" id="default-ticker" type="text" value="{{ default_ticker }}" maxlength="12" placeholder="e.g. AAPL" style="width:120px;text-transform:uppercase;">
+        <button class="btn" onclick="saveTicker()">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Account -->
+  <div class="section">
+    <div class="section-title">Account</div>
+    <div class="setting-row">
+      <div>
+        <div class="setting-label">Change Email</div>
+        <div class="setting-desc">Current: {{ email or 'Not set' }}</div>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <input class="setting-input" id="new-email" type="text" placeholder="New email" style="width:180px;">
+        <button class="btn" onclick="saveEmail()">Save</button>
+      </div>
+    </div>
+    <div class="setting-row">
+      <div>
+        <div class="setting-label">Change Password</div>
+        <div class="setting-desc">Must be at least 6 characters</div>
+      </div>
+      <button class="btn btn-muted" onclick="document.getElementById('pw-row').style.display=document.getElementById('pw-row').style.display==='none'?'block':'none'">Change</button>
+    </div>
+    <div id="pw-row" style="display:none;padding:16px 20px;border-bottom:1px solid var(--border);">
+      <div style="display:flex;flex-direction:column;gap:10px;max-width:300px;">
+        <input class="setting-input" id="pw-current" type="password" placeholder="Current password" style="width:100%;">
+        <input class="setting-input" id="pw-new" type="password" placeholder="New password" style="width:100%;">
+        <input class="setting-input" id="pw-confirm" type="password" placeholder="Confirm new password" style="width:100%;">
+        <button class="btn" onclick="changePassword()">Update Password</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Danger zone -->
+  <div class="section">
+    <div class="section-title" style="color:var(--red);">Danger Zone</div>
+    <div class="setting-row">
+      <div>
+        <div class="setting-label">Delete Account</div>
+        <div class="setting-desc">Permanently delete your account and cancel any active subscription</div>
+      </div>
+      <button class="btn btn-danger" onclick="document.getElementById('delete-modal').classList.add('open')">Delete</button>
+    </div>
+  </div>
+
+</div>
+
+<!-- Delete confirmation modal -->
+<div class="modal-bg" id="delete-modal">
+  <div class="modal">
+    <h2>Delete Account?</h2>
+    <p>This will permanently delete your account, favorites, watchlist, and copy history. If you have an active subscription it will be cancelled. This cannot be undone.</p>
+    <div class="modal-btns">
+      <button class="btn btn-muted" onclick="document.getElementById('delete-modal').classList.remove('open')">Cancel</button>
+      <button class="btn btn-danger" onclick="deleteAccount()">Yes, Delete</button>
+    </div>
+  </div>
+</div>
+
+<script>
+""" + _THEME_JS + """
+
+function flash(msg, ok) {
+  const el = document.getElementById('flash');
+  el.textContent = msg;
+  el.className = 'flash ' + (ok ? 'ok' : 'err');
+  el.style.display = 'block';
+  setTimeout(() => { el.style.display = 'none'; }, 3500);
+}
+
+function setTheme(t) {
+  document.documentElement.setAttribute('data-theme', t);
+  document.querySelectorAll('.theme-opt').forEach(b => b.classList.remove('active'));
+  event.target.classList.add('active');
+  savePref('theme', t);
+}
+
+function savePref(key, val) {
+  fetch('/api/settings', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({key, val})
+  }).then(r => r.json()).then(d => {
+    if (!d.ok) flash(d.error || 'Error saving', false);
+  }).catch(() => flash('Error saving', false));
+}
+
+function saveTicker() {
+  const val = document.getElementById('default-ticker').value.trim().toUpperCase();
+  if (!val) return;
+  document.getElementById('default-ticker').value = val;
+  fetch('/api/settings', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({key: 'default_ticker', val})
+  }).then(r => r.json()).then(d => {
+    if (d.ok) flash('Default ticker saved', true);
+    else flash(d.error || 'Error', false);
+  }).catch(() => flash('Error saving', false));
+}
+
+function saveEmail() {
+  const val = document.getElementById('new-email').value.trim();
+  if (!val) return;
+  fetch('/api/settings/email', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({email: val})
+  }).then(r => r.json()).then(d => {
+    if (d.ok) { flash('Email updated', true); document.getElementById('new-email').value = ''; }
+    else flash(d.error || 'Error', false);
+  }).catch(() => flash('Error saving', false));
+}
+
+function changePassword() {
+  const cur  = document.getElementById('pw-current').value;
+  const nw   = document.getElementById('pw-new').value;
+  const conf = document.getElementById('pw-confirm').value;
+  if (!cur || !nw || !conf) { flash('Fill in all password fields', false); return; }
+  if (nw !== conf) { flash('Passwords do not match', false); return; }
+  if (nw.length < 6) { flash('Password must be at least 6 characters', false); return; }
+  fetch('/api/settings/password', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({current: cur, new_pw: nw})
+  }).then(r => r.json()).then(d => {
+    if (d.ok) {
+      flash('Password updated', true);
+      ['pw-current','pw-new','pw-confirm'].forEach(id => document.getElementById(id).value = '');
+      document.getElementById('pw-row').style.display = 'none';
+    } else flash(d.error || 'Error', false);
+  }).catch(() => flash('Error saving', false));
+}
+
+function deleteAccount() {
+  fetch('/api/settings/delete', {method: 'POST'})
+    .then(r => r.json())
+    .then(d => {
+      if (d.ok) window.location.href = '/';
+      else flash(d.error || 'Error deleting account', false);
+    }).catch(() => flash('Error', false));
+}
+</script>
+</body>
+</html>"""
+
+
+@app.route("/settings")
+@login_required
+def settings_page():
+    user_id = session["user_id"]
+    row = _one("SELECT email, theme, default_ticker, copy_toast FROM users WHERE id=%s", (user_id,))
+    return render_template_string(
+        SETTINGS_HTML,
+        current_user=current_user(),
+        email=row["email"] if row else None,
+        user_theme=row["theme"] if row and row["theme"] else "dark",
+        default_ticker=row["default_ticker"] if row and row["default_ticker"] else "AAPL",
+        copy_toast=row["copy_toast"] if row and row["copy_toast"] is not None else 1,
+    )
+
+
+@app.route("/api/settings", methods=["POST"])
+@login_required
+def api_settings():
+    user_id = session["user_id"]
+    data = request.get_json(silent=True) or {}
+    key  = data.get("key", "")
+    val  = data.get("val")
+    allowed = {"theme", "default_ticker", "copy_toast"}
+    if key not in allowed:
+        return jsonify({"ok": False, "error": "Invalid setting"})
+    if key == "default_ticker":
+        val = str(val).upper().strip()[:12]
+    elif key == "copy_toast":
+        val = 1 if val else 0
+    elif key == "theme":
+        val = "light" if val == "light" else "dark"
+    _run(f"UPDATE users SET {key}=%s WHERE id=%s", (val, user_id))
+    return jsonify({"ok": True})
+
+
+@app.route("/api/settings/email", methods=["POST"])
+@login_required
+def api_settings_email():
+    user_id = session["user_id"]
+    data  = request.get_json(silent=True) or {}
+    email = data.get("email", "").strip()
+    if not email or "@" not in email:
+        return jsonify({"ok": False, "error": "Invalid email"})
+    existing = _one("SELECT id FROM users WHERE email=%s AND id!=%s", (email, user_id))
+    if existing:
+        return jsonify({"ok": False, "error": "Email already in use"})
+    _run("UPDATE users SET email=%s WHERE id=%s", (email, user_id))
+    return jsonify({"ok": True})
+
+
+@app.route("/api/settings/password", methods=["POST"])
+@login_required
+def api_settings_password():
+    import bcrypt
+    user_id = session["user_id"]
+    data    = request.get_json(silent=True) or {}
+    current = data.get("current", "")
+    new_pw  = data.get("new_pw", "")
+    if not current or not new_pw or len(new_pw) < 6:
+        return jsonify({"ok": False, "error": "Invalid input"})
+    row = _one("SELECT pw_hash FROM users WHERE id=%s", (user_id,))
+    if not row or not bcrypt.checkpw(current.encode(), row["pw_hash"].encode()):
+        return jsonify({"ok": False, "error": "Current password is incorrect"})
+    new_hash = bcrypt.hashpw(new_pw.encode(), bcrypt.gensalt()).decode()
+    _run("UPDATE users SET pw_hash=%s WHERE id=%s", (new_hash, user_id))
+    return jsonify({"ok": True})
+
+
+@app.route("/api/settings/delete", methods=["POST"])
+@login_required
+def api_settings_delete():
+    user_id = session["user_id"]
+    row = _one("SELECT stripe_subscription_id FROM users WHERE id=%s", (user_id,))
+    if row and row["stripe_subscription_id"]:
+        try:
+            stripe.Subscription.cancel(row["stripe_subscription_id"])
+        except Exception:
+            pass
+    # Delete all user data
+    for table, col in [
+        ("favorites", "user_id"),
+        ("watchlist", "user_id"),
+        ("copy_log", "user_id"),
+        ("copy_history", "user_id"),
+        ("indicator_ratings", "user_id"),
+        ("request_votes", "user_id"),
+    ]:
+        try:
+            _run(f"DELETE FROM {table} WHERE {col}=%s", (user_id,))
+        except Exception:
+            pass
+    _run("DELETE FROM users WHERE id=%s", (user_id,))
+    session.clear()
+    return jsonify({"ok": True})
+
+
 @app.route("/dashboard")
 def dashboard():
     return render_template_string(DASHBOARD_HTML, current_user=current_user())
@@ -10360,6 +10715,7 @@ MY_DASHBOARD_HTML = """<!DOCTYPE html>
     <div class="card">
       <div class="card-title">Account</div>
       <div style="display:flex;flex-direction:column;gap:10px;">
+        <a href="/settings" style="color:var(--accent);font-size:.88rem;text-decoration:none;">⚙️ Settings</a>
         <a href="/billing" style="color:var(--accent);font-size:.88rem;text-decoration:none;">💳 Manage Billing</a>
         <a href="/refer"   style="color:var(--accent);font-size:.88rem;text-decoration:none;">🤝 Refer a Friend</a>
         <a href="/redeem"  style="color:var(--accent);font-size:.88rem;text-decoration:none;">🎁 Redeem Code</a>
