@@ -10242,12 +10242,7 @@ MY_DASHBOARD_HTML = """<!DOCTYPE html>
     .wl-add-row input { flex: 1; background: var(--bg3); border: 1px solid var(--border); border-radius: 6px; padding: 8px 12px; color: var(--text); font-size: .85rem; font-family: monospace; text-transform: uppercase; outline: none; }
     .wl-add-row input:focus { border-color: var(--accent); }
     .wl-add-row button { background: var(--accent); color: #fff; border: none; border-radius: 6px; padding: 8px 16px; font-size: .85rem; font-weight: 600; cursor: pointer; }
-    /* Quick links */
-    .links-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; }
-    .quick-link { background: var(--bg3); border: 1px solid var(--border); border-radius: 8px; padding: 12px 10px; text-align: center; text-decoration: none; color: var(--text); font-size: .8rem; transition: border-color .15s; }
-    .quick-link:hover { border-color: var(--accent); color: var(--accent); }
-    .quick-link .icon { font-size: 1.3rem; display: block; margin-bottom: 5px; }
-    .empty { color: var(--muted); font-size: .85rem; text-align: center; padding: 20px 0; }
+.empty { color: var(--muted); font-size: .85rem; text-align: center; padding: 20px 0; }
     .wl-loading { color: var(--muted); font-size: .8rem; padding: 10px 0; }
     .full-card { grid-column: 1 / -1; }
   </style>
@@ -10320,31 +10315,6 @@ MY_DASHBOARD_HTML = """<!DOCTYPE html>
       <div id="wl-error" style="color:var(--red);font-size:.78rem;margin-top:6px;display:none;"></div>
     </div>
 
-    <!-- Quick links -->
-    <div class="card full-card">
-      <div class="card-title">Quick Access</div>
-      <div class="links-grid">
-        <a class="quick-link" href="/indicators"><span class="icon">📋</span>Indicators</a>
-        <a class="quick-link" href="/dashboard"><span class="icon">📈</span>Live Chart</a>
-        <a class="quick-link" href="/heatmap"><span class="icon">🟩</span>Heatmap</a>
-        <a class="quick-link" href="/earnings"><span class="icon">📅</span>Earnings</a>
-        <a class="quick-link" href="/volume"><span class="icon">🔊</span>Volume</a>
-        <a class="quick-link" href="/news"><span class="icon">📰</span>News</a>
-        {% if plan != 'free' %}
-        <a class="quick-link" href="/gamma"><span class="icon">Γ</span>Gamma</a>
-        <a class="quick-link" href="/volforecast"><span class="icon">📊</span>Vol Forecast</a>
-        <a class="quick-link" href="/greeks"><span class="icon">Δ</span>Greeks</a>
-        {% endif %}
-        {% if plan == 'pro' %}
-        <a class="quick-link" href="/flow"><span class="icon">🌊</span>Options Flow</a>
-        <a class="quick-link" href="/insider"><span class="icon">🏛</span>Insider</a>
-        <a class="quick-link" href="/premarket"><span class="icon">🌅</span>Pre-Market</a>
-        {% endif %}
-        <a class="quick-link" href="/crypto/feargreed"><span class="icon">😨</span>Fear &amp; Greed</a>
-        <a class="quick-link" href="/crypto/heatmap"><span class="icon">🔥</span>Crypto Map</a>
-        <a class="quick-link" href="/favorites"><span class="icon">♥</span>Favorites</a>
-      </div>
-    </div>
 
   </div>
 </div>
