@@ -224,6 +224,22 @@ def init_db():
                 updated     TIMESTAMP DEFAULT NOW()
             )
         """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS watchlist (
+                user_id INTEGER NOT NULL,
+                symbol  TEXT NOT NULL,
+                added   TIMESTAMP DEFAULT NOW(),
+                PRIMARY KEY (user_id, symbol)
+            )
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS copy_history (
+                id        SERIAL PRIMARY KEY,
+                user_id   INTEGER NOT NULL,
+                indicator TEXT NOT NULL,
+                ts        TIMESTAMP DEFAULT NOW()
+            )
+        """)
         conn.commit()
     except Exception:
         conn.rollback()
@@ -322,8 +338,9 @@ def _increment_copy(user_id):
 
 @app.route("/api/copy", methods=["POST"])
 def api_copy():
-    user_id = session.get("user_id")
-    today = date.today().isoformat()
+    user_id   = session.get("user_id")
+    today     = date.today().isoformat()
+    indicator = request.json.get("indicator", "") if request.is_json else request.form.get("indicator", "")
 
     if not user_id:
         # Anonymous: session-based tracking
@@ -339,6 +356,8 @@ def api_copy():
     plan = _get_user_plan(user_id)
     if plan == "pro":
         _increment_copy(user_id)
+        if indicator:
+            _run("INSERT INTO copy_history (user_id, indicator) VALUES (%s, %s)", (user_id, indicator))
         return jsonify({"ok": True, "remaining": -1, "plan": "pro"})
 
     limit = STRIPE_PLAN_LIMITS.get(plan, 3)
@@ -347,6 +366,8 @@ def api_copy():
         return jsonify({"ok": False, "reason": "limit", "plan": plan})
 
     _increment_copy(user_id)
+    if indicator:
+        _run("INSERT INTO copy_history (user_id, indicator) VALUES (%s, %s)", (user_id, indicator))
     return jsonify({"ok": True, "remaining": limit - used - 1, "plan": plan})
 
 
@@ -1498,6 +1519,15 @@ def google_callback():
 
 # ── Favorites API ─────────────────────────────────────────────────────────────
 
+@app.route("/api/favorites")
+def api_favorites_list():
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify([])
+    rows = _q("SELECT indicator_key FROM favorites WHERE user_id=%s ORDER BY id DESC", (user_id,))
+    return jsonify([{"indicator_key": r["indicator_key"]} for r in rows])
+
+
 @app.route("/api/favorite/<key>", methods=["POST"])
 @login_required
 def toggle_favorite(key):
@@ -1509,6 +1539,14 @@ def toggle_favorite(key):
     else:
         _run("INSERT INTO favorites (user_id, indicator_key) VALUES (%s, %s)", (user_id, key))
         return jsonify({"favorited": True})
+
+
+@app.route("/api/favorite/<key>", methods=["DELETE"])
+@login_required
+def delete_favorite(key):
+    user_id = session["user_id"]
+    _run("DELETE FROM favorites WHERE user_id=%s AND indicator_key=%s", (user_id, key))
+    return jsonify({"ok": True})
 
 
 @app.route("/favorites")
@@ -3854,6 +3892,7 @@ _NAV_LINKS = """
       {% if current_user %}
       <button class="drop-btn" onclick="toggleDrop(this, event)">{{ current_user }} ▾</button>
       <div class="drop-menu">
+        <a href="/me">🏠 My Dashboard</a>
         <a href="/profile">👤 Profile</a>
         <a href="/favorites">♥ Favorites</a>
         <a href="/billing">Billing</a>
@@ -10083,6 +10122,402 @@ def dashboard():
 @app.route("/")
 def index():
     return render_template_string(HOME_HTML, current_user=current_user())
+
+
+# ── My Dashboard ──────────────────────────────────────────────────────────────
+
+@app.route("/api/watchlist", methods=["GET"])
+def api_watchlist_get():
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "not_logged_in"}), 401
+    rows = _q("SELECT symbol, added FROM watchlist WHERE user_id=%s ORDER BY added DESC", (user_id,))
+    symbols = [r["symbol"] for r in rows]
+    # Fetch live prices
+    prices = {}
+    if symbols:
+        import yfinance as yf
+        try:
+            tickers = yf.Tickers(" ".join(symbols))
+            for sym in symbols:
+                try:
+                    info = tickers.tickers[sym].fast_info
+                    px   = float(info.last_price or 0)
+                    prev = float(info.previous_close or px)
+                    chg  = ((px - prev) / prev * 100) if prev else 0
+                    prices[sym] = {"price": round(px, 4), "chg": round(chg, 2)}
+                except Exception:
+                    prices[sym] = {"price": None, "chg": None}
+        except Exception:
+            pass
+    result = []
+    for r in rows:
+        sym = r["symbol"]
+        result.append({
+            "symbol": sym,
+            "added":  r["added"].strftime("%Y-%m-%d") if r["added"] else "",
+            **(prices.get(sym, {"price": None, "chg": None}))
+        })
+    return jsonify(result)
+
+
+@app.route("/api/watchlist", methods=["POST"])
+def api_watchlist_add():
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "not_logged_in"}), 401
+    data   = request.get_json(silent=True) or {}
+    symbol = (data.get("symbol") or "").strip().upper()
+    if not symbol:
+        return jsonify({"error": "missing symbol"}), 400
+    count = _one("SELECT COUNT(*) as c FROM watchlist WHERE user_id=%s", (user_id,))
+    if count and count["c"] >= 20:
+        return jsonify({"error": "Watchlist limit is 20 symbols"}), 400
+    _run("INSERT INTO watchlist (user_id, symbol) VALUES (%s, %s) ON CONFLICT DO NOTHING", (user_id, symbol))
+    return jsonify({"ok": True, "symbol": symbol})
+
+
+@app.route("/api/watchlist/<symbol>", methods=["DELETE"])
+def api_watchlist_delete(symbol):
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "not_logged_in"}), 401
+    _run("DELETE FROM watchlist WHERE user_id=%s AND symbol=%s", (user_id, symbol.upper()))
+    return jsonify({"ok": True})
+
+
+MY_DASHBOARD_HTML = """<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>My Dashboard · ChartEdge</title>
+  <style>
+    :root[data-theme="dark"]  { --bg:#0d1117; --bg2:#161b22; --bg3:#21262d; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --green:#3fb950; --red:#f85149; }
+    :root[data-theme="light"] { --bg:#ffffff; --bg2:#f6f8fa; --bg3:#eaeef2; --border:#d0d7de; --text:#1f2328; --muted:#636c76; --accent:#0969da; --green:#1a7f37; --red:#cf222e; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: monospace; background: var(--bg); color: var(--text); min-height: 100vh; }
+    nav { background: var(--bg2); border-bottom: 1px solid var(--border); padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; }
+    .logo { color: var(--accent); font-size: 1.1rem; font-weight: bold; text-decoration: none; }
+    """ + _NAV_CSS + """
+    .page { max-width: 1000px; margin: 0 auto; padding: 32px 24px; }
+    h1 { font-size: 1.6rem; margin-bottom: 4px; }
+    h1 span { color: var(--accent); }
+    .sub { color: var(--muted); font-size: .9rem; margin-bottom: 32px; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    @media(max-width:700px) { .grid { grid-template-columns: 1fr; } }
+    .card { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 22px; }
+    .card-title { font-size: .78rem; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 14px; display: flex; align-items: center; gap: 8px; }
+    .card-title span { color: var(--text); font-size: .95rem; }
+    /* Plan card */
+    .plan-name { font-size: 1.5rem; font-weight: 700; color: var(--accent); }
+    .plan-detail { font-size: .82rem; color: var(--muted); margin-top: 6px; }
+    .upgrade-btn { display: inline-block; margin-top: 14px; background: var(--accent); color: #fff; border-radius: 6px; padding: 8px 18px; font-size: .85rem; font-weight: 600; text-decoration: none; }
+    /* Usage bar */
+    .usage-bar-wrap { margin-top: 12px; }
+    .usage-label { display: flex; justify-content: space-between; font-size: .8rem; color: var(--muted); margin-bottom: 6px; }
+    .usage-bar { height: 8px; border-radius: 4px; background: var(--bg3); overflow: hidden; }
+    .usage-fill { height: 100%; border-radius: 4px; background: var(--accent); transition: width .4s; }
+    .usage-fill.warn { background: #d29922; }
+    .usage-fill.full { background: var(--red); }
+    /* Copy history */
+    .hist-item { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: .85rem; }
+    .hist-item:last-child { border-bottom: none; }
+    .hist-sym { font-weight: 600; }
+    .hist-ts  { color: var(--muted); font-size: .75rem; }
+    /* Favorites */
+    .fav-item { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: .85rem; }
+    .fav-item:last-child { border-bottom: none; }
+    .fav-link { color: var(--accent); text-decoration: none; font-weight: 600; }
+    .fav-link:hover { text-decoration: underline; }
+    .remove-btn { background: none; border: none; color: var(--red); cursor: pointer; font-size: .8rem; padding: 2px 6px; }
+    /* Watchlist */
+    .wl-row { display: flex; justify-content: space-between; align-items: center; padding: 9px 0; border-bottom: 1px solid var(--border); font-size: .85rem; }
+    .wl-row:last-child { border-bottom: none; }
+    .wl-sym { font-weight: 700; }
+    .wl-price { font-variant-numeric: tabular-nums; }
+    .wl-chg-pos { color: var(--green); }
+    .wl-chg-neg { color: var(--red); }
+    .wl-add-row { display: flex; gap: 8px; margin-top: 14px; }
+    .wl-add-row input { flex: 1; background: var(--bg3); border: 1px solid var(--border); border-radius: 6px; padding: 8px 12px; color: var(--text); font-size: .85rem; font-family: monospace; text-transform: uppercase; outline: none; }
+    .wl-add-row input:focus { border-color: var(--accent); }
+    .wl-add-row button { background: var(--accent); color: #fff; border: none; border-radius: 6px; padding: 8px 16px; font-size: .85rem; font-weight: 600; cursor: pointer; }
+    /* Quick links */
+    .links-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; }
+    .quick-link { background: var(--bg3); border: 1px solid var(--border); border-radius: 8px; padding: 12px 10px; text-align: center; text-decoration: none; color: var(--text); font-size: .8rem; transition: border-color .15s; }
+    .quick-link:hover { border-color: var(--accent); color: var(--accent); }
+    .quick-link .icon { font-size: 1.3rem; display: block; margin-bottom: 5px; }
+    .empty { color: var(--muted); font-size: .85rem; text-align: center; padding: 20px 0; }
+    .wl-loading { color: var(--muted); font-size: .8rem; padding: 10px 0; }
+    .full-card { grid-column: 1 / -1; }
+  </style>
+</head>
+<body>
+<nav>
+  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span></a>
+  <button class="hamburger" onclick="toggleMobileNav(event)">☰</button>
+  <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
+</nav>
+<div class="page">
+  <h1>My <span>Dashboard</span></h1>
+  <p class="sub">Your personalized ChartEdge hub</p>
+
+  <div class="grid">
+
+    <!-- Plan status -->
+    <div class="card">
+      <div class="card-title">Plan Status</div>
+      <div class="plan-name">{{ plan | upper }}</div>
+      {% if plan_expires %}
+        <div class="plan-detail">Renews {{ plan_expires }}</div>
+      {% endif %}
+      {% if plan == 'free' %}
+        <div class="plan-detail" style="margin-top:6px;">Unlock all tools with Basic or Pro.</div>
+        <a href="/pricing" class="upgrade-btn">Upgrade Plan</a>
+      {% elif plan == 'basic' %}
+        <div class="plan-detail" style="margin-top:6px;">Upgrade to Pro for Options Flow, Insider Trading &amp; more.</div>
+        <a href="/pricing" class="upgrade-btn">Go Pro</a>
+      {% else %}
+        <div class="plan-detail" style="color:var(--green);margin-top:6px;">✓ Full access to all features</div>
+      {% endif %}
+    </div>
+
+    <!-- Copy usage today -->
+    <div class="card">
+      <div class="card-title">Copies Today <span id="copies-fraction"></span></div>
+      <div class="usage-bar-wrap">
+        <div class="usage-label">
+          <span id="copies-used-lbl">—</span>
+          <span id="copies-limit-lbl">—</span>
+        </div>
+        <div class="usage-bar"><div class="usage-fill" id="copies-bar" style="width:0%"></div></div>
+      </div>
+      <div style="margin-top:14px;font-size:.82rem;color:var(--muted);">
+        Total copies all-time: <strong id="copies-total" style="color:var(--text)">—</strong>
+      </div>
+    </div>
+
+    <!-- Recent copies -->
+    <div class="card">
+      <div class="card-title">Recent Copies</div>
+      <div id="hist-list"><div class="empty">Loading…</div></div>
+    </div>
+
+    <!-- Favorites -->
+    <div class="card">
+      <div class="card-title">Saved Favorites</div>
+      <div id="fav-list"><div class="empty">Loading…</div></div>
+    </div>
+
+    <!-- Watchlist (full width) -->
+    <div class="card full-card">
+      <div class="card-title">Watchlist <span style="color:var(--muted);font-size:.75rem;">(up to 20)</span></div>
+      <div id="wl-list"><div class="wl-loading">Loading…</div></div>
+      <div class="wl-add-row">
+        <input type="text" id="wl-input" placeholder="Add ticker, e.g. AAPL" maxlength="12">
+        <button onclick="wlAdd()">Add</button>
+      </div>
+      <div id="wl-error" style="color:var(--red);font-size:.78rem;margin-top:6px;display:none;"></div>
+    </div>
+
+    <!-- Quick links -->
+    <div class="card full-card">
+      <div class="card-title">Quick Access</div>
+      <div class="links-grid">
+        <a class="quick-link" href="/indicators"><span class="icon">📋</span>Indicators</a>
+        <a class="quick-link" href="/dashboard"><span class="icon">📈</span>Live Chart</a>
+        <a class="quick-link" href="/heatmap"><span class="icon">🟩</span>Heatmap</a>
+        <a class="quick-link" href="/earnings"><span class="icon">📅</span>Earnings</a>
+        <a class="quick-link" href="/volume"><span class="icon">🔊</span>Volume</a>
+        <a class="quick-link" href="/news"><span class="icon">📰</span>News</a>
+        {% if plan != 'free' %}
+        <a class="quick-link" href="/gamma"><span class="icon">Γ</span>Gamma</a>
+        <a class="quick-link" href="/volforecast"><span class="icon">📊</span>Vol Forecast</a>
+        <a class="quick-link" href="/greeks"><span class="icon">Δ</span>Greeks</a>
+        {% endif %}
+        {% if plan == 'pro' %}
+        <a class="quick-link" href="/flow"><span class="icon">🌊</span>Options Flow</a>
+        <a class="quick-link" href="/insider"><span class="icon">🏛</span>Insider</a>
+        <a class="quick-link" href="/premarket"><span class="icon">🌅</span>Pre-Market</a>
+        {% endif %}
+        <a class="quick-link" href="/crypto/feargreed"><span class="icon">😨</span>Fear &amp; Greed</a>
+        <a class="quick-link" href="/crypto/heatmap"><span class="icon">🔥</span>Crypto Map</a>
+        <a class="quick-link" href="/favorites"><span class="icon">♥</span>Favorites</a>
+      </div>
+    </div>
+
+  </div>
+</div>
+<script>
+""" + _THEME_JS + """
+
+const PLAN      = {{ plan | tojson }};
+const PLAN_LIMS = { free: 3, basic: 8, pro: null };
+const limit     = PLAN_LIMS[PLAN];
+
+// ── Copy usage ─────────────────────────────────────────────────────────────
+fetch('/api/me/stats')
+  .then(r => r.json())
+  .then(d => {
+    const used  = d.copies_today || 0;
+    const total = d.copies_total || 0;
+    document.getElementById('copies-total').textContent = total.toLocaleString();
+    if (PLAN === 'pro') {
+      document.getElementById('copies-used-lbl').textContent   = used + ' used';
+      document.getElementById('copies-limit-lbl').textContent  = 'Unlimited';
+      const bar = document.getElementById('copies-bar');
+      bar.style.width = '100%';
+      bar.style.background = 'var(--green)';
+    } else {
+      const lim = limit || 3;
+      const pct = Math.min(used / lim * 100, 100);
+      document.getElementById('copies-used-lbl').textContent  = used + ' used';
+      document.getElementById('copies-limit-lbl').textContent = lim + ' daily limit';
+      const bar = document.getElementById('copies-bar');
+      bar.style.width = pct + '%';
+      if (pct >= 100) bar.classList.add('full');
+      else if (pct >= 70) bar.classList.add('warn');
+    }
+  }).catch(() => {});
+
+// ── Copy history ───────────────────────────────────────────────────────────
+fetch('/api/me/history')
+  .then(r => r.json())
+  .then(rows => {
+    const el = document.getElementById('hist-list');
+    if (!rows.length) { el.innerHTML = '<div class="empty">No copies yet</div>'; return; }
+    el.innerHTML = rows.map(r =>
+      '<div class="hist-item">' +
+        '<span class="hist-sym">' + r.indicator + '</span>' +
+        '<span class="hist-ts">'  + r.ts + '</span>' +
+      '</div>'
+    ).join('');
+  }).catch(() => { document.getElementById('hist-list').innerHTML = '<div class="empty">Could not load</div>'; });
+
+// ── Favorites ──────────────────────────────────────────────────────────────
+fetch('/api/favorites')
+  .then(r => r.json())
+  .then(rows => {
+    const el = document.getElementById('fav-list');
+    if (!rows || !rows.length) { el.innerHTML = '<div class="empty">No favorites saved</div>'; return; }
+    el.innerHTML = rows.slice(0, 10).map(r =>
+      '<div class="fav-item">' +
+        '<a class="fav-link" href="/indicators?kind=' + encodeURIComponent(r.indicator_key) + '">' + r.indicator_key + '</a>' +
+        '<button class="remove-btn" onclick="removeFav(' + JSON.stringify(r.indicator_key) + ', this)">✕</button>' +
+      '</div>'
+    ).join('');
+  }).catch(() => { document.getElementById('fav-list').innerHTML = '<div class="empty">Could not load</div>'; });
+
+function removeFav(key, btn) {
+  fetch('/api/favorite/' + encodeURIComponent(key), {method: 'DELETE'})
+    .then(r => r.json())
+    .then(() => { btn.closest('.fav-item').remove(); })
+    .catch(() => {});
+}
+
+// ── Watchlist ──────────────────────────────────────────────────────────────
+function loadWatchlist() {
+  fetch('/api/watchlist')
+    .then(r => r.json())
+    .then(rows => {
+      const el = document.getElementById('wl-list');
+      if (!rows.length) { el.innerHTML = '<div class="empty">No symbols yet — add one below</div>'; return; }
+      el.innerHTML = rows.map(r => {
+        const chgClass = (r.chg > 0) ? 'wl-chg-pos' : (r.chg < 0) ? 'wl-chg-neg' : '';
+        const chgStr   = r.chg !== null ? ((r.chg >= 0 ? '+' : '') + r.chg.toFixed(2) + '%') : '—';
+        const priceStr = r.price !== null ? (r.price >= 1000 ? r.price.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2}) : r.price.toFixed(r.price < 1 ? 4 : 2)) : '—';
+        return '<div class="wl-row">' +
+          '<span class="wl-sym">' + r.symbol + '</span>' +
+          '<span style="display:flex;gap:18px;align-items:center;">' +
+            '<span class="wl-price">' + priceStr + '</span>' +
+            '<span class="' + chgClass + '" style="min-width:60px;text-align:right;">' + chgStr + '</span>' +
+            '<button class="remove-btn" onclick="wlRemove(' + JSON.stringify(r.symbol) + ', this)">✕</button>' +
+          '</span>' +
+        '</div>';
+      }).join('');
+    }).catch(() => { document.getElementById('wl-list').innerHTML = '<div class="empty">Could not load watchlist</div>'; });
+}
+
+function wlAdd() {
+  const inp = document.getElementById('wl-input');
+  const sym = inp.value.trim().toUpperCase();
+  const errEl = document.getElementById('wl-error');
+  if (!sym) return;
+  errEl.style.display = 'none';
+  fetch('/api/watchlist', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({symbol: sym})
+  }).then(r => r.json()).then(d => {
+    if (d.error) { errEl.textContent = d.error; errEl.style.display = 'block'; return; }
+    inp.value = '';
+    loadWatchlist();
+  }).catch(() => {});
+}
+
+document.getElementById('wl-input').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') wlAdd();
+});
+
+function wlRemove(sym, btn) {
+  fetch('/api/watchlist/' + encodeURIComponent(sym), {method: 'DELETE'})
+    .then(r => r.json())
+    .then(() => { btn.closest('.wl-row').remove(); })
+    .catch(() => {});
+}
+
+loadWatchlist();
+</script>
+</body>
+</html>"""
+
+
+@app.route("/api/me/stats")
+def api_me_stats():
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "not_logged_in"}), 401
+    today        = date.today().isoformat()
+    copies_today = _copies_used_today(user_id)
+    row_total    = _one("SELECT COALESCE(SUM(count),0) as total FROM copy_log WHERE user_id=%s", (user_id,))
+    copies_total = int(row_total["total"]) if row_total else 0
+    return jsonify({"copies_today": copies_today, "copies_total": copies_total})
+
+
+@app.route("/api/me/history")
+def api_me_history():
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "not_logged_in"}), 401
+    rows = _q(
+        "SELECT indicator, ts FROM copy_history WHERE user_id=%s ORDER BY ts DESC LIMIT 15",
+        (user_id,)
+    )
+    result = []
+    for r in rows:
+        ts = r["ts"]
+        result.append({
+            "indicator": r["indicator"],
+            "ts": ts.strftime("%b %d, %H:%M") if ts else ""
+        })
+    return jsonify(result)
+
+
+@app.route("/me")
+@login_required
+def me():
+    user_id = session.get("user_id")
+    plan    = _get_user_plan(user_id)
+    row     = _one("SELECT plan_expires FROM users WHERE id=%s", (user_id,))
+    expires = None
+    if row and row["plan_expires"] and plan != "free":
+        expires = row["plan_expires"].strftime("%b %d, %Y")
+    return render_template_string(
+        MY_DASHBOARD_HTML,
+        current_user=current_user(),
+        plan=plan,
+        plan_expires=expires,
+    )
 
 
 # ── Entry point ───────────────────────────────────────────────────────────────
