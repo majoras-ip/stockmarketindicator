@@ -4812,9 +4812,8 @@ INDICATORS_HTML = """<!DOCTYPE html>
 
   <!-- Tutorial tab -->
   <div id="tab-tutorial" class="tutorial-wrap">
-    <div class="video-container" style="aspect-ratio:16/9;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:10px;">
-      <span style="font-size:2rem;">🎬</span>
-      <span style="color:var(--muted);font-size:.9rem;">Video coming soon</span>
+    <div class="video-container">
+      <iframe src="https://www.youtube.com/embed/oRnnDjoN_dk?rel=0&modestbranding=1&iv_load_policy=3" allowfullscreen allow="autoplay; fullscreen"></iframe>
     </div>
     <ol class="steps">
       <li>
