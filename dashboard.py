@@ -1934,102 +1934,13 @@ def profile_update():
 
     if error:
         session["profile_error"] = error
-    return redirect("/profile")
+    return redirect("/me")
 
 
 @app.route("/profile")
 @login_required
 def profile():
-    from datetime import datetime, timezone
-    user_id  = session["user_id"]
-    username = session.get("username", "")
-    row = _one("SELECT created, plan, referral_code, email, profile_pic FROM users WHERE id=%s", (user_id,))
-    plan      = _get_user_plan(user_id)
-    created   = row["created"] if row else None
-    ref_code  = row["referral_code"] or ""
-
-    # Stats
-    copies     = _scalar("SELECT COALESCE(SUM(count), 0) FROM copy_log WHERE user_id=%s", (user_id,)) or 0
-    fav_count  = _scalar("SELECT COUNT(*) FROM favorites WHERE user_id=%s", (user_id,)) or 0
-
-    referrals  = _scalar("SELECT COUNT(*) FROM users WHERE referred_by=%s", (ref_code,)) or 0 if ref_code else 0
-
-    # Member duration
-    now = datetime.now(timezone.utc)
-    if created:
-        created_aware = created.replace(tzinfo=timezone.utc) if created.tzinfo is None else created
-        delta = now - created_aware
-        days  = delta.days
-        member_since = created_aware.strftime("%b %d, %Y")
-        if days < 7:
-            duration_label = "New Member"
-            duration_color = "#8b949e"
-        elif days < 30:
-            duration_label = f"{days} Days"
-            duration_color = "#58a6ff"
-        elif days < 90:
-            months = days // 30
-            duration_label = f"{months} Month{'s' if months > 1 else ''}"
-            duration_color = "#3fb950"
-        elif days < 365:
-            months = days // 30
-            duration_label = f"{months} Months"
-            duration_color = "#e3b341"
-        elif days < 730:
-            duration_label = "1 Year"
-            duration_color = "#f0883e"
-        else:
-            years = days // 365
-            duration_label = f"{years} Years"
-            duration_color = "#bc8cff"
-    else:
-        days = 0
-        member_since = "Unknown"
-        duration_label = "Member"
-        duration_color = "#8b949e"
-
-    # Build badge list
-    badges = []
-    # User number badge
-    badges.append({"icon": "👤", "label": f"User #{user_id}", "color": "#e6edf3", "bg": "#21262d"})
-    # Plan badge
-    plan_colors = {"free": ("#8b949e","#21262d"), "basic": ("#58a6ff","#0d1a2d"), "pro": ("#e3b341","#2a2000")}
-    pc, pbg = plan_colors.get(plan, plan_colors["free"])
-    badges.append({"icon": "💎" if plan=="pro" else ("⭐" if plan=="basic" else "🆓"),
-                   "label": plan.capitalize() + " Plan", "color": pc, "bg": pbg})
-    # Duration badge (only show once past 7 days)
-    if days >= 7:
-        dur_icons = {7:"🌿", 30:"🏅", 90:"🥈", 365:"🥇", 730:"👑"}
-        dur_icon = "🌿"
-        for threshold, icon in sorted(dur_icons.items()):
-            if days >= threshold: dur_icon = icon
-        badges.append({"icon": dur_icon, "label": duration_label + " Member",
-                       "color": duration_color, "bg": "#0d1117"})
-    # Activity badges
-    if copies >= 1:
-        badges.append({"icon":"📋","label":"First Copy","color":"#3fb950","bg":"#1a2d1a"})
-    if copies >= 10:
-        badges.append({"icon":"⚡","label":"Power User","color":"#e3b341","bg":"#2a2000"})
-    if copies >= 50:
-        badges.append({"icon":"🚀","label":"Super Trader","color":"#f0883e","bg":"#2d1a0d"})
-    if fav_count >= 3:
-        badges.append({"icon":"❤️","label":"Collector","color":"#f85149","bg":"#2d1515"})
-    if fav_count >= 10:
-        badges.append({"icon":"💫","label":"Indicator Fan","color":"#bc8cff","bg":"#1a0d2d"})
-    if referrals >= 1:
-        badges.append({"icon":"🤝","label":"Referrer","color":"#3fb950","bg":"#1a2d1a"})
-    if referrals >= 3:
-        badges.append({"icon":"🌟","label":"Ambassador","color":"#e3b341","bg":"#2a2000"})
-    if days <= 30 and days >= 0:
-        badges.append({"icon":"🎉","label":"Early Adopter","color":"#bc8cff","bg":"#1a0d2d"})
-
-    profile_pic = row["profile_pic"] if row else None
-    profile_error = session.pop("profile_error", None)
-
-    stats = {"copies": copies, "favorites": fav_count, "referrals": referrals}
-    return render_template_string(PROFILE_HTML, current_user=username, username=username,
-        plan=plan, member_since=member_since, duration_label=duration_label,
-        badges=badges, stats=stats, profile_pic=profile_pic, profile_error=profile_error)
+    return redirect("/me")
 
 
 ADMIN_LOGIN_HTML = """<!DOCTYPE html>
@@ -10196,55 +10107,71 @@ MY_DASHBOARD_HTML = """<!DOCTYPE html>
     :root[data-theme="dark"]  { --bg:#0d1117; --bg2:#161b22; --bg3:#21262d; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --green:#3fb950; --red:#f85149; }
     :root[data-theme="light"] { --bg:#ffffff; --bg2:#f6f8fa; --bg3:#eaeef2; --border:#d0d7de; --text:#1f2328; --muted:#636c76; --accent:#0969da; --green:#1a7f37; --red:#cf222e; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: monospace; background: var(--bg); color: var(--text); min-height: 100vh; }
+    body { font-family: -apple-system, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
     nav { background: var(--bg2); border-bottom: 1px solid var(--border); padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; }
     .logo { color: var(--accent); font-size: 1.1rem; font-weight: bold; text-decoration: none; }
     """ + _NAV_CSS + """
     .page { max-width: 1000px; margin: 0 auto; padding: 32px 24px; }
-    h1 { font-size: 1.6rem; margin-bottom: 4px; }
-    h1 span { color: var(--accent); }
-    .sub { color: var(--muted); font-size: .9rem; margin-bottom: 32px; }
+    /* Profile header */
+    .profile-header { display: flex; align-items: center; gap: 20px; margin-bottom: 28px; padding: 24px; background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; flex-wrap: wrap; }
+    .avatar { width: 68px; height: 68px; border-radius: 50%; background: var(--accent); display: flex; align-items: center; justify-content: center; font-size: 1.8rem; font-weight: 700; color: #fff; flex-shrink: 0; overflow: hidden; }
+    .avatar img { width: 68px; height: 68px; border-radius: 50%; object-fit: cover; }
+    .profile-info { flex: 1; min-width: 0; }
+    .profile-name { font-size: 1.3rem; font-weight: 700; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .plan-pill { padding: 3px 10px; border-radius: 20px; font-size: .72rem; font-weight: 700; text-transform: uppercase; }
+    .pencil-btn { background: none; border: none; cursor: pointer; font-size: .85rem; color: var(--muted); padding: 2px 5px; border-radius: 4px; }
+    .pencil-btn:hover { color: var(--accent); background: var(--bg3); }
+    .profile-meta { color: var(--muted); font-size: .83rem; margin-top: 5px; }
+    /* Edit form */
+    .edit-section { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 22px; margin-bottom: 20px; }
+    .edit-section-title { font-size: .75rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .07em; margin-bottom: 14px; }
+    .edit-form { display: flex; flex-direction: column; gap: 12px; }
+    .edit-row { display: flex; flex-direction: column; gap: 5px; }
+    .edit-row label { font-size: .75rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+    .edit-row input[type=text], .edit-row input[type=file] { background: var(--bg3); border: 1px solid var(--border); border-radius: 6px; padding: 8px 12px; color: var(--text); font-size: .9rem; width: 100%; }
+    .btn-save { background: var(--accent); color: #fff; border: none; border-radius: 6px; padding: 9px 22px; font-size: .9rem; font-weight: 600; cursor: pointer; align-self: flex-start; }
+    .error-msg { background: #2d1515; border: 1px solid var(--red); color: var(--red); border-radius: 6px; padding: 10px 14px; font-size: .85rem; margin-bottom: 12px; }
+    /* Grid */
     .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
     @media(max-width:700px) { .grid { grid-template-columns: 1fr; } }
     .card { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 22px; }
-    .card-title { font-size: .78rem; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 14px; display: flex; align-items: center; gap: 8px; }
-    .card-title span { color: var(--text); font-size: .95rem; }
+    .card-title { font-size: .75rem; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 14px; font-weight: 700; }
+    .full-card { grid-column: 1 / -1; }
+    /* Stats */
+    .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+    .stat-box { background: var(--bg3); border-radius: 8px; padding: 14px; text-align: center; }
+    .stat-num { font-size: 1.5rem; font-weight: 700; color: var(--accent); }
+    .stat-lbl { font-size: .7rem; color: var(--muted); margin-top: 4px; text-transform: uppercase; letter-spacing: .05em; }
+    /* Badges */
+    .badges-wrap { display: flex; flex-wrap: wrap; gap: 8px; }
+    .badge-card { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border); font-size: .8rem; font-weight: 600; }
+    .no-badges { color: var(--muted); font-size: .85rem; }
     /* Plan card */
-    .plan-name { font-size: 1.5rem; font-weight: 700; color: var(--accent); }
+    .plan-name { font-size: 1.4rem; font-weight: 700; color: var(--accent); }
     .plan-detail { font-size: .82rem; color: var(--muted); margin-top: 6px; }
-    .upgrade-btn { display: inline-block; margin-top: 14px; background: var(--accent); color: #fff; border-radius: 6px; padding: 8px 18px; font-size: .85rem; font-weight: 600; text-decoration: none; }
+    .upgrade-btn { display: inline-block; margin-top: 12px; background: var(--accent); color: #fff; border-radius: 6px; padding: 8px 16px; font-size: .83rem; font-weight: 600; text-decoration: none; }
     /* Usage bar */
-    .usage-bar-wrap { margin-top: 12px; }
     .usage-label { display: flex; justify-content: space-between; font-size: .8rem; color: var(--muted); margin-bottom: 6px; }
     .usage-bar { height: 8px; border-radius: 4px; background: var(--bg3); overflow: hidden; }
     .usage-fill { height: 100%; border-radius: 4px; background: var(--accent); transition: width .4s; }
     .usage-fill.warn { background: #d29922; }
     .usage-fill.full { background: var(--red); }
-    /* Copy history */
-    .hist-item { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: .85rem; }
-    .hist-item:last-child { border-bottom: none; }
-    .hist-sym { font-weight: 600; }
-    .hist-ts  { color: var(--muted); font-size: .75rem; }
-    /* Favorites */
-    .fav-item { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: .85rem; }
-    .fav-item:last-child { border-bottom: none; }
+    /* List items */
+    .list-item { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: .85rem; }
+    .list-item:last-child { border-bottom: none; }
+    .item-main { font-weight: 600; }
+    .item-sub { color: var(--muted); font-size: .75rem; }
     .fav-link { color: var(--accent); text-decoration: none; font-weight: 600; }
     .fav-link:hover { text-decoration: underline; }
     .remove-btn { background: none; border: none; color: var(--red); cursor: pointer; font-size: .8rem; padding: 2px 6px; }
     /* Watchlist */
-    .wl-row { display: flex; justify-content: space-between; align-items: center; padding: 9px 0; border-bottom: 1px solid var(--border); font-size: .85rem; }
-    .wl-row:last-child { border-bottom: none; }
-    .wl-sym { font-weight: 700; }
-    .wl-price { font-variant-numeric: tabular-nums; }
     .wl-chg-pos { color: var(--green); }
     .wl-chg-neg { color: var(--red); }
     .wl-add-row { display: flex; gap: 8px; margin-top: 14px; }
     .wl-add-row input { flex: 1; background: var(--bg3); border: 1px solid var(--border); border-radius: 6px; padding: 8px 12px; color: var(--text); font-size: .85rem; font-family: monospace; text-transform: uppercase; outline: none; }
     .wl-add-row input:focus { border-color: var(--accent); }
     .wl-add-row button { background: var(--accent); color: #fff; border: none; border-radius: 6px; padding: 8px 16px; font-size: .85rem; font-weight: 600; cursor: pointer; }
-.empty { color: var(--muted); font-size: .85rem; text-align: center; padding: 20px 0; }
-    .wl-loading { color: var(--muted); font-size: .8rem; padding: 10px 0; }
-    .full-card { grid-column: 1 / -1; }
+    .empty { color: var(--muted); font-size: .85rem; text-align: center; padding: 20px 0; }
   </style>
 </head>
 <body>
@@ -10254,42 +10181,79 @@ MY_DASHBOARD_HTML = """<!DOCTYPE html>
   <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
 </nav>
 <div class="page">
-  <h1>My <span>Dashboard</span></h1>
-  <p class="sub">Your personalized ChartEdge hub</p>
+
+  <!-- Profile header -->
+  <div class="profile-header">
+    <div class="avatar">{% if profile_pic %}<img src="{{ profile_pic }}" alt="avatar">{% else %}{{ username[0].upper() }}{% endif %}</div>
+    <div class="profile-info">
+      <div class="profile-name">
+        {{ username }}
+        <span class="plan-pill" style="background:{{ {'free':'#21262d','basic':'#0d1a2d','pro':'#2a2000'}[plan] }};color:{{ {'free':'#8b949e','basic':'#58a6ff','pro':'#e3b341'}[plan] }};">{{ plan.upper() }}</span>
+        <button class="pencil-btn" onclick="document.getElementById('edit-section').style.display=document.getElementById('edit-section').style.display==='none'?'block':'none'" title="Edit profile">✏️</button>
+      </div>
+      <div class="profile-meta">Member since {{ member_since }}{% if plan_expires %} &nbsp;·&nbsp; Renews {{ plan_expires }}{% endif %}</div>
+    </div>
+  </div>
+
+  <!-- Edit profile (hidden by default) -->
+  <div id="edit-section" style="display:{% if profile_error %}block{% else %}none{% endif %}">
+    <div class="edit-section">
+      <div class="edit-section-title">Edit Profile</div>
+      {% if profile_error %}<div class="error-msg">{{ profile_error }}</div>{% endif %}
+      <form class="edit-form" method="POST" action="/profile/update" enctype="multipart/form-data">
+        <div class="edit-row">
+          <label>Username</label>
+          <input type="text" name="username" value="{{ username }}" maxlength="30" placeholder="New username">
+        </div>
+        <div class="edit-row">
+          <label>Profile Picture</label>
+          <input type="file" name="profile_pic" accept="image/*">
+        </div>
+        <button class="btn-save" type="submit">Save Changes</button>
+      </form>
+    </div>
+  </div>
 
   <div class="grid">
 
-    <!-- Plan status -->
+    <!-- Stats -->
     <div class="card">
-      <div class="card-title">Plan Status</div>
-      <div class="plan-name">{{ plan | upper }}</div>
-      {% if plan_expires %}
-        <div class="plan-detail">Renews {{ plan_expires }}</div>
-      {% endif %}
-      {% if plan == 'free' %}
-        <div class="plan-detail" style="margin-top:6px;">Unlock all tools with Basic or Pro.</div>
-        <a href="/pricing" class="upgrade-btn">Upgrade Plan</a>
-      {% elif plan == 'basic' %}
-        <div class="plan-detail" style="margin-top:6px;">Upgrade to Pro for Options Flow, Insider Trading &amp; more.</div>
-        <a href="/pricing" class="upgrade-btn">Go Pro</a>
-      {% else %}
-        <div class="plan-detail" style="color:var(--green);margin-top:6px;">✓ Full access to all features</div>
-      {% endif %}
+      <div class="card-title">Stats</div>
+      <div class="stats-grid">
+        <div class="stat-box"><div class="stat-num">{{ stats.copies }}</div><div class="stat-lbl">Copied</div></div>
+        <div class="stat-box"><div class="stat-num">{{ stats.favorites }}</div><div class="stat-lbl">Favorites</div></div>
+        <div class="stat-box"><div class="stat-num">{{ stats.referrals }}</div><div class="stat-lbl">Referrals</div></div>
+      </div>
     </div>
 
     <!-- Copy usage today -->
     <div class="card">
-      <div class="card-title">Copies Today <span id="copies-fraction"></span></div>
-      <div class="usage-bar-wrap">
-        <div class="usage-label">
-          <span id="copies-used-lbl">—</span>
-          <span id="copies-limit-lbl">—</span>
+      <div class="card-title">Copies Today</div>
+      <div class="usage-label">
+        <span id="copies-used-lbl">—</span>
+        <span id="copies-limit-lbl">—</span>
+      </div>
+      <div class="usage-bar"><div class="usage-fill" id="copies-bar" style="width:0%"></div></div>
+      <div style="margin-top:12px;font-size:.82rem;color:var(--muted);">
+        All-time total: <strong id="copies-total" style="color:var(--text)">—</strong>
+      </div>
+    </div>
+
+    <!-- Badges (full width) -->
+    <div class="card full-card">
+      <div class="card-title">Badges</div>
+      {% if badges %}
+      <div class="badges-wrap">
+        {% for b in badges %}
+        <div class="badge-card" style="background:{{ b.bg }};border-color:{{ b.color }}40;">
+          <span>{{ b.icon }}</span>
+          <span style="color:{{ b.color }};">{{ b.label }}</span>
         </div>
-        <div class="usage-bar"><div class="usage-fill" id="copies-bar" style="width:0%"></div></div>
+        {% endfor %}
       </div>
-      <div style="margin-top:14px;font-size:.82rem;color:var(--muted);">
-        Total copies all-time: <strong id="copies-total" style="color:var(--text)">—</strong>
-      </div>
+      {% else %}
+      <div class="no-badges">No badges yet — start copying indicators to earn some!</div>
+      {% endif %}
     </div>
 
     <!-- Recent copies -->
@@ -10306,8 +10270,8 @@ MY_DASHBOARD_HTML = """<!DOCTYPE html>
 
     <!-- Watchlist (full width) -->
     <div class="card full-card">
-      <div class="card-title">Watchlist <span style="color:var(--muted);font-size:.75rem;">(up to 20)</span></div>
-      <div id="wl-list"><div class="wl-loading">Loading…</div></div>
+      <div class="card-title">Watchlist <span style="color:var(--muted);font-size:.72rem;font-weight:400;">(up to 20)</span></div>
+      <div id="wl-list"><div class="empty">Loading…</div></div>
       <div class="wl-add-row">
         <input type="text" id="wl-input" placeholder="Add ticker, e.g. AAPL" maxlength="12">
         <button onclick="wlAdd()">Add</button>
@@ -10315,6 +10279,32 @@ MY_DASHBOARD_HTML = """<!DOCTYPE html>
       <div id="wl-error" style="color:var(--red);font-size:.78rem;margin-top:6px;display:none;"></div>
     </div>
 
+    <!-- Plan status -->
+    <div class="card">
+      <div class="card-title">Plan</div>
+      <div class="plan-name">{{ plan | upper }}</div>
+      {% if plan == 'free' %}
+        <div class="plan-detail">Unlock all tools with Basic or Pro.</div>
+        <a href="/pricing" class="upgrade-btn">Upgrade Plan</a>
+      {% elif plan == 'basic' %}
+        <div class="plan-detail">Upgrade to Pro for Options Flow, Insider Trading &amp; more.</div>
+        <a href="/pricing" class="upgrade-btn">Go Pro</a>
+      {% else %}
+        <div class="plan-detail" style="color:var(--green);margin-top:6px;">✓ Full access to all features</div>
+      {% endif %}
+    </div>
+
+    <!-- Account links -->
+    <div class="card">
+      <div class="card-title">Account</div>
+      <div style="display:flex;flex-direction:column;gap:10px;">
+        <a href="/billing" style="color:var(--accent);font-size:.88rem;text-decoration:none;">💳 Manage Billing</a>
+        <a href="/refer"   style="color:var(--accent);font-size:.88rem;text-decoration:none;">🤝 Refer a Friend</a>
+        <a href="/redeem"  style="color:var(--accent);font-size:.88rem;text-decoration:none;">🎁 Redeem Code</a>
+        <a href="/favorites" style="color:var(--accent);font-size:.88rem;text-decoration:none;">♥ All Favorites</a>
+        <a href="/logout"  style="color:var(--muted);font-size:.88rem;text-decoration:none;">→ Logout</a>
+      </div>
+    </div>
 
   </div>
 </div>
@@ -10476,17 +10466,83 @@ def api_me_history():
 @app.route("/me")
 @login_required
 def me():
-    user_id = session.get("user_id")
-    plan    = _get_user_plan(user_id)
-    row     = _one("SELECT plan_expires FROM users WHERE id=%s", (user_id,))
+    from datetime import datetime, timezone
+    user_id  = session["user_id"]
+    username = session.get("username", "")
+    plan     = _get_user_plan(user_id)
+    row      = _one("SELECT created, plan_expires, referral_code, profile_pic FROM users WHERE id=%s", (user_id,))
+
+    # Plan expiry
     expires = None
     if row and row["plan_expires"] and plan != "free":
         expires = row["plan_expires"].strftime("%b %d, %Y")
+
+    # Stats
+    copies    = _scalar("SELECT COALESCE(SUM(count),0) FROM copy_log WHERE user_id=%s", (user_id,)) or 0
+    fav_count = _scalar("SELECT COUNT(*) FROM favorites WHERE user_id=%s", (user_id,)) or 0
+    ref_code  = (row["referral_code"] or "") if row else ""
+    referrals = _scalar("SELECT COUNT(*) FROM users WHERE referred_by=%s", (ref_code,)) or 0 if ref_code else 0
+
+    # Member duration
+    now     = datetime.now(timezone.utc)
+    created = row["created"] if row else None
+    if created:
+        created_aware = created.replace(tzinfo=timezone.utc) if created.tzinfo is None else created
+        delta = now - created_aware
+        days  = delta.days
+        member_since = created_aware.strftime("%b %d, %Y")
+        if days < 7:
+            duration_label = "New Member"; duration_color = "#8b949e"
+        elif days < 30:
+            duration_label = f"{days} Days"; duration_color = "#58a6ff"
+        elif days < 90:
+            m = days // 30; duration_label = f"{m} Month{'s' if m>1 else ''}"; duration_color = "#3fb950"
+        elif days < 365:
+            m = days // 30; duration_label = f"{m} Months"; duration_color = "#e3b341"
+        elif days < 730:
+            duration_label = "1 Year"; duration_color = "#f0883e"
+        else:
+            y = days // 365; duration_label = f"{y} Years"; duration_color = "#bc8cff"
+    else:
+        days = 0; member_since = "Unknown"; duration_label = "Member"; duration_color = "#8b949e"
+
+    # Badges
+    badges = []
+    badges.append({"icon":"👤","label":f"User #{user_id}","color":"#e6edf3","bg":"#21262d"})
+    plan_colors = {"free":("#8b949e","#21262d"),"basic":("#58a6ff","#0d1a2d"),"pro":("#e3b341","#2a2000")}
+    pc, pbg = plan_colors.get(plan, plan_colors["free"])
+    badges.append({"icon":"💎" if plan=="pro" else ("⭐" if plan=="basic" else "🆓"),
+                   "label":plan.capitalize()+" Plan","color":pc,"bg":pbg})
+    if days >= 7:
+        dur_icons = {7:"🌿",30:"🏅",90:"🥈",365:"🥇",730:"👑"}
+        dur_icon = "🌿"
+        for t, ic in sorted(dur_icons.items()):
+            if days >= t: dur_icon = ic
+        badges.append({"icon":dur_icon,"label":duration_label+" Member","color":duration_color,"bg":"#0d1117"})
+    if copies >= 1:  badges.append({"icon":"📋","label":"First Copy","color":"#3fb950","bg":"#1a2d1a"})
+    if copies >= 10: badges.append({"icon":"⚡","label":"Power User","color":"#e3b341","bg":"#2a2000"})
+    if copies >= 50: badges.append({"icon":"🚀","label":"Super Trader","color":"#f0883e","bg":"#2d1a0d"})
+    if fav_count >= 3:  badges.append({"icon":"❤️","label":"Collector","color":"#f85149","bg":"#2d1515"})
+    if fav_count >= 10: badges.append({"icon":"💫","label":"Indicator Fan","color":"#bc8cff","bg":"#1a0d2d"})
+    if referrals >= 1: badges.append({"icon":"🤝","label":"Referrer","color":"#3fb950","bg":"#1a2d1a"})
+    if referrals >= 3: badges.append({"icon":"🌟","label":"Ambassador","color":"#e3b341","bg":"#2a2000"})
+    if 0 <= days <= 30: badges.append({"icon":"🎉","label":"Early Adopter","color":"#bc8cff","bg":"#1a0d2d"})
+
+    profile_pic   = row["profile_pic"] if row else None
+    profile_error = session.pop("profile_error", None)
+    stats = {"copies": copies, "favorites": fav_count, "referrals": referrals}
+
     return render_template_string(
         MY_DASHBOARD_HTML,
-        current_user=current_user(),
+        current_user=username,
+        username=username,
         plan=plan,
         plan_expires=expires,
+        member_since=member_since,
+        badges=badges,
+        stats=stats,
+        profile_pic=profile_pic,
+        profile_error=profile_error,
     )
 
 
