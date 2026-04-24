@@ -1677,6 +1677,12 @@ def indicators_page():
             session["copy_count"] = 0
         copies_remaining = max(0, 3 - session.get("copy_count", 0))
 
+    copy_toast = 1
+    if user_id:
+        pref = _one("SELECT copy_toast FROM users WHERE id=%s", (user_id,))
+        if pref and pref["copy_toast"] is not None:
+            copy_toast = pref["copy_toast"]
+
     return render_template_string(INDICATORS_HTML,
         kind=kind, search=search, category=category,
         indicators=filtered, all_indicators=INDICATORS,
@@ -1689,6 +1695,7 @@ def indicators_page():
         ratings=ratings,
         user_plan=user_plan,
         copies_remaining=copies_remaining,
+        copy_toast=copy_toast,
         current_user=current_user())
 
 
@@ -4744,6 +4751,10 @@ INDICATORS_HTML = """<!DOCTYPE html>
 
     footer { text-align: center; padding: 32px 24px; color: var(--muted); font-size: 0.8rem; border-top: 1px solid var(--border); margin-top: 40px; }
 
+    /* Copy toast */
+    .copy-toast { position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%) translateY(20px); background: #1a2d1a; border: 1px solid var(--green); color: var(--green); padding: 10px 22px; border-radius: 8px; font-size: .88rem; font-weight: 600; opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; z-index: 9999; }
+    .copy-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
     /* Page tabs */
     .page-tabs { display: flex; gap: 4px; margin-bottom: 24px; border-bottom: 1px solid var(--border); }
     .page-tab { background: none; border: none; color: var(--muted); font-family: monospace; font-size: .88rem; padding: 8px 16px; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; }
@@ -4863,9 +4874,20 @@ INDICATORS_HTML = """<!DOCTYPE html>
   </div>
 </div>
 
+<div class="copy-toast" id="copy-toast">✓ Copied to clipboard</div>
+
 <footer>© 2026 ChartEdge · Free Pine Script indicators · Not financial advice · <a href="/privacy" style="color:inherit">Privacy</a> · <a href="/terms" style="color:inherit">Terms</a></footer>
 
 <script>
+const COPY_TOAST_ENABLED = {{ copy_toast }};
+
+function showToast() {
+  if (!COPY_TOAST_ENABLED) return;
+  const t = document.getElementById('copy-toast');
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2200);
+}
+
 function switchTab(name) {
   document.getElementById('tab-indicators').style.display = name === 'indicators' ? 'block' : 'none';
   document.getElementById('tab-tutorial').classList.toggle('active', name === 'tutorial');
@@ -4989,6 +5011,7 @@ async function copyPine() {
   const btn = document.getElementById('copy-btn');
   btn.textContent = 'Copied!'; btn.classList.add('copied');
   setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
+  showToast();
   const badge = document.getElementById('copies-badge');
   const oc    = document.getElementById('overlay-count');
   if (data.remaining >= 0) {
