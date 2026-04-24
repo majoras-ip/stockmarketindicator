@@ -3813,6 +3813,7 @@ _NAV_LINKS = """
         {% if current_user %}<a href="/favorites">♥ My Favorites</a>{% endif %}
       </div>
     </div>
+    <a href="/pricing" style="font-size:.85rem;color:var(--accent);padding:6px 10px;text-decoration:none;font-weight:600;">Pricing</a>
     <div class="dropdown">
       {% if current_user %}
       <button class="drop-btn" onclick="toggleDrop(this, event)">{{ current_user }} ▾</button>
@@ -3833,7 +3834,6 @@ _NAV_LINKS = """
       </div>
       {% endif %}
     </div>
-    <a href="/pricing" style="font-size:.85rem;color:var(--accent);padding:6px 10px;text-decoration:none;font-weight:600;">Pricing</a>
 """
 
 _THEME_JS = """
