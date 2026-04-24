@@ -5267,7 +5267,7 @@ HOME_HTML = """<!DOCTYPE html>
   <h1>Stop trading <span>blind.</span></h1>
   <p>ChartEdge gives retail traders the same intelligence layer used by professionals — options flow, insider activity, gamma exposure, LSTM forecasts, and 20+ Pine Script indicators in one dashboard.</p>
   <div class="hero-btns">
-    <a class="btn-primary" href="/register">Get Started Free</a>
+    {% if not current_user %}<a class="btn-primary" href="/register">Get Started Free</a>{% endif %}
     <a class="btn-secondary" href="/indicators">Browse Tools</a>
   </div>
   <div class="hero-tools">
