@@ -3834,7 +3834,6 @@ _NAV_LINKS = """
       {% endif %}
     </div>
     <a href="/pricing" style="font-size:.85rem;color:var(--accent);padding:6px 10px;text-decoration:none;font-weight:600;">Pricing</a>
-    <button class="theme-toggle" onclick="toggleTheme()">☀ Light</button>
 """
 
 _THEME_JS = """
