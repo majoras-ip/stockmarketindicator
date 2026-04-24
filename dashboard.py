@@ -4812,8 +4812,9 @@ INDICATORS_HTML = """<!DOCTYPE html>
 
   <!-- Tutorial tab -->
   <div id="tab-tutorial" class="tutorial-wrap">
-    <div class="video-container">
-      <iframe src="https://www.youtube.com/embed/oRnnDjoN_dk?rel=0&modestbranding=1&iv_load_policy=3" allowfullscreen allow="autoplay; fullscreen"></iframe>
+    <div class="video-container" style="position:relative;">
+      <iframe src="https://www.youtube.com/embed/oRnnDjoN_dk?rel=0&modestbranding=1&iv_load_policy=3&disablekb=1" allowfullscreen allow="autoplay; fullscreen"></iframe>
+      <div style="position:absolute;top:0;left:0;width:100%;height:40px;z-index:10;"></div>
     </div>
     <ol class="steps">
       <li>
