@@ -4812,9 +4812,9 @@ INDICATORS_HTML = """<!DOCTYPE html>
 
   <!-- Tutorial tab -->
   <div id="tab-tutorial" class="tutorial-wrap">
-    <div class="video-container">
-      <!-- Replace the src below with your Loom/Vimeo/YouTube embed URL -->
-      <iframe src="about:blank" data-src="PASTE_EMBED_URL_HERE" allowfullscreen allow="autoplay; fullscreen"></iframe>
+    <div class="video-container" style="aspect-ratio:16/9;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:10px;">
+      <span style="font-size:2rem;">🎬</span>
+      <span style="color:var(--muted);font-size:.9rem;">Video coming soon</span>
     </div>
     <ol class="steps">
       <li>
@@ -4864,13 +4864,6 @@ function switchTab(name) {
   document.getElementById('tab-tutorial').classList.toggle('active', name === 'tutorial');
   document.getElementById('tab-indicators-btn').classList.toggle('active', name === 'indicators');
   document.getElementById('tab-tutorial-btn').classList.toggle('active', name === 'tutorial');
-  // Lazy-load the video iframe src on first open
-  if (name === 'tutorial') {
-    const iframe = document.querySelector('#tab-tutorial iframe');
-    if (iframe && iframe.getAttribute('data-src') && iframe.src !== iframe.getAttribute('data-src')) {
-      iframe.src = iframe.getAttribute('data-src');
-    }
-  }
 }
 
 let _currentKind = '{{ kind }}';
