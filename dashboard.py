@@ -338,6 +338,7 @@ def api_copy():
 
     plan = _get_user_plan(user_id)
     if plan == "pro":
+        _increment_copy(user_id)
         return jsonify({"ok": True, "remaining": -1, "plan": "pro"})
 
     limit = STRIPE_PLAN_LIMITS.get(plan, 3)
