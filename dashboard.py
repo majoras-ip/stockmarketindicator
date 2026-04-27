@@ -3713,13 +3713,14 @@ _NAV_CSS = """
   .dropdown > .drop-btn:hover { background: var(--bg3); border-color: var(--border); color: var(--text); }
   .dropdown > .drop-btn.open { background: var(--bg3); border-color: var(--border); color: var(--text); }
   .drop-menu {
-    position: absolute; top: calc(100% + 6px); right: 0;
+    position: absolute; top: calc(100% + 6px); left: 0;
     background: var(--bg2); border: 1px solid var(--border); border-radius: 8px;
-    min-width: 160px; z-index: 9999; overflow: hidden;
+    min-width: 180px; z-index: 9999; overflow: hidden;
     box-shadow: 0 8px 24px rgba(0,0,0,0.4);
     opacity: 0; transform: translateY(-6px); pointer-events: none;
     transition: opacity 0.18s ease, transform 0.18s ease;
   }
+  .dropdown:last-child .drop-menu, .dropdown:nth-last-child(2) .drop-menu { left: auto; right: 0; }
   .drop-menu.open { opacity: 1; transform: translateY(0); pointer-events: auto; }
   .drop-menu a {
     display: block; padding: 9px 16px; color: var(--muted);
