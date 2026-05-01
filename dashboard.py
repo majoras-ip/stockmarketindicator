@@ -8501,13 +8501,7 @@ GAMMA_HTML = """<!DOCTYPE html>
     .regime-neg { background: #2d1f1f; border: 1px solid var(--red);   color: var(--red); }
     .chart-section { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 18px; margin-bottom: 24px; }
     .chart-section h3 { font-size: .85rem; color: var(--muted); margin-bottom: 16px; text-transform: uppercase; letter-spacing: .05em; }
-    .gex-chart { display: flex; align-items: flex-end; gap: 2px; height: 180px; overflow-x: auto; padding-bottom: 4px; }
-    .bar-wrap { display: flex; flex-direction: column; align-items: center; flex-shrink: 0; }
-    .bar-pos { background: var(--green); width: 14px; border-radius: 2px 2px 0 0; }
-    .bar-neg { background: var(--red);   width: 14px; border-radius: 0 0 2px 2px; }
-    .bar-label { font-size: .6rem; color: var(--muted); margin-top: 4px; transform: rotate(-45deg); transform-origin: top left; white-space: nowrap; }
-    .spot-line { border-left: 2px dashed var(--accent); height: 180px; flex-shrink: 0; margin: 0 4px; position: relative; }
-    .spot-line::after { content: 'SPOT'; position: absolute; top: 0; left: 4px; font-size: .65rem; color: var(--accent); }
+    #gex-chart { width: 100%; height: 360px; }
     .expiry-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 20px; }
     .exp-tab { background: var(--bg2); border: 1px solid var(--border); border-radius: 6px; padding: 5px 12px; font-size: .8rem; cursor: pointer; color: var(--muted); }
     .exp-tab.active { border-color: var(--accent); color: var(--accent); }
@@ -8515,6 +8509,7 @@ GAMMA_HTML = """<!DOCTYPE html>
     .error-msg { background: #2d1f1f; border: 1px solid var(--red); border-radius: 8px; padding: 14px 18px; color: var(--red); margin-bottom: 20px; display: none; }
     footer { text-align: center; padding: 32px 24px; color: var(--muted); font-size: .8rem; border-top: 1px solid var(--border); margin-top: 20px; }
   </style>
+  <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
 </head>
 <body>
 <nav>
@@ -8599,35 +8594,41 @@ function renderGamma(d) {
 
   var regime = '<div class="regime-box ' + regimeClass + '">' + regimeText + '</div>';
 
-  // Build bar chart
-  var maxAbs = 0.0001;
-  for (var k = 0; k < d.gex.length; k++) { if (Math.abs(d.gex[k]) > maxAbs) maxAbs = Math.abs(d.gex[k]); }
-  var chartHeight = 160;
-  var bars = '';
-  for (var m = 0; m < d.strikes.length; m++) {
-    var strike = d.strikes[m];
-    var val = d.gex[m];
-    var h = Math.round(Math.abs(val) / maxAbs * chartHeight);
-    var isSpot = d.strikes.length > 1 && Math.abs(strike - d.spot) < (d.strikes[1] - d.strikes[0]) * 0.6;
-    var spotMark = isSpot ? '<div class="spot-line" style="height:' + chartHeight + 'px"></div>' : '';
-    if (val >= 0) {
-      bars += spotMark + '<div class="bar-wrap"><div class="bar-pos" style="height:' + h + 'px" title="$' + strike + ': +' + val + '"></div><div class="bar-label">' + strike + '</div></div>';
-    } else {
-      bars += spotMark + '<div class="bar-wrap" style="justify-content:flex-start;flex-direction:column-reverse"><div class="bar-neg" style="height:' + h + 'px" title="$' + strike + ': ' + val + '"></div><div class="bar-label">' + strike + '</div></div>';
-    }
-  }
-
   var chart = '<div class="chart-section">'
     + '<h3>GEX by Strike \u00b7 ' + d.ticker + ' \u00b7 ' + d.expiry + '</h3>'
-    + '<div class="gex-chart" style="align-items:center;">' + bars + '</div>'
-    + '<div style="font-size:.75rem;color:var(--muted);margin-top:12px;">'
-    + '<span style="color:var(--green)">\u25a0</span> Positive GEX (call-heavy) &nbsp;'
-    + '<span style="color:var(--red)">\u25a0</span> Negative GEX (put-heavy) &nbsp;'
-    + '<span style="color:var(--accent)">|</span> Spot price'
-    + '</div></div>';
+    + '<div id="gex-chart"></div>'
+    + '</div>';
 
   document.getElementById('gamma-content').innerHTML =
     '<div class="expiry-tabs">' + tabs + '</div>' + summary + regime + chart;
+
+  // Plotly bar chart
+  var colors = d.gex.map(function(v) { return v >= 0 ? '#3fb950' : '#f85149'; });
+  Plotly.newPlot('gex-chart', [{
+    type: 'bar',
+    x: d.strikes,
+    y: d.gex,
+    marker: { color: colors },
+    hovertemplate: '$%{x}<br>GEX: %{y:.4f}<extra></extra>'
+  }], {
+    paper_bgcolor: 'rgba(0,0,0,0)',
+    plot_bgcolor:  'rgba(0,0,0,0)',
+    font: { color: '#8b949e', size: 11 },
+    margin: { t: 20, r: 20, b: 60, l: 60 },
+    xaxis: {
+      gridcolor: '#21262d', tickformat: '.0f', title: 'Strike',
+      tickprefix: '$'
+    },
+    yaxis: { gridcolor: '#21262d', title: 'GEX', zeroline: true, zerolinecolor: '#58a6ff', zerolinewidth: 2 },
+    shapes: d.spot ? [{
+      type: 'line', x0: d.spot, x1: d.spot, y0: 0, y1: 1, yref: 'paper',
+      line: { color: '#58a6ff', width: 2, dash: 'dash' }
+    }] : [],
+    annotations: d.spot ? [{
+      x: d.spot, y: 1, yref: 'paper', text: 'SPOT', showarrow: false,
+      font: { color: '#58a6ff', size: 11 }, xanchor: 'left', yanchor: 'top'
+    }] : []
+  }, { responsive: true, displayModeBar: false });
 }
 
 document.addEventListener('DOMContentLoaded', function() {
