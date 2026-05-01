@@ -9354,6 +9354,7 @@ TRUMP_HTML = """<!DOCTYPE html>
       <select class="inst-select" id="inst-select">
         <option value="BTC-USD" selected>Bitcoin (BTC)</option>
         <option value="SPY">S&amp;P 500 (SPY)</option>
+        <option value="VOO">S&amp;P 500 (VOO)</option>
         <option value="QQQ">NASDAQ 100 (QQQ)</option>
         <option value="DIA">Dow Jones (DIA)</option>
         <option value="IWM">Russell 2000 (IWM)</option>
@@ -9378,7 +9379,10 @@ TRUMP_HTML = """<!DOCTYPE html>
       <div class="stat-card"><div class="sv" id="sc-price">—</div><div class="sl">Price</div></div>
       <div class="stat-card"><div class="sv" id="sc-chg">—</div><div class="sl">Period Change</div></div>
     </div>
-    <div id="price-chart"></div>
+    <div style="position:relative;">
+      <button onclick="loadChart()" style="position:absolute;top:8px;left:8px;z-index:10;background:var(--bg3);border:1px solid var(--border);color:var(--muted);border-radius:5px;padding:3px 10px;font-size:.75rem;cursor:pointer;" title="Reset chart">↺ Reset</button>
+      <div id="price-chart"></div>
+    </div>
     <div class="chart-status" id="chart-status"></div>
     <p class="disclaimer">Data: Yahoo Finance · Not financial advice</p>
   </div>
@@ -9479,7 +9483,7 @@ function renderChart(d) {
     annotations: annotations,
     margin: { t: 20, r: 50, b: 36, l: 10 },
     showlegend: false,
-  }, { responsive: true, displayModeBar: true, modeBarButtonsToRemove: ['zoom2d','pan2d','select2d','lasso2d','zoomIn2d','zoomOut2d','autoScale2d','hoverClosestCartesian','hoverCompareCartesian','toggleSpikelines'], displaylogo: false });
+  }, { responsive: true, displayModeBar: false });
 }
 
 function loadNews() {
