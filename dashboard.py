@@ -4743,7 +4743,7 @@ INDICATORS_HTML = """<!DOCTYPE html>
     .output-wrap {
       max-height: 0; overflow: hidden;
       transition: max-height 0.38s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.25s ease;
-      opacity: 0;
+      opacity: 0; grid-column: 1 / -1; margin-top: 4px;
     }
     .output-wrap.visible { max-height: 1400px; opacity: 1; }
     .output-loading { text-align: center; padding: 28px; color: var(--muted); font-size: 0.85rem; }
@@ -4822,11 +4822,11 @@ INDICATORS_HTML = """<!DOCTYPE html>
     {% if not indicators %}
     <div class="no-results">No indicators match "{{ search }}".</div>
     {% endif %}
-  </div>
 
-  <!-- Smooth output panel (always in DOM, revealed via JS) -->
-  <div class="output-wrap" id="output-wrap">
-    <div id="output-inner"></div>
+    <!-- Output panel lives inside grid so it can span full width below the clicked card -->
+    <div class="output-wrap" id="output-wrap">
+      <div id="output-inner"></div>
+    </div>
   </div>
   </div><!-- end #tab-indicators -->
 
@@ -4902,10 +4902,21 @@ let _atrOpts  = {atr_avg: false};
 
 async function selectIndicator(e, key) {
   e.preventDefault();
-  if (key === _currentKind) return;
+  const wrap = document.getElementById('output-wrap');
+  // Toggle: clicking the same card collapses the panel
+  if (key === _currentKind) {
+    _currentKind = '';
+    history.pushState({}, '', '/indicators');
+    document.querySelectorAll('.ind-card').forEach(c => c.classList.remove('active'));
+    wrap.classList.remove('visible');
+    return;
+  }
   _currentKind = key;
   history.pushState({}, '', '/indicators?kind=' + key);
   document.querySelectorAll('.ind-card').forEach(c => c.classList.toggle('active', c.dataset.key === key));
+  // Move output-wrap to just after the clicked card so it drops down beneath it
+  const clickedCard = e.currentTarget;
+  clickedCard.after(wrap);
   await loadOutput(key);
 }
 
@@ -4913,10 +4924,7 @@ async function loadOutput(key, extraParams) {
   const wrap = document.getElementById('output-wrap');
   const inner = document.getElementById('output-inner');
   inner.innerHTML = '<div class="output-loading"><span class="spinner"></span>Loading…</div>';
-  if (!wrap.classList.contains('visible')) {
-    wrap.classList.add('visible');
-    wrap.scrollIntoView({behavior: 'smooth', block: 'nearest'});
-  }
+  wrap.classList.add('visible');
   let url = '/api/indicator?kind=' + encodeURIComponent(key);
   if (extraParams) url += '&' + extraParams;
   const data = await fetch(url).then(r => r.json());
@@ -5045,7 +5053,11 @@ function filterCards() {
   });
 }
 // Auto-load if a kind was pre-selected via URL on page load
-if (_currentKind) { loadOutput(_currentKind); }
+if (_currentKind) {
+  const activeCard = document.querySelector('.ind-card.active');
+  if (activeCard) activeCard.after(document.getElementById('output-wrap'));
+  loadOutput(_currentKind);
+}
 """ + _THEME_JS + """
 </script>
 </body>
