@@ -4914,9 +4914,13 @@ async function selectIndicator(e, key) {
   _currentKind = key;
   history.pushState({}, '', '/indicators?kind=' + key);
   document.querySelectorAll('.ind-card').forEach(c => c.classList.toggle('active', c.dataset.key === key));
-  // Move output-wrap to just after the clicked card so it drops down beneath it
+  // Instantly hide (no transition) before moving so the DOM reposition doesn't cause a flash
+  wrap.style.transition = 'none';
+  wrap.classList.remove('visible');
   const clickedCard = e.currentTarget;
   clickedCard.after(wrap);
+  wrap.offsetHeight; // force reflow so the transition reset takes effect
+  wrap.style.transition = ''; // restore CSS transition
   await loadOutput(key);
 }
 
