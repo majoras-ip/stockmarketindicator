@@ -6173,7 +6173,7 @@ fetch('/api/crypto/feargreed').then(function(r){return r.json();}).then(function
     xaxis:{gridcolor:'#21262d'},
     yaxis:{gridcolor:'#21262d',range:[0,100]},
     showlegend:false
-  },{responsive:true,displayModeBar:false});
+  },{responsive:true,displayModeBar:true,modeBarButtonsToRemove:['zoom2d','pan2d','select2d','lasso2d','zoomIn2d','zoomOut2d','autoScale2d','hoverClosestCartesian','hoverCompareCartesian','toggleSpikelines'],displaylogo:false});
 }).catch(function(e){document.querySelector('.page').innerHTML='<div class="err">Failed: '+e+'</div>';});
 </script>
 </body></html>"""
@@ -6226,7 +6226,7 @@ fetch('/api/crypto/dominance').then(function(r){return r.json();}).then(function
     paper_bgcolor:'#161b22',plot_bgcolor:'#161b22',
     font:{color:'#e6edf3',size:12},margin:{t:20,b:20,l:20,r:20},
     showlegend:true,legend:{orientation:'v',x:1.02,y:.5,font:{size:11}}
-  },{responsive:true,displayModeBar:false});
+  },{responsive:true,displayModeBar:true,modeBarButtonsToRemove:['zoom2d','pan2d','select2d','lasso2d','zoomIn2d','zoomOut2d','autoScale2d','hoverClosestCartesian','hoverCompareCartesian','toggleSpikelines'],displaylogo:false});
 }).catch(function(e){document.querySelector('.page').innerHTML='<div class="err">Failed: '+e+'</div>';});
 </script>
 </body></html>"""
@@ -6505,7 +6505,7 @@ function load(){
       yaxis:{gridcolor:'#21262d',title:'Funding Rate (bps)',range:[-absMax*1.3,absMax*1.3]},
       shapes:[{type:'line',x0:0,x1:1,xref:'paper',y0:0,y1:0,line:{color:'#8b949e',width:1,dash:'dot'}}],
       showlegend:false
-    },{responsive:true,displayModeBar:false});
+    },{responsive:true,displayModeBar:true,modeBarButtonsToRemove:['zoom2d','pan2d','select2d','lasso2d','zoomIn2d','zoomOut2d','autoScale2d','hoverClosestCartesian','hoverCompareCartesian','toggleSpikelines'],displaylogo:false});
   }).catch(function(e){document.getElementById('liq-chart').innerHTML='<div class="err">Failed to load: '+e+'</div>';});
 }
 load();
@@ -8455,7 +8455,7 @@ function drawChart(d) {
     }],
   };
 
-  Plotly.react('chart', traces, layout, { responsive: true, displayModeBar: false });
+  Plotly.react('chart', traces, layout, { responsive: true, displayModeBar: true, modeBarButtonsToRemove: ['zoom2d','pan2d','select2d','lasso2d','zoomIn2d','zoomOut2d','autoScale2d','hoverClosestCartesian','hoverCompareCartesian','toggleSpikelines'], displaylogo: false });
 }
 
 // Initial load
@@ -8628,7 +8628,7 @@ function renderGamma(d) {
       x: d.spot, y: 1, yref: 'paper', text: 'SPOT', showarrow: false,
       font: { color: '#58a6ff', size: 11 }, xanchor: 'left', yanchor: 'top'
     }] : []
-  }, { responsive: true, displayModeBar: false });
+  }, { responsive: true, displayModeBar: true, modeBarButtonsToRemove: ['zoom2d','pan2d','select2d','lasso2d','zoomIn2d','zoomOut2d','autoScale2d','hoverClosestCartesian','hoverCompareCartesian','toggleSpikelines'], displaylogo: false });
 }
 
 document.addEventListener('DOMContentLoaded', function() {
@@ -9478,7 +9478,7 @@ function renderChart(d) {
     annotations: annotations,
     margin: { t: 20, r: 50, b: 36, l: 10 },
     showlegend: false,
-  }, { responsive: true, displayModeBar: false });
+  }, { responsive: true, displayModeBar: true, modeBarButtonsToRemove: ['zoom2d','pan2d','select2d','lasso2d','zoomIn2d','zoomOut2d','autoScale2d','hoverClosestCartesian','hoverCompareCartesian','toggleSpikelines'], displaylogo: false });
 }
 
 function loadNews() {
@@ -10110,7 +10110,7 @@ function render(d) {
       line: { color: 'rgba(139,148,158,0.4)', width: 1, dash: 'dot' },
     }],
     margin: { t: 20, r: 60, b: 60, l: 10 },
-  }, { responsive: true, displayModeBar: false });
+  }, { responsive: true, displayModeBar: true, modeBarButtonsToRemove: ['zoom2d','pan2d','select2d','lasso2d','zoomIn2d','zoomOut2d','autoScale2d','hoverClosestCartesian','hoverCompareCartesian','toggleSpikelines'], displaylogo: false });
 }
 
 load();
