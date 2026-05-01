@@ -2803,6 +2803,7 @@ def heatmap_api():
 
 _TRUMP_INSTRUMENTS = [
     {"label": "S&P 500 (SPY)",       "ticker": "SPY"},
+    {"label": "S&P 500 (VOO)",       "ticker": "VOO"},
     {"label": "NASDAQ 100 (QQQ)",    "ticker": "QQQ"},
     {"label": "Dow Jones (DIA)",      "ticker": "DIA"},
     {"label": "Russell 2000 (IWM)",  "ticker": "IWM"},
