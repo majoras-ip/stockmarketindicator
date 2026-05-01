@@ -59,16 +59,16 @@
 
 | Route | Description | Plan |
 |-------|-------------|------|
-| `/indicators` | Pine Script generator — all indicators + Tutorial tab | Free+ |
+| `/indicators` | Pine Script generator — all indicators + Tutorial tab, accordion cards | Free+ |
 | `/generate` | LSTM forecast | Pro |
 | `/dashboard` | Live chart | Free+ |
 | `/heatmap` | D3 squarified treemap, S&P 500 sectors | Free+ |
 | `/earnings` | Earnings calendar w/ EPS/revenue estimates | Free+ |
 | `/dividends` | Upcoming ex-dividend dates (~140 tickers) | Free+ |
 | `/ipo` | IPO calendar — upcoming & priced | Free+ |
-| `/trump` | Trump Tracker — BTC default, 1D default, event markers | Basic+ |
+| `/trump` | Trump Tracker — BTC default, 1D default, event markers, VOO + SPY | Basic+ |
 | `/volforecast` | Volatility forecast (RV, EWMA, regime) | Basic+ |
-| `/gamma` | Gamma exposure chart | Basic+ |
+| `/gamma` | Gamma exposure chart (Plotly bar chart) | Basic+ |
 | `/greeks` | Greeks dashboard (Delta/Gamma/Theta/Vega/Rho) | Basic+ |
 | `/flow` | Options flow | Pro |
 | `/insider` | Insider trading — SEC + Congress, name/source filter | Pro |
@@ -106,15 +106,34 @@ Heatmap and dividends use daemon threads pre-fetched at startup. Returns `{"load
 - Event markers (📰) on chart at news article timestamps
 - Gold uses GC=F (futures ~$3000), not GLD ETF
 - Prices >$999 formatted with commas
+- S&P 500 shows both SPY and VOO options
+- Uses custom ↺ Reset button (calls `loadChart()`) instead of Plotly modebar reset — avoids blank chart bug caused by `Plotly.react` + tight y-axis range conflicting with Plotly's built-in autorange reset
 
 ### Insider Trading
 - SEC Form 4 filings (major SP500 companies) + House STOCK Act via QuiverQuant
 - Filters: All/Congress/SEC tabs + name search + ticker search (all client-side)
+- Transaction date = date they actually bought/sold (from SEC filing)
 
 ### Volatility Forecast
 - Banner at top: "TradingView Plus subscription required"
 - Shows: realized vol (20d), EWMA vol, IV vs RV chart, forecast N days ahead
 - Regime detection: Low/Medium/High/Extreme
+
+### Gamma Exposure
+- Plotly bar chart (green for positive GEX, red for negative)
+- Spot price shown as dashed blue vertical line via Plotly shape
+- Replaced original custom CSS bar implementation
+
+### Plotly charts — reset axes
+- All Plotly charts use `displayModeBar: true` with `modeBarButtonsToRemove` to show only the reset axes button
+- Exception: Trump Tracker uses `displayModeBar: false` + custom ↺ Reset button
+
+### Indicator cards — accordion
+- Cards live in `#grid` (CSS grid, `repeat(auto-fill, minmax(210px, 1fr))`)
+- `#output-wrap` is also inside `#grid` with `grid-column: 1 / -1` so it spans full width
+- Clicking a card moves `#output-wrap` in DOM to just after the clicked card (`clickedCard.after(wrap)`), then expands it
+- Clicking the same card again collapses it (`wrap.classList.remove('visible')`, `_currentKind = ''`)
+- On direct URL load (`/indicators?kind=rsi`), the active card is found and `output-wrap` inserted after it before calling `loadOutput`
 
 ### Crypto tools
 - All exchange data via **Hyperliquid** (decentralized, no geo blocks from Railway)
@@ -145,6 +164,7 @@ Heatmap and dividends use daemon threads pre-fetched at startup. Returns `{"load
 ### Copy tracking
 - `/api/copy` accepts `indicator` field and logs to `copy_history` for all logged-in users (including Pro)
 - Pro users: `_increment_copy()` is called before returning (was previously skipped — fixed)
+- Copy toast: floating notification shown after successful copy. Enabled/disabled per user in Settings. `COPY_TOAST_ENABLED` JS var injected from DB pref. `showToast()` called in `copyPine()`.
 
 ### Indicators Tutorial tab
 - Two tabs on `/indicators`: Indicators (default) | Tutorial
@@ -165,7 +185,9 @@ Heatmap and dividends use daemon threads pre-fetched at startup. Returns `{"load
 - **MultiIndex columns** from `yf.download()` multi-ticker: flatten with `raw.columns = raw.columns.get_level_values(0)`.
 - **@login_required on JSON endpoints** returns HTML redirect — `fetch().then(r=>r.json())` throws silently. Always use manual session check on API routes.
 - **Plotly.newPlot vs react** — always clear div and use `newPlot` for initial renders; `react` can fail silently on divs with existing innerHTML.
+- **Plotly modebar reset + tight y-axis range** — Plotly's built-in "Reset axes" reverts to autorange, overriding tight `[min*0.998, max*1.002]` and blanking the chart. Fix: disable modebar and add a custom reset button that re-calls the load function.
 - **Nav dropdowns** — last two dropdowns use `right: 0` alignment to prevent overflow off right edge of screen.
+- **Indicator accordion DOM move** — `output-wrap` is repositioned with `clickedCard.after(wrap)` each click. Since it's inside the CSS grid with `grid-column: 1/-1`, it naturally spans full width wherever inserted.
 
 ---
 
