@@ -4740,10 +4740,8 @@ INDICATORS_HTML = """<!DOCTYPE html>
     .how-to-body.open { display: block; }
 
     /* Smooth output panel */
-    .output-wrap { display: none; grid-column: 1 / -1; }
-    .output-wrap.open { display: block; }
-    @keyframes panelIn { from { opacity:0; transform:translateY(-6px); } to { opacity:1; transform:translateY(0); } }
-    .output-wrap.open #output-inner { animation: panelIn 0.22s ease forwards; }
+    .output-wrap { max-height: 0; overflow: hidden; transition: max-height 0.38s cubic-bezier(0.4,0,0.2,1), opacity 0.25s ease; opacity: 0; }
+    .output-wrap.visible { max-height: 1400px; opacity: 1; }
     .output-loading { text-align: center; padding: 28px; color: var(--muted); font-size: 0.85rem; }
     @keyframes spin { to { transform: rotate(360deg); } }
     .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; vertical-align: middle; margin-right: 8px; }
@@ -4820,7 +4818,9 @@ INDICATORS_HTML = """<!DOCTYPE html>
     {% if not indicators %}
     <div class="no-results">No indicators match "{{ search }}".</div>
     {% endif %}
-    <div class="output-wrap" id="output-wrap"><div id="output-inner"></div></div>
+  </div>
+  <div class="output-wrap" id="output-wrap">
+    <div id="output-inner"></div>
   </div>
   </div><!-- end #tab-indicators -->
 
@@ -4896,34 +4896,24 @@ let _atrOpts  = {atr_avg: false};
 
 async function selectIndicator(e, key) {
   e.preventDefault();
-  const wrap = document.getElementById('output-wrap');
-  if (key === _currentKind) {
-    _currentKind = '';
-    history.pushState({}, '', '/indicators');
-    document.querySelectorAll('.ind-card').forEach(c => c.classList.remove('active'));
-    wrap.classList.remove('open');
-    return;
-  }
+  if (key === _currentKind) return;
   _currentKind = key;
   history.pushState({}, '', '/indicators?kind=' + key);
   document.querySelectorAll('.ind-card').forEach(c => c.classList.toggle('active', c.dataset.key === key));
-  e.currentTarget.after(wrap);
   await loadOutput(key);
 }
 
 async function loadOutput(key, extraParams) {
-  const wrap  = document.getElementById('output-wrap');
+  const wrap = document.getElementById('output-wrap');
   const inner = document.getElementById('output-inner');
-  wrap.classList.remove('open');
   inner.innerHTML = '<div class="output-loading"><span class="spinner"></span>Loading…</div>';
-  wrap.classList.add('open');
+  if (!wrap.classList.contains('visible')) {
+    wrap.classList.add('visible');
+  }
   let url = '/api/indicator?kind=' + encodeURIComponent(key);
   if (extraParams) url += '&' + extraParams;
   const data = await fetch(url).then(r => r.json());
   if (!data.ok) { inner.innerHTML = '<div class="output-loading">Error loading indicator.</div>'; return; }
-  // Reset animation by briefly clearing inner, then setting content
-  inner.innerHTML = '';
-  inner.offsetHeight;
   inner.innerHTML = buildOutput(data);
   wrap.scrollIntoView({behavior: 'smooth', block: 'nearest'});
 }
@@ -5048,11 +5038,7 @@ function filterCards() {
   });
 }
 // Auto-load if a kind was pre-selected via URL on page load
-if (_currentKind) {
-  const activeCard = document.querySelector('.ind-card.active');
-  if (activeCard) activeCard.after(document.getElementById('output-wrap'));
-  loadOutput(_currentKind);
-}
+if (_currentKind) { loadOutput(_currentKind); }
 """ + _THEME_JS + """
 </script>
 </body>
