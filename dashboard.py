@@ -4740,10 +4740,10 @@ INDICATORS_HTML = """<!DOCTYPE html>
     .how-to-body.open { display: block; }
 
     /* Smooth output panel */
-    .output-wrap {
-      height: 0; overflow: hidden; opacity: 0;
-      transition: height 0.36s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.22s ease;
-    }
+    .output-wrap { display: none; grid-column: 1 / -1; }
+    .output-wrap.visible { display: block; }
+    @keyframes panelIn { from { opacity:0; transform:translateY(-8px); } to { opacity:1; transform:translateY(0); } }
+    #output-inner { animation: panelIn 0.22s ease; }
     .output-loading { text-align: center; padding: 28px; color: var(--muted); font-size: 0.85rem; }
     @keyframes spin { to { transform: rotate(360deg); } }
     .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; vertical-align: middle; margin-right: 8px; }
@@ -4820,11 +4820,11 @@ INDICATORS_HTML = """<!DOCTYPE html>
     {% if not indicators %}
     <div class="no-results">No indicators match "{{ search }}".</div>
     {% endif %}
-  </div>
 
-  <!-- Output panel outside grid — avoids grid reflow during animation -->
-  <div class="output-wrap" id="output-wrap">
-    <div id="output-inner"></div>
+    <!-- Output panel inside grid, spans full width below the clicked card -->
+    <div class="output-wrap" id="output-wrap">
+      <div id="output-inner"></div>
+    </div>
   </div>
   </div><!-- end #tab-indicators -->
 
@@ -4898,19 +4898,6 @@ let _currentKind = '{{ kind }}';
 let _vwapOpts = {band1: true, band2: true, band3: false};
 let _atrOpts  = {atr_avg: false};
 
-function _panelOpen(wrap, targetH) {
-  wrap.style.transition = 'height 0.36s cubic-bezier(0.4,0,0.2,1), opacity 0.22s ease';
-  wrap.style.height  = targetH + 'px';
-  wrap.style.opacity = '1';
-}
-function _panelClose(wrap) {
-  wrap.style.height  = wrap.scrollHeight + 'px'; // anchor current height first
-  wrap.offsetHeight;                              // force reflow
-  wrap.style.transition = 'height 0.28s cubic-bezier(0.4,0,0.2,1), opacity 0.18s ease';
-  wrap.style.height  = '0';
-  wrap.style.opacity = '0';
-}
-
 async function selectIndicator(e, key) {
   e.preventDefault();
   const wrap = document.getElementById('output-wrap');
@@ -4918,12 +4905,14 @@ async function selectIndicator(e, key) {
     _currentKind = '';
     history.pushState({}, '', '/indicators');
     document.querySelectorAll('.ind-card').forEach(c => c.classList.remove('active'));
-    _panelClose(wrap);
+    wrap.classList.remove('visible');
     return;
   }
   _currentKind = key;
   history.pushState({}, '', '/indicators?kind=' + key);
   document.querySelectorAll('.ind-card').forEach(c => c.classList.toggle('active', c.dataset.key === key));
+  const clickedCard = e.currentTarget;
+  clickedCard.after(wrap);
   await loadOutput(key);
 }
 
@@ -4931,22 +4920,13 @@ async function loadOutput(key, extraParams) {
   const wrap  = document.getElementById('output-wrap');
   const inner = document.getElementById('output-inner');
   inner.innerHTML = '<div class="output-loading"><span class="spinner"></span>Loading…</div>';
-  // Open to spinner height instantly if closed, or keep open if already visible
-  if (parseFloat(wrap.style.height) === 0 || !wrap.style.height) {
-    wrap.style.transition = 'none';
-    wrap.style.height  = '80px';
-    wrap.style.opacity = '1';
-    wrap.offsetHeight;
-  }
+  wrap.classList.add('visible');
+  wrap.scrollIntoView({behavior: 'smooth', block: 'nearest'});
   let url = '/api/indicator?kind=' + encodeURIComponent(key);
   if (extraParams) url += '&' + extraParams;
   const data = await fetch(url).then(r => r.json());
   if (!data.ok) { inner.innerHTML = '<div class="output-loading">Error loading indicator.</div>'; return; }
   inner.innerHTML = buildOutput(data);
-  // Animate to full content height
-  _panelOpen(wrap, wrap.scrollHeight);
-  setTimeout(() => { if (wrap.style.opacity === '1') wrap.style.height = 'auto'; }, 380);
-  wrap.scrollIntoView({behavior: 'smooth', block: 'nearest'});
 }
 
 function buildOutput(d) {
