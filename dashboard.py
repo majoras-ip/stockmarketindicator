@@ -4903,12 +4903,15 @@ let _atrOpts  = {atr_avg: false};
 async function selectIndicator(e, key) {
   e.preventDefault();
   const wrap = document.getElementById('output-wrap');
-  // Toggle: clicking the same card collapses the panel
+  // Toggle: clicking the same card collapses the panel instantly (no animation to avoid grid jump)
   if (key === _currentKind) {
     _currentKind = '';
     history.pushState({}, '', '/indicators');
     document.querySelectorAll('.ind-card').forEach(c => c.classList.remove('active'));
+    wrap.style.transition = 'none';
     wrap.classList.remove('visible');
+    wrap.offsetHeight;
+    wrap.style.transition = '';
     return;
   }
   _currentKind = key;
