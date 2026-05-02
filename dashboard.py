@@ -4740,10 +4740,7 @@ INDICATORS_HTML = """<!DOCTYPE html>
     .how-to-body.open { display: block; }
 
     /* Smooth output panel */
-    .output-wrap { display: none; grid-column: 1 / -1; }
-    .output-wrap.visible { display: block; }
-    @keyframes panelIn { from { opacity:0; transform:translateY(-8px); } to { opacity:1; transform:translateY(0); } }
-    #output-inner { animation: panelIn 0.22s ease; }
+    .output-wrap { overflow: hidden; height: 0; transition: height 0.3s cubic-bezier(0.4,0,0.2,1); margin-top: 0; }
     .output-loading { text-align: center; padding: 28px; color: var(--muted); font-size: 0.85rem; }
     @keyframes spin { to { transform: rotate(360deg); } }
     .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; vertical-align: middle; margin-right: 8px; }
@@ -4820,12 +4817,8 @@ INDICATORS_HTML = """<!DOCTYPE html>
     {% if not indicators %}
     <div class="no-results">No indicators match "{{ search }}".</div>
     {% endif %}
-
-    <!-- Output panel inside grid, spans full width below the clicked card -->
-    <div class="output-wrap" id="output-wrap">
-      <div id="output-inner"></div>
-    </div>
   </div>
+  <div class="output-wrap" id="output-wrap"><div id="output-inner"></div></div>
   </div><!-- end #tab-indicators -->
 
   <!-- Tutorial tab -->
@@ -4898,6 +4891,21 @@ let _currentKind = '{{ kind }}';
 let _vwapOpts = {band1: true, band2: true, band3: false};
 let _atrOpts  = {atr_avg: false};
 
+function _setHeight(wrap, h) {
+  wrap.style.height = h === 'auto' ? 'auto' : h + 'px';
+}
+function _openTo(wrap, h) {
+  wrap.style.transition = 'height 0.3s cubic-bezier(0.4,0,0.2,1)';
+  _setHeight(wrap, h);
+}
+function _closePanel(wrap) {
+  // pin current height so transition has a start value
+  wrap.style.height = wrap.scrollHeight + 'px';
+  wrap.offsetHeight;
+  wrap.style.transition = 'height 0.25s cubic-bezier(0.4,0,0.2,1)';
+  wrap.style.height = '0';
+}
+
 async function selectIndicator(e, key) {
   e.preventDefault();
   const wrap = document.getElementById('output-wrap');
@@ -4905,28 +4913,37 @@ async function selectIndicator(e, key) {
     _currentKind = '';
     history.pushState({}, '', '/indicators');
     document.querySelectorAll('.ind-card').forEach(c => c.classList.remove('active'));
-    wrap.classList.remove('visible');
+    _closePanel(wrap);
     return;
   }
   _currentKind = key;
   history.pushState({}, '', '/indicators?kind=' + key);
   document.querySelectorAll('.ind-card').forEach(c => c.classList.toggle('active', c.dataset.key === key));
-  const clickedCard = e.currentTarget;
-  clickedCard.after(wrap);
   await loadOutput(key);
 }
 
 async function loadOutput(key, extraParams) {
   const wrap  = document.getElementById('output-wrap');
   const inner = document.getElementById('output-inner');
+
+  // Show spinner instantly — no transition, snap to spinner height
   inner.innerHTML = '<div class="output-loading"><span class="spinner"></span>Loading…</div>';
-  wrap.classList.add('visible');
-  wrap.scrollIntoView({behavior: 'smooth', block: 'nearest'});
+  wrap.style.transition = 'none';
+  wrap.style.height = inner.scrollHeight + 'px';
+  wrap.offsetHeight;
+
   let url = '/api/indicator?kind=' + encodeURIComponent(key);
   if (extraParams) url += '&' + extraParams;
   const data = await fetch(url).then(r => r.json());
   if (!data.ok) { inner.innerHTML = '<div class="output-loading">Error loading indicator.</div>'; return; }
   inner.innerHTML = buildOutput(data);
+
+  // Smoothly expand from spinner height to full content height
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    _openTo(wrap, inner.scrollHeight);
+    setTimeout(() => { if (parseFloat(wrap.style.height) > 0) wrap.style.height = 'auto'; }, 320);
+    wrap.scrollIntoView({behavior: 'smooth', block: 'nearest'});
+  }));
 }
 
 function buildOutput(d) {
