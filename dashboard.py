@@ -4741,11 +4741,9 @@ INDICATORS_HTML = """<!DOCTYPE html>
 
     /* Smooth output panel */
     .output-wrap {
-      max-height: 0; overflow: hidden;
-      transition: max-height 0.38s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.25s ease;
-      opacity: 0; grid-column: 1 / -1; margin-top: 4px;
+      height: 0; overflow: hidden; opacity: 0;
+      transition: height 0.36s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.22s ease;
     }
-    .output-wrap.visible { max-height: 1400px; opacity: 1; }
     .output-loading { text-align: center; padding: 28px; color: var(--muted); font-size: 0.85rem; }
     @keyframes spin { to { transform: rotate(360deg); } }
     .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; vertical-align: middle; margin-right: 8px; }
@@ -4822,11 +4820,11 @@ INDICATORS_HTML = """<!DOCTYPE html>
     {% if not indicators %}
     <div class="no-results">No indicators match "{{ search }}".</div>
     {% endif %}
+  </div>
 
-    <!-- Output panel lives inside grid so it can span full width below the clicked card -->
-    <div class="output-wrap" id="output-wrap">
-      <div id="output-inner"></div>
-    </div>
+  <!-- Output panel outside grid — avoids grid reflow during animation -->
+  <div class="output-wrap" id="output-wrap">
+    <div id="output-inner"></div>
   </div>
   </div><!-- end #tab-indicators -->
 
@@ -4900,43 +4898,54 @@ let _currentKind = '{{ kind }}';
 let _vwapOpts = {band1: true, band2: true, band3: false};
 let _atrOpts  = {atr_avg: false};
 
+function _panelOpen(wrap, targetH) {
+  wrap.style.transition = 'height 0.36s cubic-bezier(0.4,0,0.2,1), opacity 0.22s ease';
+  wrap.style.height  = targetH + 'px';
+  wrap.style.opacity = '1';
+}
+function _panelClose(wrap) {
+  wrap.style.height  = wrap.scrollHeight + 'px'; // anchor current height first
+  wrap.offsetHeight;                              // force reflow
+  wrap.style.transition = 'height 0.28s cubic-bezier(0.4,0,0.2,1), opacity 0.18s ease';
+  wrap.style.height  = '0';
+  wrap.style.opacity = '0';
+}
+
 async function selectIndicator(e, key) {
   e.preventDefault();
   const wrap = document.getElementById('output-wrap');
-  // Toggle: clicking the same card collapses the panel instantly (no animation to avoid grid jump)
   if (key === _currentKind) {
     _currentKind = '';
     history.pushState({}, '', '/indicators');
     document.querySelectorAll('.ind-card').forEach(c => c.classList.remove('active'));
-    wrap.style.transition = 'none';
-    wrap.classList.remove('visible');
-    wrap.offsetHeight;
-    wrap.style.transition = '';
+    _panelClose(wrap);
     return;
   }
   _currentKind = key;
   history.pushState({}, '', '/indicators?kind=' + key);
   document.querySelectorAll('.ind-card').forEach(c => c.classList.toggle('active', c.dataset.key === key));
-  // Instantly hide (no transition) before moving so the DOM reposition doesn't cause a flash
-  wrap.style.transition = 'none';
-  wrap.classList.remove('visible');
-  const clickedCard = e.currentTarget;
-  clickedCard.after(wrap);
-  wrap.offsetHeight; // force reflow so the transition reset takes effect
-  wrap.style.transition = ''; // restore CSS transition
   await loadOutput(key);
 }
 
 async function loadOutput(key, extraParams) {
-  const wrap = document.getElementById('output-wrap');
+  const wrap  = document.getElementById('output-wrap');
   const inner = document.getElementById('output-inner');
   inner.innerHTML = '<div class="output-loading"><span class="spinner"></span>Loading…</div>';
-  wrap.classList.add('visible');
+  // Open to spinner height instantly if closed, or keep open if already visible
+  if (parseFloat(wrap.style.height) === 0 || !wrap.style.height) {
+    wrap.style.transition = 'none';
+    wrap.style.height  = '80px';
+    wrap.style.opacity = '1';
+    wrap.offsetHeight;
+  }
   let url = '/api/indicator?kind=' + encodeURIComponent(key);
   if (extraParams) url += '&' + extraParams;
   const data = await fetch(url).then(r => r.json());
   if (!data.ok) { inner.innerHTML = '<div class="output-loading">Error loading indicator.</div>'; return; }
   inner.innerHTML = buildOutput(data);
+  // Animate to full content height
+  _panelOpen(wrap, wrap.scrollHeight);
+  setTimeout(() => { if (wrap.style.opacity === '1') wrap.style.height = 'auto'; }, 380);
   wrap.scrollIntoView({behavior: 'smooth', block: 'nearest'});
 }
 
@@ -5060,11 +5069,7 @@ function filterCards() {
   });
 }
 // Auto-load if a kind was pre-selected via URL on page load
-if (_currentKind) {
-  const activeCard = document.querySelector('.ind-card.active');
-  if (activeCard) activeCard.after(document.getElementById('output-wrap'));
-  loadOutput(_currentKind);
-}
+if (_currentKind) { loadOutput(_currentKind); }
 """ + _THEME_JS + """
 </script>
 </body>
