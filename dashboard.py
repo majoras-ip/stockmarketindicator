@@ -52,6 +52,9 @@ APP_URL               = "https://chartedge.trade"
 HCAPTCHA_SITE_KEY   = "b06c575c-981a-4884-bbc0-5aa8c1d8aaa0"
 HCAPTCHA_SECRET_KEY = os.environ.get("HCAPTCHA_SECRET", "")
 
+# ── Finnhub ───────────────────────────────────────────────────────────────────
+FINNHUB_API_KEY = os.environ.get("FINNHUB_API_KEY", "")
+
 # ── Resend email ──────────────────────────────────────────────────────────────
 resend.api_key = os.environ.get("RESEND_API_KEY", "")
 
@@ -2191,6 +2194,53 @@ def earnings_api():
         return jsonify({"error": str(e)}), 500
 
 
+# ── Economic Calendar ────────────────────────────────────────────────────────
+
+_econ_cache = {"data": None, "ts": 0}
+
+@app.route("/economic")
+def economic_page():
+    return render_template_string(ECONOMIC_HTML, current_user=current_user())
+
+@app.route("/api/economic")
+def economic_api():
+    import requests as _req, time as _time
+    now = _time.time()
+    if _econ_cache["data"] and now - _econ_cache["ts"] < 3600:
+        return jsonify(_econ_cache["data"])
+    if not FINNHUB_API_KEY:
+        return jsonify({"error": "FINNHUB_API_KEY not configured"}), 503
+    try:
+        from datetime import date, timedelta
+        today = date.today()
+        to    = today + timedelta(days=30)
+        url   = (f"https://finnhub.io/api/v1/calendar/economic"
+                 f"?from={today.isoformat()}&to={to.isoformat()}&token={FINNHUB_API_KEY}")
+        r = _req.get(url, timeout=10)
+        raw = r.json().get("economicCalendar", [])
+        # Filter to US events and sort by time
+        events = []
+        for ev in raw:
+            if ev.get("country", "").upper() != "US":
+                continue
+            events.append({
+                "event":    ev.get("event", ""),
+                "time":     ev.get("time", ""),
+                "impact":   ev.get("impact", "").lower(),
+                "prev":     ev.get("prev"),
+                "estimate": ev.get("estimate"),
+                "actual":   ev.get("actual"),
+                "unit":     ev.get("unit", ""),
+            })
+        events.sort(key=lambda x: x["time"])
+        result = {"events": events}
+        _econ_cache["data"] = result
+        _econ_cache["ts"]   = now
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 # ── Dividends Calendar ───────────────────────────────────────────────────────
 
 _DIVIDEND_TICKERS = [
@@ -3754,6 +3804,7 @@ _NAV_LINKS = """
         <a href="/heatmap">Market Heatmap</a>
         <a href="/earnings">Earnings Calendar</a>
         <a href="/dividends">Dividends Calendar</a>
+        <a href="/economic">Economic Calendar</a>
         <a href="/volume">Unusual Volume</a>
         <a href="/news">News</a>
         <a href="/ipo">IPO Calendar</a>
@@ -5857,6 +5908,195 @@ GENERATOR_HTML = """<!DOCTYPE html>
     btn.classList.add('copied');
     setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
   }
+""" + _THEME_JS + """
+</script>
+</body>
+</html>"""
+
+
+# ── Economic Calendar HTML ───────────────────────────────────────────────────
+
+ECONOMIC_HTML = """<!DOCTYPE html>
+<html data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">""" + _META + """
+  <title>Economic Calendar — ChartEdge</title>
+  <style>
+    :root[data-theme="dark"]  { --bg:#0d1117; --bg2:#161b22; --bg3:#21262d; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --green:#3fb950; --red:#f85149; --yellow:#d29922; }
+    :root[data-theme="light"] { --bg:#ffffff; --bg2:#f6f8fa; --bg3:#eaeef2; --border:#d0d7de; --text:#1f2328; --muted:#636c76; --accent:#0969da; --green:#1a7f37; --red:#cf222e; --yellow:#9a6700; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+    nav { background: var(--bg2); border-bottom: 1px solid var(--border); padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; }
+    .logo { font-size: 1.1rem; font-weight: bold; text-decoration: none; }
+    """ + _NAV_CSS + """
+    .hero { text-align: center; padding: 40px 24px 28px; border-bottom: 1px solid var(--border); }
+    .hero h1 { font-size: 1.6rem; margin-bottom: 8px; }
+    .hero h1 span { color: var(--accent); }
+    .hero p { color: var(--muted); font-size: .9rem; }
+    .container { max-width: 960px; margin: 0 auto; padding: 28px 24px; }
+    .filter-row { display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; }
+    .filter-btn { background: var(--bg2); border: 1px solid var(--border); color: var(--muted); padding: 6px 16px; border-radius: 20px; font-size: .82rem; cursor: pointer; transition: all .15s; }
+    .filter-btn.active, .filter-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--bg3); }
+    table { width: 100%; border-collapse: collapse; font-size: .86rem; }
+    th { color: var(--muted); font-size: .72rem; text-transform: uppercase; letter-spacing: .05em; padding: 8px 14px; border-bottom: 1px solid var(--border); text-align: left; white-space: nowrap; }
+    td { padding: 12px 14px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+    tr:hover td { background: var(--bg2); }
+    .impact-high   { display:inline-block; padding:2px 8px; border-radius:4px; font-size:.72rem; font-weight:700; background:rgba(248,81,73,.15); color:var(--red); }
+    .impact-medium { display:inline-block; padding:2px 8px; border-radius:4px; font-size:.72rem; font-weight:700; background:rgba(210,153,34,.15); color:var(--yellow); }
+    .impact-low    { display:inline-block; padding:2px 8px; border-radius:4px; font-size:.72rem; font-weight:700; background:rgba(139,148,158,.12); color:var(--muted); }
+    .date-cell { color: var(--muted); font-size: .8rem; white-space: nowrap; }
+    .time-cell { color: var(--muted); font-size: .8rem; white-space: nowrap; }
+    .event-name { font-weight: 600; color: var(--text); }
+    .val { font-variant-numeric: tabular-nums; }
+    .val.actual { color: var(--green); font-weight: 600; }
+    .val.miss { color: var(--red); font-weight: 600; }
+    .day-header td { background: var(--bg2); color: var(--muted); font-size: .75rem; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; padding: 6px 14px; border-bottom: 1px solid var(--border); }
+    .loading { text-align: center; padding: 60px; color: var(--muted); }
+    .spin { width: 32px; height: 32px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; margin: 0 auto 16px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .empty { text-align: center; padding: 60px; color: var(--muted); }
+    .disclaimer { color: var(--muted); font-size: .78rem; margin-top: 20px; padding: 12px; background: var(--bg2); border-radius: 6px; border: 1px solid var(--border); }
+    footer { text-align: center; padding: 32px 24px; color: var(--muted); font-size: .8rem; border-top: 1px solid var(--border); margin-top: 40px; }
+  </style>
+</head>
+<body>
+<nav>
+  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span></a>
+  <button class="hamburger" onclick="toggleMobileNav(event)">☰</button>
+  <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
+</nav>
+<div class="hero">
+  <h1>Economic <span>Calendar</span></h1>
+  <p>Upcoming US economic events — Fed meetings, CPI, jobs, GDP &amp; more</p>
+</div>
+<div class="container">
+  <div class="filter-row">
+    <button class="filter-btn active" onclick="setFilter('week', this)">This Week</button>
+    <button class="filter-btn" onclick="setFilter('next', this)">Next Week</button>
+    <button class="filter-btn" onclick="setFilter('month', this)">This Month</button>
+    <button class="filter-btn" onclick="setFilter('high', this)">High Impact Only</button>
+  </div>
+  <div id="econ-content">
+    <div class="loading"><div class="spin"></div>Loading economic events…</div>
+  </div>
+</div>
+<footer>© 2026 ChartEdge · Data via Finnhub · Not financial advice · <a href="/privacy" style="color:inherit">Privacy</a> · <a href="/terms" style="color:inherit">Terms</a></footer>
+<script>
+let _allEvents = [];
+let _activeFilter = 'week';
+
+function setFilter(f, btn) {
+  _activeFilter = f;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  render();
+}
+
+function getWeekRange(offset) {
+  const now = new Date();
+  const day = now.getDay(); // 0=Sun
+  const monday = new Date(now);
+  monday.setDate(now.getDate() - (day === 0 ? 6 : day - 1) + offset * 7);
+  monday.setHours(0,0,0,0);
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+  sunday.setHours(23,59,59,999);
+  return [monday, sunday];
+}
+
+function filterEvents(events) {
+  const now = new Date();
+  if (_activeFilter === 'week') {
+    const [start, end] = getWeekRange(0);
+    return events.filter(e => { const d = new Date(e.time); return d >= start && d <= end; });
+  }
+  if (_activeFilter === 'next') {
+    const [start, end] = getWeekRange(1);
+    return events.filter(e => { const d = new Date(e.time); return d >= start && d <= end; });
+  }
+  if (_activeFilter === 'month') {
+    const end = new Date(now); end.setDate(now.getDate() + 30);
+    return events.filter(e => new Date(e.time) <= end);
+  }
+  if (_activeFilter === 'high') {
+    return events.filter(e => e.impact === 'high');
+  }
+  return events;
+}
+
+function fmtDate(iso) {
+  const d = new Date(iso);
+  return d.toLocaleDateString('en-US', {weekday:'short', month:'short', day:'numeric'});
+}
+function fmtTime(iso) {
+  const d = new Date(iso);
+  const h = d.getUTCHours(), m = d.getUTCMinutes();
+  if (h === 0 && m === 0) return 'All Day';
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  return ((h % 12) || 12) + ':' + String(m).padStart(2,'0') + ' ' + ampm + ' ET';
+}
+function fmtVal(v, unit) {
+  if (v === null || v === undefined) return '<span style="color:var(--muted)">—</span>';
+  return '<span class="val">' + v + (unit ? ' ' + unit : '') + '</span>';
+}
+function fmtActual(actual, estimate, unit) {
+  if (actual === null || actual === undefined) return '<span style="color:var(--muted)">—</span>';
+  let cls = 'actual';
+  if (estimate !== null && estimate !== undefined) {
+    cls = actual >= estimate ? 'actual' : 'miss';
+  }
+  return '<span class="val ' + cls + '">' + actual + (unit ? ' ' + unit : '') + '</span>';
+}
+
+function render() {
+  const events = filterEvents(_allEvents);
+  const el = document.getElementById('econ-content');
+  if (!events.length) {
+    el.innerHTML = '<div class="empty">No events found for this period.</div>';
+    return;
+  }
+  let html = '<table><thead><tr><th>Date</th><th>Time (ET)</th><th>Event</th><th>Impact</th><th>Previous</th><th>Estimate</th><th>Actual</th></tr></thead><tbody>';
+  let lastDate = '';
+  events.forEach(e => {
+    const d = new Date(e.time);
+    const dateStr = d.toDateString();
+    if (dateStr !== lastDate) {
+      lastDate = dateStr;
+      html += '<tr class="day-header"><td colspan="7">' + fmtDate(e.time) + '</td></tr>';
+    }
+    const impactClass = e.impact === 'high' ? 'impact-high' : e.impact === 'medium' ? 'impact-medium' : 'impact-low';
+    const impactLabel = e.impact === 'high' ? 'High' : e.impact === 'medium' ? 'Medium' : 'Low';
+    html += '<tr>'
+      + '<td class="date-cell">' + fmtDate(e.time) + '</td>'
+      + '<td class="time-cell">' + fmtTime(e.time) + '</td>'
+      + '<td class="event-name">' + e.event + '</td>'
+      + '<td><span class="' + impactClass + '">' + impactLabel + '</span></td>'
+      + '<td>' + fmtVal(e.prev, e.unit) + '</td>'
+      + '<td>' + fmtVal(e.estimate, e.unit) + '</td>'
+      + '<td>' + fmtActual(e.actual, e.estimate, e.unit) + '</td>'
+      + '</tr>';
+  });
+  html += '</tbody></table>';
+  html += '<div class="disclaimer">📅 US economic events only · Data via Finnhub · Times in ET · Actual values turn green (beat) or red (miss) vs estimate</div>';
+  el.innerHTML = html;
+}
+
+async function loadEconomic() {
+  try {
+    const res = await fetch('/api/economic');
+    const data = await res.json();
+    if (data.error) {
+      document.getElementById('econ-content').innerHTML = '<div class="empty">Unable to load economic data.<br><span style="font-size:.8rem;color:var(--muted)">' + data.error + '</span></div>';
+      return;
+    }
+    _allEvents = data.events || [];
+    render();
+  } catch(e) {
+    document.getElementById('econ-content').innerHTML = '<div class="empty" style="color:var(--red)">Failed to load economic calendar.</div>';
+  }
+}
+loadEconomic();
 """ + _THEME_JS + """
 </script>
 </body>
