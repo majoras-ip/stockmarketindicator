@@ -6589,12 +6589,17 @@ function dateStr(d) {
 }
 function getWeekRange(offset) {
   const now = new Date();
-  const day = now.getDay(); // 0=Sun
-  const monday = new Date(now);
-  monday.setDate(now.getDate() - (day === 0 ? 6 : day - 1) + offset * 7);
-  const sunday = new Date(monday);
-  sunday.setDate(monday.getDate() + 6);
-  return [dateStr(monday), dateStr(sunday)];
+  const day = now.getDay(); // 0=Sun, 6=Sat
+  // Normalize to midnight to avoid DST edge cases
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const daysSinceMonday = day === 0 ? 6 : day - 1;
+  // On weekends bump "this week" forward to the upcoming Mon-Fri
+  const weekendShift = (day === 0 || day === 6) ? 1 : 0;
+  const monday = new Date(today);
+  monday.setDate(today.getDate() - daysSinceMonday + (offset + weekendShift) * 7);
+  const friday = new Date(monday);
+  friday.setDate(monday.getDate() + 4); // Mon-Fri only, no weekends
+  return [dateStr(monday), dateStr(friday)];
 }
 
 function filterEvents(events) {
