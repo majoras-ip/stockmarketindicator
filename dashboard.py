@@ -4593,7 +4593,6 @@ PRICING_HTML = """<!DOCTYPE html>
         <li>3 copies per day</li>
         <li>All indicators</li>
         <li>Live chart &amp; forecast</li>
-        <li>Unusual volume scanner</li>
         <li>Market news</li>
         <li>Earnings calendar</li>
         <li>Market heatmap</li>
@@ -4627,7 +4626,6 @@ PRICING_HTML = """<!DOCTYPE html>
         <li>8 copies per day</li>
         <li>All indicators</li>
         <li>Live chart &amp; forecast</li>
-        <li>Unusual volume scanner</li>
         <li>Market news</li>
         <li>Earnings calendar</li>
         <li>Market heatmap</li>
@@ -4666,7 +4664,6 @@ PRICING_HTML = """<!DOCTYPE html>
         <li>Unlimited copies</li>
         <li>All indicators</li>
         <li>Live chart &amp; forecast</li>
-        <li>Unusual volume scanner</li>
         <li>Market news</li>
         <li>Earnings calendar</li>
         <li>Market heatmap</li>
