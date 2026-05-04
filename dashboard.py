@@ -4258,6 +4258,8 @@ PRICING_HTML = """<!DOCTYPE html>
         <li>Earnings calendar</li>
         <li>Market heatmap</li>
         <li>Dividends calendar</li>
+        <li>IPO calendar</li>
+        <li>Economic calendar</li>
         <li>Crypto fear &amp; greed</li>
         <li>Crypto heatmap</li>
         <li>Trending coins</li>
@@ -4290,6 +4292,8 @@ PRICING_HTML = """<!DOCTYPE html>
         <li>Earnings calendar</li>
         <li>Market heatmap</li>
         <li>Dividends calendar</li>
+        <li>IPO calendar</li>
+        <li>Economic calendar</li>
         <li>Crypto fear &amp; greed</li>
         <li>Crypto heatmap</li>
         <li>Trending coins</li>
@@ -4327,6 +4331,8 @@ PRICING_HTML = """<!DOCTYPE html>
         <li>Earnings calendar</li>
         <li>Market heatmap</li>
         <li>Dividends calendar</li>
+        <li>IPO calendar</li>
+        <li>Economic calendar</li>
         <li>Crypto fear &amp; greed</li>
         <li>Crypto heatmap</li>
         <li>Trending coins</li>
