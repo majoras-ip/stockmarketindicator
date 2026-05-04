@@ -6652,31 +6652,36 @@ function setFilter(f, btn) {
   render();
 }
 
+function dateStr(d) {
+  // Returns YYYY-MM-DD string in local time
+  return d.getFullYear() + '-'
+    + String(d.getMonth() + 1).padStart(2, '0') + '-'
+    + String(d.getDate()).padStart(2, '0');
+}
 function getWeekRange(offset) {
   const now = new Date();
   const day = now.getDay(); // 0=Sun
   const monday = new Date(now);
   monday.setDate(now.getDate() - (day === 0 ? 6 : day - 1) + offset * 7);
-  monday.setHours(0,0,0,0);
   const sunday = new Date(monday);
   sunday.setDate(monday.getDate() + 6);
-  sunday.setHours(23,59,59,999);
-  return [monday, sunday];
+  return [dateStr(monday), dateStr(sunday)];
 }
 
 function filterEvents(events) {
-  const now = new Date();
+  const now  = new Date();
+  const today = dateStr(now);
   if (_activeFilter === 'week') {
     const [start, end] = getWeekRange(0);
-    return events.filter(e => { const d = new Date(e.time); return d >= start && d <= end; });
+    return events.filter(e => { const d = e.time.slice(0,10); return d >= start && d <= end; });
   }
   if (_activeFilter === 'next') {
     const [start, end] = getWeekRange(1);
-    return events.filter(e => { const d = new Date(e.time); return d >= start && d <= end; });
+    return events.filter(e => { const d = e.time.slice(0,10); return d >= start && d <= end; });
   }
   if (_activeFilter === 'month') {
     const end = new Date(now); end.setDate(now.getDate() + 30);
-    return events.filter(e => new Date(e.time) <= end);
+    return events.filter(e => e.time.slice(0,10) <= dateStr(end));
   }
   if (_activeFilter === 'high') {
     return events.filter(e => e.impact === 'high');
@@ -6685,13 +6690,16 @@ function filterEvents(events) {
 }
 
 function fmtDate(iso) {
-  const d = new Date(iso);
+  // Parse YYYY-MM-DD portion only to avoid timezone shifts
+  const parts = iso.slice(0,10).split('-');
+  const d = new Date(parseInt(parts[0]), parseInt(parts[1])-1, parseInt(parts[2]));
   return d.toLocaleDateString('en-US', {weekday:'short', month:'short', day:'numeric'});
 }
 function fmtTime(iso) {
-  const d = new Date(iso);
-  const h = d.getUTCHours(), m = d.getUTCMinutes();
-  if (h === 0 && m === 0) return 'All Day';
+  const timePart = iso.slice(11,16);
+  if (!timePart || timePart === '00:00') return 'All Day';
+  const [hStr, mStr] = timePart.split(':');
+  const h = parseInt(hStr), m = parseInt(mStr);
   const ampm = h >= 12 ? 'PM' : 'AM';
   return ((h % 12) || 12) + ':' + String(m).padStart(2,'0') + ' ' + ampm + ' ET';
 }
