@@ -7730,7 +7730,7 @@ PRIVACY_HTML = """<!DOCTYPE html>
   <p>Your account data is stored for as long as your account exists. You can request deletion by emailing us or using the delete account option if available.</p>
 
   <h2>6. Contact</h2>
-  <p>Questions? Email: <a href="mailto:ayden.j.folkerts@gmail.com">ayden.j.folkerts@gmail.com</a></p>
+  <p>Questions? Email: <a href="mailto:verdictessentials@gmail.com">verdictessentials@gmail.com</a></p>
 </div>
 <footer>© 2026 ChartEdge · Not financial advice · <a href="/privacy" style="color:inherit">Privacy</a> · <a href="/terms" style="color:inherit">Terms</a></footer>
 <script>""" + _THEME_JS + """</script>
@@ -7796,7 +7796,7 @@ TERMS_HTML = """<!DOCTYPE html>
   <p>We may update these terms at any time. Continued use of the site after changes constitutes acceptance.</p>
 
   <h2>8. Contact</h2>
-  <p>Questions? Email: <a href="mailto:ayden.j.folkerts@gmail.com">ayden.j.folkerts@gmail.com</a></p>
+  <p>Questions? Email: <a href="mailto:verdictessentials@gmail.com">verdictessentials@gmail.com</a></p>
 </div>
 <footer>© 2026 ChartEdge · Not financial advice · <a href="/privacy" style="color:inherit">Privacy</a> · <a href="/terms" style="color:inherit">Terms</a></footer>
 <script>""" + _THEME_JS + """</script>
