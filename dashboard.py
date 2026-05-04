@@ -2194,6 +2194,246 @@ def earnings_api():
         return jsonify({"error": str(e)}), 500
 
 
+# ── Backtester ────────────────────────────────────────────────────────────────
+
+@app.route("/backtest")
+@login_required
+def backtest_page():
+    plan = _get_user_plan(session.get("user_id"))
+    if plan != "pro":
+        return redirect("/pricing?upgrade=backtest")
+    return render_template_string(BACKTEST_HTML, current_user=current_user())
+
+
+@app.route("/api/backtest", methods=["POST"])
+def api_backtest():
+    if not session.get("user_id"):
+        return jsonify({"ok": False}), 401
+    plan = _get_user_plan(session.get("user_id"))
+    if plan != "pro":
+        return jsonify({"ok": False, "error": "Pro required"}), 403
+
+    import math as _math
+    import numpy as _np
+    import pandas as _pd
+    import yfinance as _yf
+
+    def _sf(v):
+        """Safe float — returns None for NaN/inf."""
+        try:
+            f = float(v)
+            return None if (_math.isnan(f) or _math.isinf(f)) else round(f, 4)
+        except Exception:
+            return None
+
+    data = request.get_json(silent=True) or {}
+    ticker   = str(data.get("ticker", "AAPL")).upper().strip()
+    strategy = str(data.get("strategy", "rsi")).lower().strip()
+    period   = str(data.get("period", "1y")).lower().strip()
+    params   = data.get("params", {}) or {}
+
+    if period not in ("1y", "2y", "5y"):
+        period = "1y"
+    if strategy not in ("rsi", "macd", "bbands", "ema_cross", "sma_cross"):
+        return jsonify({"ok": False, "error": "Unknown strategy"}), 400
+
+    try:
+        raw = _yf.download(ticker, period=period, interval="1d", auto_adjust=True, progress=False)
+        if hasattr(raw.columns, "levels"):
+            raw.columns = raw.columns.get_level_values(0)
+        raw = raw.dropna(subset=["Close", "Open", "High", "Low"])
+        if len(raw) < 5:
+            return jsonify({"ok": False, "error": "Not enough data"}), 400
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+    closes = raw["Close"].astype(float)
+    dates  = [str(d)[:10] for d in raw.index]
+    n      = len(closes)
+
+    # ── compute signals ───────────────────────────────────────────────────────
+    signals = [0] * n   # +1 = buy, -1 = sell, 0 = hold
+
+    if strategy == "rsi":
+        rsi_period = int(params.get("rsi_period", 14))
+        oversold   = float(params.get("oversold",   30))
+        overbought = float(params.get("overbought",  70))
+        delta = closes.diff()
+        gain  = delta.clip(lower=0).rolling(rsi_period).mean()
+        loss  = (-delta.clip(upper=0)).rolling(rsi_period).mean()
+        rs    = gain / loss.replace(0, _np.nan)
+        rsi   = 100 - (100 / (1 + rs))
+        rsi   = rsi.fillna(50)
+        for i in range(1, n):
+            if rsi.iloc[i-1] >= oversold > rsi.iloc[i]:
+                signals[i] = 1    # cross below oversold → wait for bounce up
+            elif rsi.iloc[i-1] <= oversold < rsi.iloc[i]:
+                signals[i] = 1    # RSI crosses above oversold (buy)
+            elif rsi.iloc[i-1] <= overbought < rsi.iloc[i]:
+                signals[i] = -1   # RSI crosses above overbought (sell)
+        # re-do: standard logic — buy cross UP through oversold, sell cross UP through overbought
+        signals = [0] * n
+        for i in range(1, n):
+            prev, curr = float(rsi.iloc[i-1]), float(rsi.iloc[i])
+            if prev <= oversold and curr > oversold:
+                signals[i] = 1
+            elif prev <= overbought and curr > overbought:
+                signals[i] = -1
+
+    elif strategy == "macd":
+        fast   = int(params.get("fast",   12))
+        slow   = int(params.get("slow",   26))
+        signal_p = int(params.get("signal",  9))
+        ema_fast = closes.ewm(span=fast,   adjust=False).mean()
+        ema_slow = closes.ewm(span=slow,   adjust=False).mean()
+        macd_line  = ema_fast - ema_slow
+        signal_line = macd_line.ewm(span=signal_p, adjust=False).mean()
+        for i in range(1, n):
+            pm, ps = float(macd_line.iloc[i-1]), float(signal_line.iloc[i-1])
+            cm, cs = float(macd_line.iloc[i]),   float(signal_line.iloc[i])
+            if pm <= ps and cm > cs:
+                signals[i] = 1
+            elif pm >= ps and cm < cs:
+                signals[i] = -1
+
+    elif strategy == "bbands":
+        bb_period = int(params.get("period", 20))
+        bb_std    = float(params.get("std",  2.0))
+        rolling_mean = closes.rolling(bb_period).mean()
+        rolling_std  = closes.rolling(bb_period).std()
+        upper = rolling_mean + bb_std * rolling_std
+        lower = rolling_mean - bb_std * rolling_std
+        for i in range(1, n):
+            pc, cc = float(closes.iloc[i-1]), float(closes.iloc[i])
+            pl, cl = float(lower.iloc[i-1])  if not _math.isnan(float(lower.iloc[i-1]))  else cc, float(lower.iloc[i])  if not _math.isnan(float(lower.iloc[i]))  else cc
+            pu, cu = float(upper.iloc[i-1])  if not _math.isnan(float(upper.iloc[i-1]))  else cc, float(upper.iloc[i])  if not _math.isnan(float(upper.iloc[i]))  else cc
+            if pc >= pl and cc < cl:
+                signals[i] = 1
+            elif pc <= pu and cc > cu:
+                signals[i] = -1
+
+    elif strategy == "ema_cross":
+        fast_p = int(params.get("fast",  9))
+        slow_p = int(params.get("slow", 21))
+        ema_f = closes.ewm(span=fast_p, adjust=False).mean()
+        ema_s = closes.ewm(span=slow_p, adjust=False).mean()
+        for i in range(1, n):
+            pf, ps2 = float(ema_f.iloc[i-1]), float(ema_s.iloc[i-1])
+            cf, cs2 = float(ema_f.iloc[i]),   float(ema_s.iloc[i])
+            if pf <= ps2 and cf > cs2:
+                signals[i] = 1
+            elif pf >= ps2 and cf < cs2:
+                signals[i] = -1
+
+    elif strategy == "sma_cross":
+        fast_p = int(params.get("fast",  50))
+        slow_p = int(params.get("slow", 200))
+        sma_f = closes.rolling(fast_p).mean()
+        sma_s = closes.rolling(slow_p).mean()
+        for i in range(1, n):
+            pf = float(sma_f.iloc[i-1]) if not _pd.isna(sma_f.iloc[i-1]) else None
+            ps2 = float(sma_s.iloc[i-1]) if not _pd.isna(sma_s.iloc[i-1]) else None
+            cf = float(sma_f.iloc[i])   if not _pd.isna(sma_f.iloc[i])   else None
+            cs2 = float(sma_s.iloc[i])   if not _pd.isna(sma_s.iloc[i])   else None
+            if None in (pf, ps2, cf, cs2):
+                continue
+            if pf <= ps2 and cf > cs2:
+                signals[i] = 1
+            elif pf >= ps2 and cf < cs2:
+                signals[i] = -1
+
+    # ── simulate trades ───────────────────────────────────────────────────────
+    INITIAL = 10000.0
+    cash    = INITIAL
+    shares  = 0.0
+    in_pos  = False
+    trades  = []
+    equity  = []
+
+    bh_shares = INITIAL / float(closes.iloc[0]) if float(closes.iloc[0]) > 0 else 0.0
+
+    for i in range(n):
+        price = float(closes.iloc[i])
+        sig   = signals[i]
+
+        if sig == 1 and not in_pos and cash > 0:
+            shares   = cash / price
+            cash     = 0.0
+            in_pos   = True
+            trades.append({"date": dates[i], "type": "buy", "price": _sf(price), "shares": _sf(shares)})
+        elif sig == -1 and in_pos and shares > 0:
+            cash     = shares * price
+            shares   = 0.0
+            in_pos   = False
+            trades.append({"date": dates[i], "type": "sell", "price": _sf(price), "shares": _sf(cash / price if price > 0 else 0)})
+
+        port_val = cash + shares * price
+        bh_val   = bh_shares * price
+        equity.append({"date": dates[i], "value": _sf(port_val), "bh": _sf(bh_val)})
+
+    # final portfolio value (if still in position)
+    final_price = float(closes.iloc[-1])
+    final_val   = cash + shares * final_price
+    bh_final    = bh_shares * final_price
+
+    total_return = _sf((final_val - INITIAL) / INITIAL * 100)
+    bh_return    = _sf((bh_final  - INITIAL) / INITIAL * 100)
+
+    # win rate
+    buy_prices, wins, losses = [], 0, 0
+    for t in trades:
+        if t["type"] == "buy":
+            buy_prices.append(float(t["price"]) if t["price"] else 0)
+        elif t["type"] == "sell" and buy_prices:
+            bp = buy_prices.pop()
+            sp = float(t["price"]) if t["price"] else 0
+            if sp > bp:
+                wins += 1
+            else:
+                losses += 1
+    total_closed = wins + losses
+    win_rate = _sf(wins / total_closed * 100) if total_closed > 0 else None
+
+    # max drawdown on equity curve
+    vals = [e["value"] for e in equity if e["value"] is not None]
+    max_dd = 0.0
+    if vals:
+        peak = vals[0]
+        for v in vals:
+            if v > peak:
+                peak = v
+            dd = (v - peak) / peak * 100 if peak > 0 else 0
+            if dd < max_dd:
+                max_dd = dd
+
+    # Sharpe ratio (annualised, daily returns, rf=0)
+    sharpe = None
+    if len(vals) > 2:
+        daily_rets = []
+        for j in range(1, len(vals)):
+            if vals[j-1] > 0:
+                daily_rets.append((vals[j] - vals[j-1]) / vals[j-1])
+        if daily_rets:
+            arr = _np.array(daily_rets, dtype=float)
+            std = float(_np.std(arr, ddof=1))
+            if std > 0:
+                sharpe = _sf(float(_np.mean(arr)) / std * _math.sqrt(252))
+
+    return jsonify({
+        "ok":           True,
+        "ticker":       ticker,
+        "strategy":     strategy,
+        "total_return": total_return,
+        "bh_return":    bh_return,
+        "win_rate":     win_rate,
+        "num_trades":   len(trades),
+        "max_drawdown": _sf(max_dd),
+        "sharpe":       sharpe,
+        "equity_curve": equity,
+        "trades":       trades,
+    })
+
+
 # ── Economic Calendar ────────────────────────────────────────────────────────
 
 _econ_cache = {"data": None, "ts": 0}
@@ -3816,6 +4056,7 @@ _NAV_LINKS = """
         <a href="/pricing?upgrade=flow" style="opacity:.4;">Options Flow 🔒</a>
         <a href="/pricing?upgrade=insider" style="opacity:.4;">Insider Trading 🔒</a>
         <a href="/pricing?upgrade=premarket" style="opacity:.4;">Pre-Market Scanner 🔒</a>
+        <a href="/pricing?upgrade=backtest" style="opacity:.4;">Backtester 🔒</a>
         {% elif nav_plan == 'basic' %}
         <a href="/trump">Trump Tracker</a>
         <a href="/gamma">Gamma Exposure</a>
@@ -3824,6 +4065,7 @@ _NAV_LINKS = """
         <a href="/pricing?upgrade=flow" style="opacity:.4;">Options Flow 🔒</a>
         <a href="/pricing?upgrade=insider" style="opacity:.4;">Insider Trading 🔒</a>
         <a href="/pricing?upgrade=premarket" style="opacity:.4;">Pre-Market Scanner 🔒</a>
+        <a href="/pricing?upgrade=backtest" style="opacity:.4;">Backtester 🔒</a>
         {% else %}
         <a href="/trump">Trump Tracker</a>
         <a href="/gamma">Gamma Exposure</a>
@@ -3832,6 +4074,7 @@ _NAV_LINKS = """
         <a href="/flow">Options Flow</a>
         <a href="/insider">Insider Trading</a>
         <a href="/premarket">Pre-Market Scanner</a>
+        <a href="/backtest">Backtester</a>
         {% endif %}
       </div>
     </div>
@@ -5915,6 +6158,373 @@ GENERATOR_HTML = """<!DOCTYPE html>
     setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
   }
 """ + _THEME_JS + """
+</script>
+</body>
+</html>"""
+
+
+# ── Backtester HTML ──────────────────────────────────────────────────────────
+
+BACKTEST_HTML = """<!DOCTYPE html>
+<html data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">""" + _META + """
+  <title>Backtester · ChartEdge</title>
+  <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+  <style>
+    :root[data-theme="dark"]  { --bg:#0d1117; --bg2:#161b22; --bg3:#21262d; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --green:#3fb950; --red:#f85149; }
+    :root[data-theme="light"] { --bg:#ffffff; --bg2:#f6f8fa; --bg3:#eaeef2; --border:#d0d7de; --text:#1f2328; --muted:#636c76; --accent:#0969da; --green:#1a7f37; --red:#cf222e; }
+    * { box-sizing:border-box; margin:0; padding:0; }
+    body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; background:var(--bg); color:var(--text); min-height:100vh; }
+    nav { background:var(--bg2); border-bottom:1px solid var(--border); padding:14px 24px; display:flex; align-items:center; justify-content:space-between; }
+    .logo { font-size:1.1rem; font-weight:bold; text-decoration:none; color:var(--text); }
+    """ + _NAV_CSS + """
+    .page { max-width:1100px; margin:0 auto; padding:32px 20px; }
+    h1 { font-size:1.6rem; margin-bottom:8px; }
+    .subtitle { color:var(--muted); margin-bottom:28px; font-size:.95rem; }
+    .form-card { background:var(--bg2); border:1px solid var(--border); border-radius:10px; padding:24px; margin-bottom:28px; }
+    .form-row { display:flex; flex-wrap:wrap; gap:16px; margin-bottom:18px; }
+    .form-group { display:flex; flex-direction:column; gap:6px; flex:1; min-width:160px; }
+    .form-group label { font-size:.82rem; color:var(--muted); font-weight:600; text-transform:uppercase; letter-spacing:.04em; }
+    .form-group input, .form-group select { background:var(--bg3); border:1px solid var(--border); color:var(--text); border-radius:6px; padding:9px 12px; font-size:.95rem; outline:none; }
+    .form-group input:focus, .form-group select:focus { border-color:var(--accent); }
+    .params-section { margin-top:4px; }
+    .params-group { display:none; }
+    .params-group.active { display:flex; flex-wrap:wrap; gap:16px; }
+    .run-btn { background:var(--accent); color:#fff; border:none; border-radius:8px; padding:11px 28px; font-size:1rem; font-weight:600; cursor:pointer; transition:opacity .15s; }
+    .run-btn:hover { opacity:.85; }
+    .run-btn:disabled { opacity:.5; cursor:not-allowed; }
+    .loader { display:none; color:var(--muted); font-size:.9rem; margin-top:12px; }
+    .error-msg { display:none; color:var(--red); font-size:.9rem; margin-top:12px; padding:10px 14px; background:rgba(248,81,73,.1); border-radius:6px; border:1px solid rgba(248,81,73,.3); }
+    .results { display:none; }
+    .stats-row { display:flex; flex-wrap:wrap; gap:14px; margin-bottom:20px; }
+    .stat-card { background:var(--bg2); border:1px solid var(--border); border-radius:10px; padding:18px 22px; flex:1; min-width:140px; }
+    .stat-label { font-size:.78rem; color:var(--muted); font-weight:600; text-transform:uppercase; letter-spacing:.04em; margin-bottom:6px; }
+    .stat-value { font-size:1.55rem; font-weight:700; }
+    .stat-value.pos { color:var(--green); }
+    .stat-value.neg { color:var(--red); }
+    .stat-value.neutral { color:var(--text); }
+    .chart-wrap { background:var(--bg2); border:1px solid var(--border); border-radius:10px; padding:16px; margin-bottom:20px; }
+    .chart-title { font-size:1rem; font-weight:600; margin-bottom:12px; }
+    #equity-chart { width:100%; height:360px; }
+    .table-wrap { background:var(--bg2); border:1px solid var(--border); border-radius:10px; overflow:hidden; }
+    .table-header { padding:14px 20px; border-bottom:1px solid var(--border); font-weight:600; display:flex; justify-content:space-between; align-items:center; }
+    .trade-count { font-size:.82rem; color:var(--muted); font-weight:400; }
+    table { width:100%; border-collapse:collapse; font-size:.9rem; }
+    th { padding:10px 16px; text-align:left; color:var(--muted); font-weight:600; font-size:.8rem; text-transform:uppercase; letter-spacing:.04em; border-bottom:1px solid var(--border); }
+    td { padding:10px 16px; border-bottom:1px solid var(--border); }
+    tr:last-child td { border-bottom:none; }
+    .type-buy  { color:var(--green); font-weight:600; }
+    .type-sell { color:var(--red);   font-weight:600; }
+  </style>
+</head>
+<body>
+<nav>
+  <a class="logo" href="/">📈 ChartEdge</a>
+  <div class="nav-links">""" + _NAV_LINKS + """
+  </div>
+</nav>
+<div class="page">
+  <h1>Strategy Backtester</h1>
+  <p class="subtitle">Simulate trading strategies on historical data. Pro feature.</p>
+
+  <div class="form-card">
+    <div class="form-row">
+      <div class="form-group">
+        <label>Ticker</label>
+        <input type="text" id="bt-ticker" value="AAPL" placeholder="e.g. AAPL" style="text-transform:uppercase">
+      </div>
+      <div class="form-group">
+        <label>Strategy</label>
+        <select id="bt-strategy" onchange="updateParams()">
+          <option value="rsi">RSI</option>
+          <option value="macd">MACD</option>
+          <option value="bbands">Bollinger Bands</option>
+          <option value="ema_cross">EMA Crossover</option>
+          <option value="sma_cross">SMA Crossover</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Period</label>
+        <select id="bt-period">
+          <option value="1y">1 Year</option>
+          <option value="2y">2 Years</option>
+          <option value="5y">5 Years</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="params-section">
+      <!-- RSI params -->
+      <div class="params-group active" id="params-rsi">
+        <div class="form-group">
+          <label>RSI Period</label>
+          <input type="number" id="rsi-period" value="14" min="2" max="100">
+        </div>
+        <div class="form-group">
+          <label>Oversold</label>
+          <input type="number" id="rsi-oversold" value="30" min="1" max="49">
+        </div>
+        <div class="form-group">
+          <label>Overbought</label>
+          <input type="number" id="rsi-overbought" value="70" min="51" max="99">
+        </div>
+      </div>
+      <!-- MACD params -->
+      <div class="params-group" id="params-macd">
+        <div class="form-group">
+          <label>Fast EMA</label>
+          <input type="number" id="macd-fast" value="12" min="2" max="50">
+        </div>
+        <div class="form-group">
+          <label>Slow EMA</label>
+          <input type="number" id="macd-slow" value="26" min="5" max="100">
+        </div>
+        <div class="form-group">
+          <label>Signal</label>
+          <input type="number" id="macd-signal" value="9" min="2" max="30">
+        </div>
+      </div>
+      <!-- Bollinger Bands params -->
+      <div class="params-group" id="params-bbands">
+        <div class="form-group">
+          <label>Period</label>
+          <input type="number" id="bb-period" value="20" min="5" max="100">
+        </div>
+        <div class="form-group">
+          <label>Std Dev</label>
+          <input type="number" id="bb-std" value="2.0" min="0.5" max="5" step="0.1">
+        </div>
+      </div>
+      <!-- EMA Cross params -->
+      <div class="params-group" id="params-ema_cross">
+        <div class="form-group">
+          <label>Fast EMA</label>
+          <input type="number" id="ema-fast" value="9" min="2" max="50">
+        </div>
+        <div class="form-group">
+          <label>Slow EMA</label>
+          <input type="number" id="ema-slow" value="21" min="5" max="200">
+        </div>
+      </div>
+      <!-- SMA Cross params -->
+      <div class="params-group" id="params-sma_cross">
+        <div class="form-group">
+          <label>Fast SMA</label>
+          <input type="number" id="sma-fast" value="50" min="2" max="100">
+        </div>
+        <div class="form-group">
+          <label>Slow SMA</label>
+          <input type="number" id="sma-slow" value="200" min="10" max="500">
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top:20px;">
+      <button class="run-btn" id="run-btn" onclick="runBacktest()">Run Backtest</button>
+      <div class="loader" id="loader">⏳ Running backtest…</div>
+      <div class="error-msg" id="error-msg"></div>
+    </div>
+  </div>
+
+  <!-- Results -->
+  <div class="results" id="results">
+    <div class="stats-row" id="stats-row"></div>
+    <div class="chart-wrap">
+      <div class="chart-title">Equity Curve</div>
+      <div id="equity-chart"></div>
+    </div>
+    <div class="table-wrap">
+      <div class="table-header">
+        <span>Trade Log</span>
+        <span class="trade-count" id="trade-count"></span>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Type</th>
+            <th>Price</th>
+            <th>Shares</th>
+          </tr>
+        </thead>
+        <tbody id="trade-log"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+""" + _THEME_JS + """
+
+function updateParams() {
+  const strat = document.getElementById('bt-strategy').value;
+  document.querySelectorAll('.params-group').forEach(function(el) {
+    el.classList.remove('active');
+  });
+  const target = document.getElementById('params-' + strat);
+  if (target) target.classList.add('active');
+}
+
+function getParams() {
+  const strat = document.getElementById('bt-strategy').value;
+  if (strat === 'rsi') {
+    return {
+      rsi_period: parseInt(document.getElementById('rsi-period').value) || 14,
+      oversold:   parseFloat(document.getElementById('rsi-oversold').value) || 30,
+      overbought: parseFloat(document.getElementById('rsi-overbought').value) || 70
+    };
+  } else if (strat === 'macd') {
+    return {
+      fast:   parseInt(document.getElementById('macd-fast').value) || 12,
+      slow:   parseInt(document.getElementById('macd-slow').value) || 26,
+      signal: parseInt(document.getElementById('macd-signal').value) || 9
+    };
+  } else if (strat === 'bbands') {
+    return {
+      period: parseInt(document.getElementById('bb-period').value) || 20,
+      std:    parseFloat(document.getElementById('bb-std').value) || 2.0
+    };
+  } else if (strat === 'ema_cross') {
+    return {
+      fast: parseInt(document.getElementById('ema-fast').value) || 9,
+      slow: parseInt(document.getElementById('ema-slow').value) || 21
+    };
+  } else if (strat === 'sma_cross') {
+    return {
+      fast: parseInt(document.getElementById('sma-fast').value) || 50,
+      slow: parseInt(document.getElementById('sma-slow').value) || 200
+    };
+  }
+  return {};
+}
+
+function fmtPct(v) {
+  if (v === null || v === undefined) return '—';
+  var sign = v >= 0 ? '+' : '';
+  return sign + v.toFixed(2) + '%';
+}
+function fmtNum(v) {
+  if (v === null || v === undefined) return '—';
+  return v.toFixed(2);
+}
+function colorClass(v) {
+  if (v === null || v === undefined) return 'neutral';
+  return v >= 0 ? 'pos' : 'neg';
+}
+
+async function runBacktest() {
+  const ticker   = document.getElementById('bt-ticker').value.trim().toUpperCase();
+  const strategy = document.getElementById('bt-strategy').value;
+  const period   = document.getElementById('bt-period').value;
+  const params   = getParams();
+
+  if (!ticker) { showError('Please enter a ticker.'); return; }
+
+  const btn = document.getElementById('run-btn');
+  const loader = document.getElementById('loader');
+  const errDiv = document.getElementById('error-msg');
+  const results = document.getElementById('results');
+
+  btn.disabled = true;
+  loader.style.display = 'block';
+  errDiv.style.display = 'none';
+  results.style.display = 'none';
+
+  try {
+    const resp = await fetch('/api/backtest', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ticker: ticker, strategy: strategy, period: period, params: params})
+    });
+    const d = await resp.json();
+
+    if (!d.ok) { showError(d.error || 'Backtest failed.'); return; }
+
+    // Stats cards
+    var statsHTML = [
+      makeCard('Total Return', fmtPct(d.total_return), colorClass(d.total_return)),
+      makeCard('Buy &amp; Hold Return', fmtPct(d.bh_return), colorClass(d.bh_return)),
+      makeCard('Win Rate', d.win_rate !== null ? d.win_rate.toFixed(1) + '%' : '—', 'neutral'),
+      makeCard('Max Drawdown', fmtPct(d.max_drawdown), d.max_drawdown <= 0 ? 'neg' : 'neutral'),
+      makeCard('Trades', String(d.num_trades), 'neutral'),
+      makeCard('Sharpe Ratio', d.sharpe !== null ? fmtNum(d.sharpe) : '—', d.sharpe !== null ? colorClass(d.sharpe) : 'neutral')
+    ].join('');
+    document.getElementById('stats-row').innerHTML = statsHTML;
+
+    // Equity chart
+    var dates = d.equity_curve.map(function(e) { return e.date; });
+    var vals   = d.equity_curve.map(function(e) { return e.value; });
+    var bh     = d.equity_curve.map(function(e) { return e.bh; });
+
+    var allVals = vals.concat(bh).filter(function(v) { return v !== null; });
+    var minV = Math.min.apply(null, allVals);
+    var maxV = Math.max.apply(null, allVals);
+    var pad  = (maxV - minV) * 0.03 || 100;
+
+    var isDark = document.documentElement.getAttribute('data-theme') !== 'light';
+    var bgColor   = isDark ? '#0d1117' : '#ffffff';
+    var gridColor = isDark ? '#21262d' : '#eaeef2';
+    var textColor = isDark ? '#8b949e' : '#636c76';
+
+    Plotly.newPlot('equity-chart', [
+      {
+        x: dates, y: vals, name: 'Strategy',
+        type: 'scatter', mode: 'lines',
+        line: {color: '#58a6ff', width: 2}
+      },
+      {
+        x: dates, y: bh, name: 'Buy & Hold',
+        type: 'scatter', mode: 'lines',
+        line: {color: '#8b949e', width: 1.5, dash: 'dot'}
+      }
+    ], {
+      paper_bgcolor: bgColor,
+      plot_bgcolor:  bgColor,
+      font: {color: textColor, size: 11},
+      margin: {t: 10, r: 16, b: 40, l: 64},
+      xaxis: {gridcolor: gridColor, linecolor: gridColor, tickfont: {color: textColor}},
+      yaxis: {gridcolor: gridColor, linecolor: gridColor, tickfont: {color: textColor},
+              range: [minV - pad, maxV + pad], tickprefix: '$'},
+      legend: {bgcolor: 'rgba(0,0,0,0)', font: {color: textColor}},
+      hovermode: 'x unified'
+    }, {responsive: true, displayModeBar: false});
+
+    // Trade log
+    document.getElementById('trade-count').textContent = d.num_trades + ' trades';
+    var tbody = document.getElementById('trade-log');
+    if (d.trades.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="4" style="color:var(--muted);text-align:center;padding:20px;">No trades generated</td></tr>';
+    } else {
+      tbody.innerHTML = d.trades.map(function(t) {
+        var cls = t.type === 'buy' ? 'type-buy' : 'type-sell';
+        var price = t.price !== null ? '$' + t.price.toFixed(2) : '—';
+        var shares = t.shares !== null ? t.shares.toFixed(4) : '—';
+        return '<tr><td>' + t.date + '</td><td class="' + cls + '">' + t.type.toUpperCase() + '</td><td>' + price + '</td><td>' + shares + '</td></tr>';
+      }).join('');
+    }
+
+    results.style.display = 'block';
+  } catch(err) {
+    showError('Network error: ' + err.message);
+  } finally {
+    btn.disabled = false;
+    loader.style.display = 'none';
+  }
+}
+
+function makeCard(label, value, cls) {
+  return '<div class="stat-card"><div class="stat-label">' + label + '</div><div class="stat-value ' + cls + '">' + value + '</div></div>';
+}
+
+function showError(msg) {
+  var e = document.getElementById('error-msg');
+  e.textContent = msg;
+  e.style.display = 'block';
+  document.getElementById('loader').style.display = 'none';
+  document.getElementById('run-btn').disabled = false;
+}
 </script>
 </body>
 </html>"""
