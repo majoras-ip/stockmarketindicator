@@ -2234,7 +2234,7 @@ def api_backtest():
 
     if period not in ("1y", "2y", "5y"):
         period = "1y"
-    if strategy not in ("rsi", "macd", "bbands", "ema_cross", "sma_cross"):
+    if strategy not in ("rsi", "macd", "bbands", "ema_cross", "sma_cross", "uvol"):
         return jsonify({"ok": False, "error": "Unknown strategy"}), 400
 
     try:
@@ -2247,7 +2247,8 @@ def api_backtest():
     except Exception as exc:
         return jsonify({"ok": False, "error": str(exc)}), 500
 
-    closes = raw["Close"].astype(float)
+    closes  = raw["Close"].astype(float)
+    volumes = raw["Volume"].astype(float) if "Volume" in raw.columns else _pd.Series([0.0]*len(raw), index=raw.index)
     dates  = [str(d)[:10] for d in raw.index]
     n      = len(closes)
 
@@ -2341,6 +2342,25 @@ def api_backtest():
                 signals[i] = 1
             elif pf >= ps2 and cf < cs2:
                 signals[i] = -1
+
+    elif strategy == "uvol":
+        # Unusual Volume: buy when volume spikes above multiplier × avg, sell after hold_days
+        vol_period  = int(params.get("vol_period", 20))
+        multiplier  = float(params.get("multiplier", 2.0))
+        hold_days   = int(params.get("hold_days", 5))
+        avg_vol = volumes.rolling(vol_period).mean()
+        hold_until = -1
+        for i in range(vol_period, n):
+            avg = float(avg_vol.iloc[i]) if not _pd.isna(avg_vol.iloc[i]) else 0
+            vol = float(volumes.iloc[i])
+            if not (hold_until >= 0):
+                if avg > 0 and vol >= multiplier * avg:
+                    signals[i] = 1
+                    hold_until = i + hold_days
+            else:
+                if i >= hold_until:
+                    signals[i] = -1
+                    hold_until = -1
 
     # ── simulate trades ───────────────────────────────────────────────────────
     INITIAL = 10000.0
@@ -6243,6 +6263,7 @@ BACKTEST_HTML = """<!DOCTYPE html>
           <option value="bbands">Bollinger Bands</option>
           <option value="ema_cross">EMA Crossover</option>
           <option value="sma_cross">SMA Crossover</option>
+          <option value="uvol">Unusual Volume</option>
         </select>
       </div>
       <div class="form-group">
@@ -6317,6 +6338,21 @@ BACKTEST_HTML = """<!DOCTYPE html>
         <div class="form-group">
           <label>Slow SMA</label>
           <input type="number" id="sma-slow" value="200" min="10" max="500">
+        </div>
+      </div>
+      <!-- Unusual Volume params -->
+      <div class="params-group" id="params-uvol">
+        <div class="form-group">
+          <label>Avg Period</label>
+          <input type="number" id="uvol-period" value="20" min="5" max="100">
+        </div>
+        <div class="form-group">
+          <label>Volume Multiplier</label>
+          <input type="number" id="uvol-mult" value="2.0" min="1.1" max="10" step="0.1">
+        </div>
+        <div class="form-group">
+          <label>Hold Days</label>
+          <input type="number" id="uvol-hold" value="5" min="1" max="30">
         </div>
       </div>
     </div>
@@ -6395,6 +6431,12 @@ function getParams() {
     return {
       fast: parseInt(document.getElementById('sma-fast').value) || 50,
       slow: parseInt(document.getElementById('sma-slow').value) || 200
+    };
+  } else if (strat === 'uvol') {
+    return {
+      vol_period: parseInt(document.getElementById('uvol-period').value) || 20,
+      multiplier: parseFloat(document.getElementById('uvol-mult').value) || 2.0,
+      hold_days:  parseInt(document.getElementById('uvol-hold').value) || 5
     };
   }
   return {};
@@ -9565,6 +9607,22 @@ VOLUME_HTML = """<!DOCTYPE html>
     <button class="filter-btn"        data-min="2"  onclick="setFilter(this)">2x+</button>
     <button class="filter-btn"        data-min="5"  onclick="setFilter(this)">5x+</button>
     <button class="filter-btn"        data-min="10" onclick="setFilter(this)">10x+</button>
+    <select id="dir-filter" onchange="renderTable()" style="background:var(--bg2);border:1px solid var(--border);color:var(--muted);padding:5px 10px;border-radius:6px;font-size:.8rem;cursor:pointer;outline:none;">
+      <option value="all">All directions</option>
+      <option value="up">Gainers only</option>
+      <option value="down">Losers only</option>
+    </select>
+    <select id="price-filter" onchange="renderTable()" style="background:var(--bg2);border:1px solid var(--border);color:var(--muted);padding:5px 10px;border-radius:6px;font-size:.8rem;cursor:pointer;outline:none;">
+      <option value="0">Any price</option>
+      <option value="5">$5+</option>
+      <option value="10">$10+</option>
+      <option value="20">$20+</option>
+    </select>
+    <select id="sort-filter" onchange="renderTable()" style="background:var(--bg2);border:1px solid var(--border);color:var(--muted);padding:5px 10px;border-radius:6px;font-size:.8rem;cursor:pointer;outline:none;">
+      <option value="ratio">Sort: Ratio</option>
+      <option value="chg">Sort: % Change</option>
+      <option value="vol">Sort: Volume</option>
+    </select>
     <span class="status" id="status"></span>
     <button class="scan-btn" id="scan-btn" onclick="runScan()">&#9654; Scan Now</button>
   </div>
@@ -9611,7 +9669,7 @@ function setFilter(btn) {
   document.querySelectorAll('.filter-btn').forEach(function(b) { b.classList.remove('active'); });
   btn.classList.add('active');
   minRatio = parseFloat(btn.getAttribute('data-min'));
-  renderTable(allResults);
+  renderTable();
 }
 
 function ratioClass(r) {
@@ -9625,8 +9683,25 @@ function fmtVol(n) {
   return String(n);
 }
 
-function renderTable(data) {
-  var rows = data.filter(function(r) { return r.ratio >= minRatio; });
+function renderTable() {
+  var dir      = document.getElementById('dir-filter') ? document.getElementById('dir-filter').value : 'all';
+  var minPrice = document.getElementById('price-filter') ? parseFloat(document.getElementById('price-filter').value) : 0;
+  var sortBy   = document.getElementById('sort-filter') ? document.getElementById('sort-filter').value : 'ratio';
+
+  var rows = allResults.filter(function(r) {
+    if (r.ratio < minRatio) return false;
+    if (r.price < minPrice) return false;
+    if (dir === 'up'   && r.chg_pct < 0) return false;
+    if (dir === 'down' && r.chg_pct > 0) return false;
+    return true;
+  });
+
+  rows.sort(function(a, b) {
+    if (sortBy === 'chg') return Math.abs(b.chg_pct) - Math.abs(a.chg_pct);
+    if (sortBy === 'vol') return b.volume - a.volume;
+    return b.ratio - a.ratio;
+  });
+
   if (rows.length === 0) {
     document.getElementById('vol-content').innerHTML = '<div class="loading-msg">No tickers match this filter.</div>';
     return;
@@ -9672,7 +9747,7 @@ function runScan() {
       allResults = data.results;
       var src = data.cached ? ('Cached \u2014 ' + data.age_min + ' min ago') : 'Fresh scan';
       document.getElementById('status').textContent = allResults.length + ' tickers scanned \u00b7 ' + src;
-      renderTable(allResults);
+      renderTable();
     })
     .catch(function(err) {
       btn.disabled = false;
