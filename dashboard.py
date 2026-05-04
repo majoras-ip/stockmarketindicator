@@ -11213,12 +11213,11 @@ function render(d) {
       line: { color: '#e3b341', width: 1.5, dash: 'dot' },
     },
     {
-      x: [d.dates[d.dates.length-1]].concat(fcastDates),
-      y: [d.ewma[d.ewma.length-1]].concat(d.forecast),
+      x: [d.dates[0], d.dates[d.dates.length-1]].concat(fcastDates),
+      y: [d.ewma[d.ewma.length-1], d.ewma[d.ewma.length-1]].concat(d.forecast),
       name: 'Forecast',
-      type: 'scatter', mode: 'lines+markers',
-      line: { color: '#f85149', width: 2, dash: 'dash' },
-      marker: { size: 4 },
+      type: 'scatter', mode: 'lines',
+      line: { color: '#f85149', width: 1.5, dash: 'dash' },
     },
   ];
 
