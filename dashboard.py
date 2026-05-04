@@ -3274,18 +3274,91 @@ def trump_chart_api():
 # ── Unusual Volume ────────────────────────────────────────────────────────────
 
 _VOLUME_TICKERS = [
-    "SPY","QQQ","IWM","DIA","GLD","SLV","TLT","HYG","XLF","XLK","XLE","XLV","XLI","XLC","ARKK",
-    "AAPL","MSFT","NVDA","AMZN","GOOGL","META","TSLA","AVGO","JPM","JNJ","UNH","V","MA","HD",
-    "PG","XOM","CVX","AMD","INTC","BAC","C","WFC","GS","MS","F","GM","PLTR","NIO","BABA",
-    "SNAP","UBER","COIN","MSTR","SQ","PYPL","SHOP","ROKU","NFLX","DIS","WMT","TGT","COST",
-    "AMGN","PFE","MRK","LLY","ABBV","GME","AMC","SOFI","HOOD","RIVN","LCID","SMCI","ARM",
-    "MU","QCOM","TXN","AMAT","LRCX","KLAC","ASML","TSM","ORCL","CRM","NOW","SNOW","PANW",
-    "CRWD","DDOG","NET","ZS","OKTA","RBLX","U","ABNB","DASH","LYFT","PINS","RDDT","APP",
-    "MELI","SE","NU","GRAB","CELH","DKNG","PENN","MGM","LVS","WYNN",
+    # ETFs
+    "SPY","QQQ","IWM","DIA","GLD","SLV","TLT","HYG","XLF","XLK","XLE","XLV","XLI","XLC","XLB","XLU","XLP","XLRE","ARKK","VXX","SQQQ","TQQQ","SPXU","SPXL","UVXY",
+    # Mega cap tech
+    "AAPL","MSFT","NVDA","AMZN","GOOGL","GOOG","META","TSLA","AVGO","ORCL","CRM","ADBE","CSCO","IBM","NOW","SNOW","PLTR","PANW","CRWD","DDOG","NET","ZS","OKTA","FTNT","GTLB",
+    # Semiconductors
+    "AMD","INTC","MU","QCOM","TXN","AMAT","LRCX","KLAC","ASML","TSM","ARM","SMCI","MRVL","MCHP","ADI","NXPI","ON","WOLF","SWKS","QRVO",
+    # Financials
+    "JPM","BAC","C","WFC","GS","MS","BLK","AXP","V","MA","PYPL","SQ","COIN","HOOD","SOFI","NU","SCHW","USB","PNC","TFC","COF","DFS","SYF","ALLY",
+    # Healthcare
+    "JNJ","UNH","PFE","MRK","LLY","ABBV","AMGN","BMY","GILD","REGN","VRTX","MRNA","BNTX","CVS","CI","HUM","MOH","CNC","ISRG","MDT","ABT","TMO","DHR","A","IQV",
+    # Consumer
+    "AMZN","WMT","TGT","COST","HD","LOW","MCD","SBUX","NKE","LULU","TJX","ROST","DG","DLTR","EBAY","ETSY","W","CHWY","CVNA","KO","PEP","PG","CL","KMB","GIS","HSY","MO","PM",
+    # Energy
+    "XOM","CVX","COP","EOG","PXD","SLB","HAL","BKR","MPC","VLO","PSX","OXY","DVN","FANG","HES","APA","WMB","KMI","ET","MPLX",
+    # Media/Entertainment
+    "NFLX","DIS","PARA","WBD","CMCSA","CHTR","FOXA","FOX","RBLX","U","EA","TTWO","ATVI","MTCH","IAC","ZM","GOOGL",
+    # Auto/EV
+    "TSLA","F","GM","RIVN","LCID","NIO","LI","XPEV","TM","HMC","STLA",
+    # Travel/Leisure
+    "ABNB","BKNG","EXPE","UBER","LYFT","DASH","LYFT","MAR","HLT","CCL","RCL","NCLH","DAL","UAL","AAL","LUV","DKNG","PENN","MGM","LVS","WYNN","CZR",
+    # Retail/E-comm
+    "SHOP","MELI","SE","GRAB","BABA","JD","PDD","DASH","SNAP","PINS","RDDT","TWTR","APP","MTCH",
+    # Small/mid cap popular
+    "GME","AMC","BBBY","SPCE","NKLA","WKHS","CLOV","WISH","BB","NOK","EXPR","KOSS","SNDL","TLRY","CGC","ACB",
+    # Growth/ARK names
+    "ROKU","TDOC","TWLO","DOCU","DDOG","BILL","HUBS","VEEV","ZI","PCTY","PAYC","COUP","SMAR","MDB","ESTC","CFLT","GTLB",
+    # Biotech
+    "BIIB","ILMN","ALGN","HOLX","NVCR","SAGE","SRPT","BMRN","ALNY","EXEL","FOLD","ACAD","PTON","HIMS","RXRX","RXDX",
+    # Industrials/Defense
+    "BA","LMT","RTX","NOC","GD","HII","L3H","LHX","CAT","DE","GE","HON","MMM","UPS","FDX","CSX","UNP","NSC","WM","RSG",
+    # Real estate / REITs
+    "AMT","PLD","EQIX","CCI","O","SPG","AVB","EQR","MAA","NLY","AGNC","STWD","BXMT",
+    # Banks regional
+    "ZION","RF","CFG","HBAN","KEY","MTB","FITB","FHN","FRC","SIVB","SBNY","WAL","PACW","PacWest",
+    # Misc high-volume
+    "MSTR","MARA","RIOT","HUT","CLSK","CIFR","BTBT","BTDR","WULF","CORZ","SDIG",
 ]
+# deduplicate preserving order
+_seen = set()
+_VOLUME_TICKERS = [t for t in _VOLUME_TICKERS if not (t in _seen or _seen.add(t))]
 
 _volume_cache: dict = {"ts": 0, "data": []}
-_VOLUME_CACHE_SECS = 1200  # 20 min
+_VOLUME_CACHE_SECS = 1800  # 30 min
+
+def _volume_refresh_bg():
+    import threading as _vt
+    def _run():
+        import time as _time
+        import yfinance as _yf
+        import pandas as _pd
+        try:
+            raw = _yf.download(" ".join(_VOLUME_TICKERS), period="32d", interval="1d",
+                               group_by="ticker", auto_adjust=True, progress=False)
+            results = []
+            for t in _VOLUME_TICKERS:
+                try:
+                    if isinstance(raw.columns, _pd.MultiIndex):
+                        df = raw[t] if t in raw.columns.get_level_values(0) else None
+                    else:
+                        df = raw
+                    if df is None or len(df) < 5:
+                        continue
+                    df = df.dropna(subset=["Volume"])
+                    if len(df) < 5:
+                        continue
+                    today_vol  = int(df["Volume"].iloc[-1])
+                    avg_vol    = int(df["Volume"].iloc[-31:-1].mean())
+                    if avg_vol < 100_000 or today_vol == 0:
+                        continue
+                    ratio      = round(today_vol / avg_vol, 2)
+                    price      = round(float(df["Close"].iloc[-1]), 2)
+                    prev_close = float(df["Close"].iloc[-2])
+                    chg_pct    = round((price - prev_close) / prev_close * 100, 2)
+                    results.append({"ticker": t, "price": price, "chg_pct": chg_pct,
+                                    "volume": today_vol, "avg_vol": avg_vol, "ratio": ratio})
+                except Exception:
+                    continue
+            results.sort(key=lambda x: x["ratio"], reverse=True)
+            _volume_cache["data"] = results
+            _volume_cache["ts"]   = _time.time()
+        except Exception:
+            pass
+    _vt.Thread(target=_run, daemon=True).start()
+
+_volume_refresh_bg()  # pre-fetch at startup
 
 @app.route("/volume")
 @login_required
