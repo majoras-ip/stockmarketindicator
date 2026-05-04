@@ -3347,12 +3347,7 @@ def volume_api():
 
 
 @app.route("/api/volume/ticker")
-@login_required
 def volume_ticker_api():
-    import yfinance as yf
-    plan = _get_user_plan(session.get("user_id"))
-    if plan == "free":
-        return jsonify({"error": "upgrade_required"}), 403
     ticker = request.args.get("t", "").upper().strip()[:10]
     if not ticker:
         return jsonify({"error": "No ticker provided"}), 400
@@ -3375,13 +3370,19 @@ def volume_ticker_api():
         price      = round(float(df["Close"].iloc[-1]), 2)
         prev_close = float(df["Close"].iloc[-2])
         chg_pct    = round((price - prev_close) / prev_close * 100, 2)
+        # 30-day volume history for chart
+        hist = df.tail(30)
+        vol_dates = [str(d)[:10] for d in hist.index]
+        vol_vals  = [int(v) for v in hist["Volume"].fillna(0)]
         return jsonify({
-            "ticker":  ticker,
-            "price":   price,
-            "chg_pct": chg_pct,
-            "volume":  today_vol,
-            "avg_vol": avg_vol,
-            "ratio":   ratio,
+            "ticker":    ticker,
+            "price":     price,
+            "chg_pct":   chg_pct,
+            "volume":    today_vol,
+            "avg_vol":   avg_vol,
+            "ratio":     ratio,
+            "vol_dates": vol_dates,
+            "vol_vals":  vol_vals,
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -9538,6 +9539,7 @@ VOLUME_HTML = """<!DOCTYPE html>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">""" + _META + """
   <title>Unusual Volume · ChartEdge</title>
+  <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
   <style>
     :root[data-theme="dark"]  { --bg:#0d1117; --bg2:#161b22; --bg3:#21262d; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --green:#3fb950; --red:#f85149; }
     :root[data-theme="light"] { --bg:#ffffff; --bg2:#f6f8fa; --bg3:#eaeef2; --border:#d0d7de; --text:#1f2328; --muted:#636c76; --accent:#0969da; --green:#1a7f37; --red:#cf222e; }
@@ -9578,9 +9580,10 @@ VOLUME_HTML = """<!DOCTYPE html>
     .search-row button:hover { border-color: var(--accent); color: var(--accent); }
     .lookup-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 18px 22px; margin-bottom: 20px; display: none; }
     .lookup-card .sym { font-size: 1.3rem; font-weight: 700; color: var(--accent); margin-bottom: 10px; }
-    .lookup-grid { display: flex; gap: 24px; flex-wrap: wrap; }
+    .lookup-grid { display: flex; gap: 24px; flex-wrap: wrap; margin-bottom: 14px; }
     .lookup-item .lbl { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
     .lookup-item .val { font-size: 1.1rem; font-weight: 700; margin-top: 2px; }
+    #lookup-vol-chart { width: 100%; height: 180px; margin-top: 8px; }
     .loading-msg { text-align: center; padding: 60px; color: var(--muted); }
     footer { text-align: center; padding: 32px 24px; color: var(--muted); font-size: .8rem; border-top: 1px solid var(--border); margin-top: 20px; }
   </style>
@@ -9658,7 +9661,30 @@ function lookupTicker() {
         + '<div class="lookup-item"><div class="lbl">Today Vol</div><div class="val">' + fmtVol(d.volume) + '</div></div>'
         + '<div class="lookup-item"><div class="lbl">Avg Vol (30d)</div><div class="val">' + fmtVol(d.avg_vol) + '</div></div>'
         + '<div class="lookup-item"><div class="lbl">Ratio</div><div class="val"><span class="ratio-badge ' + ratioClass(d.ratio) + '">' + d.ratio.toFixed(1) + 'x</span></div></div>'
-        + '</div>';
+        + '</div>'
+        + '<div id="lookup-vol-chart"></div>';
+      // render 30-day volume bar chart
+      if (d.vol_dates && d.vol_vals) {
+        var colors = d.vol_vals.map(function(v, i) {
+          return i === d.vol_vals.length - 1 ? '#58a6ff' : (v > d.avg_vol * 1.5 ? '#3fb950' : '#30363d');
+        });
+        Plotly.newPlot('lookup-vol-chart', [{
+          type: 'bar', x: d.vol_dates, y: d.vol_vals,
+          marker: { color: colors },
+          hovertemplate: '%{x}<br>Vol: %{y:,.0f}<extra></extra>'
+        }, {
+          type: 'scatter', mode: 'lines', x: d.vol_dates,
+          y: d.vol_dates.map(function() { return d.avg_vol; }),
+          line: { color: '#8b949e', dash: 'dash', width: 1 },
+          name: '30d avg', hoverinfo: 'skip'
+        }], {
+          paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
+          margin: { t: 8, r: 8, b: 40, l: 50 },
+          xaxis: { color: '#8b949e', tickfont: { size: 10 } },
+          yaxis: { color: '#8b949e', tickfont: { size: 10 }, tickformat: '.2s' },
+          showlegend: false
+        }, { responsive: true, displayModeBar: false });
+      }
     })
     .catch(function() {
       card.innerHTML = '<div style="color:var(--red);">\u26a0 Lookup failed.</div>';
