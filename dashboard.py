@@ -11213,11 +11213,12 @@ function render(d) {
       line: { color: '#e3b341', width: 1.5, dash: 'dot' },
     },
     {
-      x: [d.dates[0], d.dates[d.dates.length-1]].concat(fcastDates),
-      y: [d.ewma[d.ewma.length-1], d.ewma[d.ewma.length-1]].concat(d.forecast),
+      x: [d.dates[d.dates.length-1]].concat(fcastDates),
+      y: [d.ewma[d.ewma.length-1]].concat(d.forecast),
       name: 'Forecast',
-      type: 'scatter', mode: 'lines',
-      line: { color: '#f85149', width: 1.5, dash: 'dash' },
+      type: 'scatter', mode: 'lines+markers',
+      line: { color: '#f85149', width: 2, dash: 'dash' },
+      marker: { size: 4 },
     },
   ];
 
@@ -11236,12 +11237,20 @@ function render(d) {
     xaxis: { gridcolor: '#21262d', tickformat: '%m/%d/%y' },
     yaxis: { gridcolor: '#21262d', title: 'Annualized Vol %', side: 'right' },
     legend: { orientation: 'h', y: -0.15, font: { size: 11 } },
-    shapes: [{
-      type: 'line', xref: 'x', yref: 'y',
-      x0: d.dates[d.dates.length-1], x1: d.dates[d.dates.length-1],
-      y0: 0, y1: Math.max.apply(null, d.rv) * 1.1,
-      line: { color: 'rgba(139,148,158,0.4)', width: 1, dash: 'dot' },
-    }],
+    shapes: [
+      {
+        type: 'line', xref: 'x', yref: 'y',
+        x0: d.dates[d.dates.length-1], x1: d.dates[d.dates.length-1],
+        y0: 0, y1: Math.max.apply(null, d.rv) * 1.1,
+        line: { color: 'rgba(139,148,158,0.4)', width: 1, dash: 'dot' },
+      },
+      {
+        type: 'line', xref: 'paper', yref: 'y',
+        x0: 0, x1: 1,
+        y0: d.ewma[d.ewma.length-1], y1: d.ewma[d.ewma.length-1],
+        line: { color: 'rgba(248,81,73,0.35)', width: 1.5, dash: 'dot' },
+      },
+    ],
     margin: { t: 20, r: 60, b: 60, l: 10 },
   }, { responsive: true, displayModeBar: true, modeBarButtonsToRemove: ['zoom2d','pan2d','select2d','lasso2d','zoomIn2d','zoomOut2d','autoScale2d','hoverClosestCartesian','hoverCompareCartesian','toggleSpikelines'], displaylogo: false });
 }
