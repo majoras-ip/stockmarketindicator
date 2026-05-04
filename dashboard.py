@@ -2472,10 +2472,12 @@ def economic_api():
         return jsonify({"error": "FINNHUB_API_KEY not configured"}), 503
     try:
         from datetime import date, timedelta
-        today = date.today()
+        today    = date.today()
+        # Start from Monday of this week so "This Week" filter shows all events
+        week_start = today - timedelta(days=today.weekday())  # weekday() 0=Mon
         to    = today + timedelta(days=30)
         url   = (f"https://finnhub.io/api/v1/calendar/economic"
-                 f"?from={today.isoformat()}&to={to.isoformat()}&token={FINNHUB_API_KEY}")
+                 f"?from={week_start.isoformat()}&to={to.isoformat()}&token={FINNHUB_API_KEY}")
         r = _req.get(url, timeout=10)
         raw = r.json().get("economicCalendar", [])
         # Filter to US events and sort by time
