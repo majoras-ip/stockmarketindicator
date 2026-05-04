@@ -10594,7 +10594,8 @@ function renderChart(d) {
     }
   });
 
-  Plotly.react('price-chart', [{
+  Plotly.purge('price-chart');
+  Plotly.newPlot('price-chart', [{
     x: dates, y: d.prices, type: 'scatter', mode: 'lines',
     line: { color: color, width: 2 },
     name: d.ticker,
