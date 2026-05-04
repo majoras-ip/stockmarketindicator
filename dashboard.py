@@ -9012,7 +9012,7 @@ function renderTable() {
 
   var html = '<table class="dp-table"><thead><tr>';
   html += '<th onclick="sortBy(&quot;ticker&quot;)">Ticker</th>';
-  html += '<th onclick="sortBy(&quot;shares&quot;)">DP Shares' + (sortCol==='shares'?' <span class=sort-arrow>' + (sortDir>0?'▲':'▼') + '</span>':'') + '</th>';
+  html += '<th onclick="sortBy(&quot;shares&quot;)">Bought or Sold Shares' + (sortCol==='shares'?' <span class=sort-arrow>' + (sortDir>0?'▲':'▼') + '</span>':'') + '</th>';
   html += '<th onclick="sortBy(&quot;notional&quot;)">Notional' + (sortCol==='notional'?' <span class=sort-arrow>' + (sortDir>0?'▲':'▼') + '</span>':'') + '</th>';
   html += '<th onclick="sortBy(&quot;trades&quot;)">Trades' + (sortCol==='trades'?' <span class=sort-arrow>' + (sortDir>0?'▲':'▼') + '</span>':'') + '</th>';
   html += '<th>Price</th>';
@@ -9065,7 +9065,7 @@ async function showDetail(ticker) {
   document.getElementById('detail-name-label').textContent = row.name || '';
 
   var statsHtml = '';
-  statsHtml += '<div class="stat-box"><div class="stat-label">DP Shares</div><div class="stat-val">' + fmtShares(row.shares) + '</div></div>';
+  statsHtml += '<div class="stat-box"><div class="stat-label">Bought or Sold Shares</div><div class="stat-val">' + fmtShares(row.shares) + '</div></div>';
   statsHtml += '<div class="stat-box"><div class="stat-label">Notional</div><div class="stat-val">' + fmt(row.notional) + '</div></div>';
   if (row.trades != null) statsHtml += '<div class="stat-box"><div class="stat-label">Trades</div><div class="stat-val">' + row.trades.toLocaleString() + '</div></div>';
   if (row.price != null) statsHtml += '<div class="stat-box"><div class="stat-label">Last Price</div><div class="stat-val">$' + Number(row.price).toFixed(2) + '</div></div>';
@@ -9091,7 +9091,7 @@ async function showDetail(ticker) {
         y: hist.shares,
         type: 'bar',
         marker: {color: isDark ? '#bc8cff' : '#8250df', opacity: 0.8},
-        name: 'DP Shares',
+        name: 'Bought or Sold Shares',
         hovertemplate: '%{y:,.0f} shares<extra></extra>',
       };
       Plotly.newPlot('detail-chart', [trace], layout, {displayModeBar:false, responsive:true});
