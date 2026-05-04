@@ -4151,6 +4151,7 @@ _NAV_LINKS = """
         <a href="/pricing?upgrade=insider" style="opacity:.4;">Insider Trading 🔒</a>
         <a href="/pricing?upgrade=premarket" style="opacity:.4;">Pre-Market Scanner 🔒</a>
         <a href="/pricing?upgrade=backtest" style="opacity:.4;">Backtester 🔒</a>
+        <a href="/pricing?upgrade=darkpool" style="opacity:.4;">Dark Pool 🔒</a>
         {% elif nav_plan == 'basic' %}
         <a href="/trump">Trump Tracker</a>
         <a href="/gamma">Gamma Exposure</a>
@@ -4160,6 +4161,7 @@ _NAV_LINKS = """
         <a href="/pricing?upgrade=insider" style="opacity:.4;">Insider Trading 🔒</a>
         <a href="/pricing?upgrade=premarket" style="opacity:.4;">Pre-Market Scanner 🔒</a>
         <a href="/pricing?upgrade=backtest" style="opacity:.4;">Backtester 🔒</a>
+        <a href="/pricing?upgrade=darkpool" style="opacity:.4;">Dark Pool 🔒</a>
         {% else %}
         <a href="/trump">Trump Tracker</a>
         <a href="/gamma">Gamma Exposure</a>
@@ -4169,6 +4171,7 @@ _NAV_LINKS = """
         <a href="/insider">Insider Trading</a>
         <a href="/premarket">Pre-Market Scanner</a>
         <a href="/backtest">Backtester</a>
+        <a href="/darkpool">Dark Pool</a>
         {% endif %}
       </div>
     </div>
@@ -8625,6 +8628,496 @@ async function loadData(force) {
     renderTable();
   } catch(e) {
     document.getElementById('content').innerHTML = '<p style="color:var(--red)">Request failed: ' + e.message + '</p>';
+  }
+}
+
+loadData(false);
+</script>
+</body>
+</html>"""
+
+
+# ── Dark Pool ─────────────────────────────────────────────────────────────────
+
+_darkpool_cache = {"data": [], "ts": 0}
+
+@app.route("/darkpool")
+@login_required
+def darkpool_page():
+    plan = _get_user_plan(session.get("user_id"))
+    if plan != "pro":
+        return redirect("/pricing?upgrade=darkpool")
+    return render_template_string(DARKPOOL_HTML, current_user=current_user())
+
+@app.route("/api/darkpool")
+@login_required
+def api_darkpool():
+    import time, requests as _req, datetime as _dt
+    plan = _get_user_plan(session.get("user_id"))
+    if plan != "pro":
+        return jsonify({"error": "Pro required"}), 403
+
+    now = time.time()
+    if now - _darkpool_cache["ts"] < 1800 and _darkpool_cache["data"]:
+        return jsonify(_darkpool_cache["data"])
+
+    headers = {"User-Agent": "ChartEdge ayden.j.folkerts@gmail.com"}
+
+    # FINRA OTC / ATS transparency data — weekly aggregated dark pool prints
+    # Published biweekly at: https://ats.finra.org/
+    # We use the JSON API that powers their public dashboard
+    results = []
+    try:
+        # FINRA ATS Transparency Data - biweekly aggregate by security
+        # Each row: ticker, shortName, totalWeeklyShareQuantity, totalWeeklyTradeCount
+        # We pull the most recent two-week period available
+        r = _req.get(
+            "https://ats.finra.org/api/download/ats-transparency-data/all-ats",
+            headers=headers, timeout=20
+        )
+        if r.status_code == 200:
+            rows = r.json()
+            # rows is a list of dicts with keys like:
+            # issueSymbolIdentifier, issueName, totalWeeklyShareQuantity, totalWeeklyTradeCount,
+            # lastSalePrice, weekDate, atsName
+            # Aggregate by ticker across all ATSs for each week
+            agg = {}
+            for row in rows:
+                tk  = (row.get("issueSymbolIdentifier") or "").strip().upper()
+                if not tk:
+                    continue
+                shares = int(row.get("totalWeeklyShareQuantity") or 0)
+                trades = int(row.get("totalWeeklyTradeCount") or 0)
+                price  = row.get("lastSalePrice")
+                week   = row.get("weekDate") or ""
+                name   = row.get("issueName") or tk
+                if tk not in agg:
+                    agg[tk] = {"ticker": tk, "name": name, "shares": 0, "trades": 0,
+                               "price": price, "week": week}
+                agg[tk]["shares"] += shares
+                agg[tk]["trades"] += trades
+
+            # compute notional value
+            for tk, d in agg.items():
+                if d["price"]:
+                    try:
+                        d["notional"] = round(float(d["price"]) * d["shares"])
+                    except Exception:
+                        d["notional"] = None
+                else:
+                    d["notional"] = None
+
+            results = sorted(agg.values(), key=lambda x: x["shares"], reverse=True)[:200]
+
+    except Exception:
+        pass
+
+    # Fallback: use FINRA weekly ATS CSV if JSON fails
+    if not results:
+        try:
+            # Try alternate FINRA endpoint
+            import csv, io
+            today = _dt.date.today()
+            # FINRA publishes every other Monday; try last few weeks
+            for delta in [0, 7, 14, 21]:
+                d = today - _dt.timedelta(days=today.weekday() + delta)
+                url = f"https://ats.finra.org/api/download/ats-transparency-data/{d.strftime('%Y-%m-%d')}"
+                try:
+                    r = _req.get(url, headers=headers, timeout=10)
+                    if r.status_code == 200:
+                        reader = csv.DictReader(io.StringIO(r.text))
+                        agg = {}
+                        for row in reader:
+                            tk = (row.get("Issue Symbol") or row.get("issueSymbolIdentifier") or "").strip().upper()
+                            if not tk:
+                                continue
+                            try:
+                                shares = int(row.get("Total Weekly Share Quantity") or row.get("totalWeeklyShareQuantity") or 0)
+                                trades = int(row.get("Total Weekly Trade Count") or row.get("totalWeeklyTradeCount") or 0)
+                            except Exception:
+                                continue
+                            price_raw = row.get("Last Sale Price") or row.get("lastSalePrice")
+                            price = None
+                            try:
+                                price = float(price_raw) if price_raw else None
+                            except Exception:
+                                pass
+                            name = row.get("Issue Name") or row.get("issueName") or tk
+                            week = row.get("Week Date") or row.get("weekDate") or ""
+                            if tk not in agg:
+                                agg[tk] = {"ticker": tk, "name": name, "shares": 0,
+                                           "trades": 0, "price": price, "week": week}
+                            agg[tk]["shares"] += shares
+                            agg[tk]["trades"] += trades
+
+                        for d2 in agg.values():
+                            if d2["price"]:
+                                try:
+                                    d2["notional"] = round(float(d2["price"]) * d2["shares"])
+                                except Exception:
+                                    d2["notional"] = None
+                            else:
+                                d2["notional"] = None
+
+                        results = sorted(agg.values(), key=lambda x: x["shares"], reverse=True)[:200]
+                        if results:
+                            break
+                except Exception:
+                    continue
+        except Exception:
+            pass
+
+    # Last resort: well-known large dark pool prints from popular tickers using yfinance volume
+    if not results:
+        import yfinance as _yf
+        BIG_TICKERS = [
+            "SPY","QQQ","AAPL","MSFT","NVDA","AMZN","META","GOOGL","TSLA","JPM",
+            "AMD","INTC","BAC","C","GS","MS","XOM","CVX","V","MA","NFLX","COIN",
+            "PLTR","RIVN","SOFI","MARA","F","GM","DIS","PYPL","SQ","UBER","HOOD",
+        ]
+        try:
+            raw = _yf.download(
+                " ".join(BIG_TICKERS), period="5d", interval="1d",
+                group_by="ticker", auto_adjust=True, progress=False
+            )
+            today_str = str(_dt.date.today())
+            for tk in BIG_TICKERS:
+                try:
+                    df = raw[tk].dropna()
+                    if df.empty:
+                        continue
+                    last = df.iloc[-1]
+                    price  = float(last["Close"])
+                    volume = int(last["Volume"])
+                    # Estimate dark pool ~30% of total volume (industry average)
+                    dp_shares = int(volume * 0.30)
+                    results.append({
+                        "ticker":   tk,
+                        "name":     tk,
+                        "shares":   dp_shares,
+                        "trades":   None,
+                        "price":    round(price, 2),
+                        "notional": round(price * dp_shares),
+                        "week":     today_str,
+                        "estimated": True,
+                    })
+                except Exception:
+                    continue
+            results.sort(key=lambda x: x["shares"], reverse=True)
+        except Exception:
+            pass
+
+    if not results:
+        return jsonify({"error": "Dark pool data temporarily unavailable."}), 503
+
+    _darkpool_cache["data"] = results
+    _darkpool_cache["ts"]   = now
+    return jsonify(results)
+
+
+@app.route("/api/darkpool/ticker")
+@login_required
+def api_darkpool_ticker():
+    """Historical dark pool volume for a specific ticker (uses FINRA ATS weekly data)."""
+    import time, requests as _req
+    plan = _get_user_plan(session.get("user_id"))
+    if plan != "pro":
+        return jsonify({"error": "Pro required"}), 403
+
+    ticker = (request.args.get("ticker") or "").strip().upper()
+    if not ticker:
+        return jsonify({"error": "ticker required"}), 400
+
+    headers = {"User-Agent": "ChartEdge ayden.j.folkerts@gmail.com"}
+    weeks = []
+    shares_list = []
+    notional_list = []
+
+    try:
+        r = _req.get(
+            "https://ats.finra.org/api/download/ats-transparency-data/all-ats",
+            headers=headers, timeout=20
+        )
+        if r.status_code == 200:
+            rows = r.json()
+            # group by weekDate for this ticker
+            by_week = {}
+            for row in rows:
+                tk = (row.get("issueSymbolIdentifier") or "").strip().upper()
+                if tk != ticker:
+                    continue
+                week = row.get("weekDate") or ""
+                shares = int(row.get("totalWeeklyShareQuantity") or 0)
+                price  = row.get("lastSalePrice")
+                if week not in by_week:
+                    by_week[week] = {"shares": 0, "price": price}
+                by_week[week]["shares"] += shares
+
+            for wk in sorted(by_week.keys()):
+                d = by_week[wk]
+                weeks.append(wk)
+                shares_list.append(d["shares"])
+                try:
+                    notional_list.append(round(float(d["price"]) * d["shares"]) if d["price"] else None)
+                except Exception:
+                    notional_list.append(None)
+    except Exception:
+        pass
+
+    return jsonify({"ticker": ticker, "weeks": weeks,
+                    "shares": shares_list, "notional": notional_list})
+
+
+DARKPOOL_HTML = """<!DOCTYPE html>
+<html data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">""" + _META + """
+  <title>Dark Pool · ChartEdge</title>
+  <style>
+    :root[data-theme="dark"]  { --bg:#0d1117; --bg2:#161b22; --bg3:#21262d; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --green:#3fb950; --red:#f85149; --purple:#bc8cff; }
+    :root[data-theme="light"] { --bg:#ffffff; --bg2:#f6f8fa; --bg3:#eaeef2; --border:#d0d7de; --text:#1f2328; --muted:#636c76; --accent:#0969da; --green:#1a7f37; --red:#cf222e; --purple:#8250df; }
+    * { box-sizing:border-box; margin:0; padding:0; }
+    body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; background:var(--bg); color:var(--text); min-height:100vh; }
+    nav { background:var(--bg2); border-bottom:1px solid var(--border); padding:14px 24px; display:flex; align-items:center; justify-content:space-between; }
+    .logo { font-size:1.1rem; font-weight:bold; text-decoration:none; }
+    """ + _NAV_CSS + """
+    .page { max-width:1000px; margin:0 auto; padding:36px 24px; }
+    h1 { font-size:1.6rem; margin-bottom:6px; } h1 span { color:var(--accent); }
+    .sub { color:var(--muted); font-size:.85rem; margin-bottom:24px; }
+    .toolbar { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:20px; }
+    .toolbar input { background:var(--bg2); border:1px solid var(--border); border-radius:6px; padding:8px 14px; color:var(--text); font-size:.9rem; outline:none; width:200px; }
+    .toolbar input:focus { border-color:var(--accent); }
+    .toolbar select { background:var(--bg2); border:1px solid var(--border); border-radius:6px; padding:8px 12px; color:var(--text); font-size:.85rem; outline:none; cursor:pointer; }
+    .refresh-btn { background:none; border:1px solid var(--border); border-radius:6px; padding:7px 14px; color:var(--muted); font-size:.82rem; cursor:pointer; margin-left:auto; }
+    .refresh-btn:hover { border-color:var(--accent); color:var(--accent); }
+    .dp-table { width:100%; border-collapse:collapse; }
+    .dp-table th { text-align:left; font-size:.72rem; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; padding:8px 12px; border-bottom:1px solid var(--border); cursor:pointer; user-select:none; white-space:nowrap; }
+    .dp-table th:hover { color:var(--accent); }
+    .dp-table td { padding:10px 12px; border-bottom:1px solid var(--border); font-size:.85rem; vertical-align:middle; }
+    .dp-table tr:hover td { background:var(--bg2); }
+    .dp-table tr.selected td { background:#1a1f2e; }
+    .ticker-link { color:var(--accent); text-decoration:none; font-weight:700; cursor:pointer; }
+    .ticker-link:hover { text-decoration:underline; }
+    .vol-bar { display:inline-block; height:6px; border-radius:3px; background:var(--purple); opacity:.7; vertical-align:middle; margin-left:6px; }
+    .loading { color:var(--muted); padding:40px; text-align:center; }
+    .pro-badge { display:inline-block; background:#2a2000; color:#e3b341; border:1px solid #e3b34140; border-radius:4px; font-size:.7rem; font-weight:700; padding:2px 8px; margin-left:8px; vertical-align:middle; }
+    .info-banner { background:#161b22; border:1px solid var(--border); border-radius:8px; padding:14px 18px; margin-bottom:24px; font-size:.82rem; color:var(--muted); line-height:1.6; }
+    .info-banner strong { color:var(--text); }
+    .detail-panel { background:var(--bg2); border:1px solid var(--border); border-radius:10px; padding:22px; margin-bottom:24px; display:none; }
+    .detail-panel.visible { display:block; }
+    .detail-header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:16px; }
+    .detail-ticker { font-size:1.4rem; font-weight:700; }
+    .detail-name { color:var(--muted); font-size:.85rem; margin-top:2px; }
+    .close-btn { background:none; border:none; color:var(--muted); font-size:1.2rem; cursor:pointer; }
+    .close-btn:hover { color:var(--text); }
+    .detail-stats { display:flex; gap:20px; flex-wrap:wrap; margin-bottom:16px; }
+    .stat-box { background:var(--bg3); border-radius:8px; padding:12px 16px; min-width:120px; }
+    .stat-label { font-size:.72rem; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; }
+    .stat-val { font-size:1.1rem; font-weight:700; color:var(--text); margin-top:3px; }
+    #detail-chart { height:180px; }
+    .sort-arrow { color:var(--accent); margin-left:4px; font-size:.75rem; }
+    footer { text-align:center; padding:32px 24px; color:var(--muted); font-size:.8rem; border-top:1px solid var(--border); margin-top:20px; }
+  </style>
+  <script src="https://cdn.plot.ly/plotly-2.26.0.min.js"></script>
+</head>
+<body>
+<nav>
+  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span></a>
+  <button class="hamburger" onclick="toggleMobileNav(event)">☰</button>
+  <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
+</nav>
+
+<div class="page">
+  <h1>Dark Pool <span>Flow</span> <span class="pro-badge">PRO</span></h1>
+  <p class="sub">Weekly off-exchange block trade volume by security · Source: FINRA ATS Transparency Data</p>
+
+  <div class="info-banner">
+    <strong>What is dark pool trading?</strong> Dark pools are private exchanges where large institutional investors
+    (hedge funds, banks, pension funds) execute block trades away from public markets to avoid price impact.
+    FINRA requires all ATS (Alternative Trading System) operators to report weekly aggregate volume.
+    High dark pool volume relative to normal volume often signals institutional accumulation or distribution.
+  </div>
+
+  <div id="detail-panel" class="detail-panel">
+    <div class="detail-header">
+      <div>
+        <div class="detail-ticker" id="detail-ticker-label">—</div>
+        <div class="detail-name" id="detail-name-label"></div>
+      </div>
+      <button class="close-btn" onclick="closeDetail()">✕</button>
+    </div>
+    <div class="detail-stats" id="detail-stats"></div>
+    <div id="detail-chart"></div>
+  </div>
+
+  <div class="toolbar">
+    <input type="text" id="search-input" placeholder="Search ticker or name…" oninput="renderTable()">
+    <select id="sort-select" onchange="handleSortChange()">
+      <option value="shares">Sort: Dark Pool Shares</option>
+      <option value="notional">Sort: Notional Value</option>
+      <option value="trades">Sort: Trade Count</option>
+    </select>
+    <button class="refresh-btn" onclick="loadData(true)">↻ Refresh</button>
+  </div>
+
+  <div id="content" class="loading">Loading dark pool data…</div>
+</div>
+
+<footer>© 2026 ChartEdge · Data: FINRA ATS Transparency · Biweekly aggregate · Not financial advice</footer>
+<script>""" + _THEME_JS + """
+var allData = [];
+var sortCol = 'shares';
+var sortDir = -1;
+var maxShares = 0;
+var selectedTicker = null;
+
+function handleSortChange() {
+  sortCol = document.getElementById('sort-select').value;
+  sortDir = -1;
+  renderTable();
+}
+
+function fmt(n) {
+  if (n == null) return '—';
+  if (n >= 1e9) return '$' + (n/1e9).toFixed(1) + 'B';
+  if (n >= 1e6) return '$' + (n/1e6).toFixed(1) + 'M';
+  if (n >= 1e3) return '$' + (n/1e3).toFixed(1) + 'K';
+  return '$' + n.toFixed(0);
+}
+function fmtShares(n) {
+  if (n == null) return '—';
+  if (n >= 1e9) return (n/1e9).toFixed(2) + 'B';
+  if (n >= 1e6) return (n/1e6).toFixed(2) + 'M';
+  if (n >= 1e3) return (n/1e3).toFixed(0) + 'K';
+  return String(n);
+}
+
+function renderTable() {
+  var q = (document.getElementById('search-input').value || '').trim().toUpperCase();
+  var data = allData.filter(function(r) {
+    if (!q) return true;
+    return (r.ticker || '').includes(q) || (r.name || '').toUpperCase().includes(q);
+  });
+  data.sort(function(a, b) {
+    var av = a[sortCol] == null ? -Infinity : a[sortCol];
+    var bv = b[sortCol] == null ? -Infinity : b[sortCol];
+    return (av > bv ? 1 : -1) * sortDir;
+  });
+
+  if (!data.length) {
+    document.getElementById('content').innerHTML = '<p style="color:var(--muted);padding:20px 0;">No results.</p>';
+    return;
+  }
+
+  var html = '<table class="dp-table"><thead><tr>';
+  html += '<th onclick="sortBy(&quot;ticker&quot;)">Ticker</th>';
+  html += '<th onclick="sortBy(&quot;shares&quot;)">DP Shares' + (sortCol==='shares'?' <span class=sort-arrow>' + (sortDir>0?'▲':'▼') + '</span>':'') + '</th>';
+  html += '<th onclick="sortBy(&quot;notional&quot;)">Notional' + (sortCol==='notional'?' <span class=sort-arrow>' + (sortDir>0?'▲':'▼') + '</span>':'') + '</th>';
+  html += '<th onclick="sortBy(&quot;trades&quot;)">Trades' + (sortCol==='trades'?' <span class=sort-arrow>' + (sortDir>0?'▲':'▼') + '</span>':'') + '</th>';
+  html += '<th>Price</th>';
+  html += '<th>Week</th>';
+  html += '</tr></thead><tbody>';
+
+  for (var i = 0; i < data.length; i++) {
+    var r = data[i];
+    var barW = maxShares > 0 ? Math.round((r.shares / maxShares) * 80) : 0;
+    var isSel = r.ticker === selectedTicker;
+    html += '<tr class="' + (isSel ? 'selected' : '') + '" onclick="showDetail(&quot;' + r.ticker + '&quot;)">';
+    html += '<td><span class="ticker-link">' + r.ticker + '</span>';
+    if (r.name && r.name !== r.ticker) html += ' <span style="color:var(--muted);font-size:.78rem;">' + r.name.slice(0,30) + '</span>';
+    if (r.estimated) html += ' <span style="background:#1a1a30;color:#8b8bff;border:1px solid #8b8bff40;border-radius:3px;font-size:.65rem;padding:1px 5px;margin-left:4px;">EST</span>';
+    html += '</td>';
+    html += '<td>' + fmtShares(r.shares) + '<span class="vol-bar" style="width:' + barW + 'px;"></span></td>';
+    html += '<td>' + fmt(r.notional) + '</td>';
+    html += '<td>' + (r.trades != null ? r.trades.toLocaleString() : '—') + '</td>';
+    html += '<td>' + (r.price != null ? '$' + Number(r.price).toFixed(2) : '—') + '</td>';
+    html += '<td style="color:var(--muted);font-size:.8rem;">' + (r.week || '—') + '</td>';
+    html += '</tr>';
+  }
+  html += '</tbody></table>';
+  document.getElementById('content').innerHTML = html;
+}
+
+function sortBy(col) {
+  if (sortCol === col) { sortDir *= -1; } else { sortCol = col; sortDir = -1; }
+  document.getElementById('sort-select').value = col === 'trades' ? 'trades' : col === 'notional' ? 'notional' : 'shares';
+  renderTable();
+}
+
+function closeDetail() {
+  selectedTicker = null;
+  document.getElementById('detail-panel').classList.remove('visible');
+  renderTable();
+}
+
+async function showDetail(ticker) {
+  if (selectedTicker === ticker) { closeDetail(); return; }
+  selectedTicker = ticker;
+  renderTable();
+
+  var row = allData.find(function(r) { return r.ticker === ticker; });
+  if (!row) return;
+
+  var panel = document.getElementById('detail-panel');
+  panel.classList.add('visible');
+  document.getElementById('detail-ticker-label').textContent = ticker;
+  document.getElementById('detail-name-label').textContent = row.name || '';
+
+  var statsHtml = '';
+  statsHtml += '<div class="stat-box"><div class="stat-label">DP Shares</div><div class="stat-val">' + fmtShares(row.shares) + '</div></div>';
+  statsHtml += '<div class="stat-box"><div class="stat-label">Notional</div><div class="stat-val">' + fmt(row.notional) + '</div></div>';
+  if (row.trades != null) statsHtml += '<div class="stat-box"><div class="stat-label">Trades</div><div class="stat-val">' + row.trades.toLocaleString() + '</div></div>';
+  if (row.price != null) statsHtml += '<div class="stat-box"><div class="stat-label">Last Price</div><div class="stat-val">$' + Number(row.price).toFixed(2) + '</div></div>';
+  document.getElementById('detail-stats').innerHTML = statsHtml;
+
+  // Fetch historical chart
+  document.getElementById('detail-chart').innerHTML = '<p style="color:var(--muted);font-size:.82rem;padding:10px 0;">Loading history…</p>';
+  try {
+    var res = await fetch('/api/darkpool/ticker?ticker=' + encodeURIComponent(ticker));
+    var hist = await res.json();
+    if (hist.weeks && hist.weeks.length > 1) {
+      var isDark = document.documentElement.getAttribute('data-theme') !== 'light';
+      var layout = {
+        margin:{t:10,b:40,l:60,r:10}, paper_bgcolor:'transparent', plot_bgcolor:'transparent',
+        font:{color: isDark ? '#8b949e' : '#636c76', size:11},
+        xaxis:{showgrid:false, linecolor: isDark ? '#30363d' : '#d0d7de', tickfont:{size:10}},
+        yaxis:{gridcolor: isDark ? '#21262d' : '#eaeef2', tickfont:{size:10}},
+        showlegend:false,
+        hovermode:'x unified',
+      };
+      var trace = {
+        x: hist.weeks,
+        y: hist.shares,
+        type: 'bar',
+        marker: {color: isDark ? '#bc8cff' : '#8250df', opacity: 0.8},
+        name: 'DP Shares',
+        hovertemplate: '%{y:,.0f} shares<extra></extra>',
+      };
+      Plotly.newPlot('detail-chart', [trace], layout, {displayModeBar:false, responsive:true});
+    } else {
+      document.getElementById('detail-chart').innerHTML = '<p style="color:var(--muted);font-size:.82rem;padding:10px 0;">Historical data not available for this ticker.</p>';
+    }
+  } catch(e) {
+    document.getElementById('detail-chart').innerHTML = '<p style="color:var(--muted);font-size:.82rem;padding:10px 0;">Could not load history.</p>';
+  }
+}
+
+async function loadData(force) {
+  if (!force && allData.length) return;
+  document.getElementById('content').innerHTML = '<div class="loading">Loading dark pool data…</div>';
+  try {
+    var res = await fetch('/api/darkpool');
+    var data = await res.json();
+    if (data.error) {
+      document.getElementById('content').innerHTML = '<p style="color:var(--red)">Error: ' + data.error + '</p>';
+      return;
+    }
+    allData = Array.isArray(data) ? data : [];
+    maxShares = allData.length ? Math.max.apply(null, allData.map(function(r){return r.shares||0;})) : 0;
+    renderTable();
+  } catch(e) {
+    document.getElementById('content').innerHTML = '<p style="color:var(--red)">Failed to load: ' + e.message + '</p>';
   }
 }
 
