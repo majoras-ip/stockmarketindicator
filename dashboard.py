@@ -5756,23 +5756,23 @@ HOME_HTML = """<!DOCTYPE html>
     <a class="ind-pill" href="/indicators?kind=smallcap_pb">
       <div class="cat">Small Cap</div><div class="iname">Micro Pullback</div>
     </a>
-    <a class="ind-pill" href="/flow">
-      <div class="cat">Options · Pro</div><div class="iname">Options Flow</div>
+    <a class="ind-pill" href="/indicators?kind=rsi">
+      <div class="cat">Momentum</div><div class="iname">RSI</div>
     </a>
-    <a class="ind-pill" href="/gamma">
-      <div class="cat">Options · Basic+</div><div class="iname">Gamma Exposure</div>
+    <a class="ind-pill" href="/indicators?kind=macd">
+      <div class="cat">Trend</div><div class="iname">MACD</div>
     </a>
-    <a class="ind-pill" href="/greeks">
-      <div class="cat">Options · Basic+</div><div class="iname">Greeks Dashboard</div>
+    <a class="ind-pill" href="/indicators?kind=supertrend">
+      <div class="cat">Trend</div><div class="iname">Supertrend</div>
     </a>
-    <a class="ind-pill" href="/heatmap">
-      <div class="cat">Market · Free</div><div class="iname">Market Heatmap</div>
+    <a class="ind-pill" href="/indicators?kind=bbands">
+      <div class="cat">Volatility</div><div class="iname">Bollinger Bands</div>
     </a>
-    <a class="ind-pill" href="/earnings">
-      <div class="cat">Calendar · Free</div><div class="iname">Earnings Calendar</div>
+    <a class="ind-pill" href="/indicators?kind=ema">
+      <div class="cat">Trend</div><div class="iname">EMA Ribbon</div>
     </a>
-    <a class="ind-pill" href="/dividends">
-      <div class="cat">Calendar · Free</div><div class="iname">Dividends Calendar</div>
+    <a class="ind-pill" href="/indicators?kind=obv">
+      <div class="cat">Volume</div><div class="iname">OBV</div>
     </a>
   </div>
   <div style="text-align:center;margin-top:24px;">
