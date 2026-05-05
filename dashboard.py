@@ -299,7 +299,7 @@ def inject_nav_plan():
 # Routes that don't require login
 _PUBLIC_ROUTES = {
     "index", "login", "register", "google_login", "google_callback",
-    "pricing", "privacy", "terms", "stripe_webhook",
+    "pricing", "privacy", "terms", "stripe_webhook", "admin_codes",
 }
 
 @app.before_request
