@@ -5564,13 +5564,33 @@ HOME_HTML = """<!DOCTYPE html>
       <div class="hero-tool-desc">20+ indicators — VWAP, ATR, MA Cross, Fear & Greed, and more.</div>
       <span class="hero-tool-tag tag-free">Free</span>
     </a>
+    <a class="hero-tool purple" href="/darkpool">
+      <div class="hero-tool-icon">🌑</div>
+      <div class="hero-tool-name">Dark Pool Flow</div>
+      <div class="hero-tool-desc">FINRA ATS institutional block trades. See where big money is hiding.</div>
+      <span class="hero-tool-tag tag-pro">Pro</span>
+    </a>
+    <a class="hero-tool orange" href="/backtest">
+      <div class="hero-tool-icon">⚡</div>
+      <div class="hero-tool-name">Backtester</div>
+      <div class="hero-tool-desc">Test strategies on any ticker. Sharpe ratio, drawdown, equity curve.</div>
+      <span class="hero-tool-tag tag-pro">Pro</span>
+    </a>
   </div>
+</div>
+
+<!-- Trust bar -->
+<div style="background:var(--bg2);border-bottom:1px solid var(--border);padding:10px 24px;display:flex;justify-content:center;gap:32px;flex-wrap:wrap;">
+  <span style="font-size:.8rem;color:var(--muted);display:flex;align-items:center;gap:6px;"><span style="color:#3fb950;">✓</span> No credit card to start</span>
+  <span style="font-size:.8rem;color:var(--muted);display:flex;align-items:center;gap:6px;"><span style="color:#3fb950;">✓</span> 7-day free trial on paid plans</span>
+  <span style="font-size:.8rem;color:var(--muted);display:flex;align-items:center;gap:6px;"><span style="color:#3fb950;">✓</span> Cancel anytime</span>
+  <span style="font-size:.8rem;color:var(--muted);display:flex;align-items:center;gap:6px;"><span style="color:#3fb950;">✓</span> Live market data</span>
 </div>
 
 <!-- Stats strip -->
 <div class="stats-strip">
   <div class="stat-item">
-    <div class="stat-num">14</div>
+    <div class="stat-num">25+</div>
     <div class="stat-label">Market intelligence tools</div>
   </div>
   <div class="stat-item">
@@ -5644,6 +5664,63 @@ HOME_HTML = """<!DOCTYPE html>
       <span class="intel-tag tag-basic">Basic</span>
       <h3>Trump Tracker</h3>
       <p>Chart any asset against Trump-related news events with timestamped markers. See exactly how markets reacted to each announcement.</p>
+    </div>
+    <div class="intel-card purple">
+      <div class="intel-card-icon">🌑</div>
+      <span class="intel-tag tag-pro">Pro</span>
+      <h3>Dark Pool Flow</h3>
+      <p>Weekly off-exchange institutional block trade volume from FINRA ATS data. Spot where big money is quietly accumulating or distributing.</p>
+    </div>
+    <div class="intel-card orange">
+      <div class="intel-card-icon">⚡</div>
+      <span class="intel-tag tag-pro">Pro</span>
+      <h3>Backtester</h3>
+      <p>Test RSI, MACD, Bollinger Bands, EMA cross, and SMA cross strategies on any ticker. Get return, win rate, Sharpe ratio, and equity curve.</p>
+    </div>
+  </div>
+</div>
+
+<hr class="divider">
+
+<!-- Crypto section -->
+<div style="background:linear-gradient(135deg,#0d1a2d 0%,#0d1117 60%,#1a0d2d 100%);border-top:1px solid var(--border);border-bottom:1px solid var(--border);padding:60px 24px;">
+  <div style="max-width:900px;margin:0 auto;">
+    <div style="text-align:center;margin-bottom:36px;">
+      <span style="background:#1a0d2d;border:1px solid #6e40c9;color:#bc8cff;font-size:.72rem;font-weight:700;padding:3px 12px;border-radius:20px;letter-spacing:.06em;">CRYPTO</span>
+      <h2 style="font-size:1.5rem;margin-top:14px;margin-bottom:10px;">Crypto intelligence, <span style="color:#bc8cff;">built in.</span></h2>
+      <p style="color:var(--muted);font-size:.9rem;max-width:540px;margin:0 auto;line-height:1.7;">From fear & greed to funding rates and liquidation maps — all crypto data via Hyperliquid and CoinGecko, no geo-blocks.</p>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;">
+      <a href="/crypto/feargreed" style="background:rgba(255,255,255,.03);border:1px solid #21262d;border-radius:10px;padding:20px;text-decoration:none;transition:border-color .15s;" onmouseover="this.style.borderColor='#bc8cff'" onmouseout="this.style.borderColor='#21262d'">
+        <div style="font-size:1.3rem;margin-bottom:8px;">😰</div>
+        <div style="font-size:.88rem;font-weight:700;color:var(--text);margin-bottom:3px;">Fear &amp; Greed</div>
+        <div style="font-size:.75rem;color:var(--muted);">Crypto sentiment index · Free</div>
+      </a>
+      <a href="/crypto/heatmap" style="background:rgba(255,255,255,.03);border:1px solid #21262d;border-radius:10px;padding:20px;text-decoration:none;transition:border-color .15s;" onmouseover="this.style.borderColor='#bc8cff'" onmouseout="this.style.borderColor='#21262d'">
+        <div style="font-size:1.3rem;margin-bottom:8px;">🗺</div>
+        <div style="font-size:.88rem;font-weight:700;color:var(--text);margin-bottom:3px;">Crypto Heatmap</div>
+        <div style="font-size:.75rem;color:var(--muted);">Market cap & 24h % change · Free</div>
+      </a>
+      <a href="/crypto/dominance" style="background:rgba(255,255,255,.03);border:1px solid #21262d;border-radius:10px;padding:20px;text-decoration:none;transition:border-color .15s;" onmouseover="this.style.borderColor='#bc8cff'" onmouseout="this.style.borderColor='#21262d'">
+        <div style="font-size:1.3rem;margin-bottom:8px;">₿</div>
+        <div style="font-size:.88rem;font-weight:700;color:var(--text);margin-bottom:3px;">BTC Dominance</div>
+        <div style="font-size:.75rem;color:var(--muted);">Altcoin cycle tracker · Basic+</div>
+      </a>
+      <a href="/crypto/funding" style="background:rgba(255,255,255,.03);border:1px solid #21262d;border-radius:10px;padding:20px;text-decoration:none;transition:border-color .15s;" onmouseover="this.style.borderColor='#bc8cff'" onmouseout="this.style.borderColor='#21262d'">
+        <div style="font-size:1.3rem;margin-bottom:8px;">💰</div>
+        <div style="font-size:.88rem;font-weight:700;color:var(--text);margin-bottom:3px;">Funding Rates</div>
+        <div style="font-size:.75rem;color:var(--muted);">Hyperliquid perps · Basic+</div>
+      </a>
+      <a href="/crypto/onchain" style="background:rgba(255,255,255,.03);border:1px solid #21262d;border-radius:10px;padding:20px;text-decoration:none;transition:border-color .15s;" onmouseover="this.style.borderColor='#bc8cff'" onmouseout="this.style.borderColor='#21262d'">
+        <div style="font-size:1.3rem;margin-bottom:8px;">⛓</div>
+        <div style="font-size:.88rem;font-weight:700;color:var(--text);margin-bottom:3px;">On-Chain Metrics</div>
+        <div style="font-size:.75rem;color:var(--muted);">Active addresses, tx vol · Basic+</div>
+      </a>
+      <a href="/crypto/liquidations" style="background:rgba(255,255,255,.03);border:1px solid #21262d;border-radius:10px;padding:20px;text-decoration:none;transition:border-color .15s;" onmouseover="this.style.borderColor='#bc8cff'" onmouseout="this.style.borderColor='#21262d'">
+        <div style="font-size:1.3rem;margin-bottom:8px;">💥</div>
+        <div style="font-size:.88rem;font-weight:700;color:var(--text);margin-bottom:3px;">Liquidation Map</div>
+        <div style="font-size:.75rem;color:var(--muted);">Funding rate history · Pro</div>
+      </a>
     </div>
   </div>
 </div>
@@ -5801,9 +5878,38 @@ HOME_HTML = """<!DOCTYPE html>
         <div class="p-price">$15.99<span>/mo</span></div>
       </div>
     </div>
-    <p class="trial-note"><strong>7-day free trial</strong> on your first subscription · Annual plans save up to 47%</p>
+    <p class="trial-note"><strong>7-day free trial</strong> on your first subscription · Annual plans save up to 25%</p>
     <br>
     <a class="btn-primary" href="/pricing">See full pricing →</a>
+  </div>
+</div>
+
+<hr class="divider">
+
+<!-- Why ChartEdge -->
+<div class="section">
+  <h2>Why <span>ChartEdge</span>?</h2>
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px;">
+    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:22px;">
+      <div style="font-size:1.4rem;margin-bottom:10px;">🔓</div>
+      <h3 style="font-size:.9rem;font-weight:700;margin-bottom:6px;">Everything in one place</h3>
+      <p style="color:var(--muted);font-size:.8rem;line-height:1.55;">Options flow, dark pool, insider trades, gamma, Greeks, crypto — no juggling 6 different sites and subscriptions.</p>
+    </div>
+    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:22px;">
+      <div style="font-size:1.4rem;margin-bottom:10px;">💸</div>
+      <h3 style="font-size:.9rem;font-weight:700;margin-bottom:6px;">Fraction of the cost</h3>
+      <p style="color:var(--muted);font-size:.8rem;line-height:1.55;">Comparable platforms charge $50–$200/mo. ChartEdge Pro is $15.99/mo with a free trial — no commitment required.</p>
+    </div>
+    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:22px;">
+      <div style="font-size:1.4rem;margin-bottom:10px;">⚡</div>
+      <h3 style="font-size:.9rem;font-weight:700;margin-bottom:6px;">Built for speed</h3>
+      <p style="color:var(--muted);font-size:.8rem;line-height:1.55;">No bloated dashboards. Tools load fast, data refreshes automatically, and Pine Scripts copy in one click.</p>
+    </div>
+    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:22px;">
+      <div style="font-size:1.4rem;margin-bottom:10px;">📡</div>
+      <h3 style="font-size:.9rem;font-weight:700;margin-bottom:6px;">Real data sources</h3>
+      <p style="color:var(--muted);font-size:.8rem;line-height:1.55;">FINRA, SEC EDGAR, Hyperliquid, CoinGecko, Finnhub — not delayed or fabricated data. Live options chains, real filings.</p>
+    </div>
   </div>
 </div>
 

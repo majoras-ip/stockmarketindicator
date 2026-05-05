@@ -42,6 +42,7 @@
 | Insider trading | ✗ | ✗ | ✓ |
 | Pre-market scanner | ✗ | ✗ | ✓ |
 | Liquidation map | ✗ | ✗ | ✓ |
+| Dark pool flow | ✗ | ✗ | ✓ |
 
 ---
 
@@ -82,6 +83,7 @@
 | `/crypto/funding` | Funding rates (Hyperliquid) | Basic+ |
 | `/crypto/onchain` | On-chain metrics | Basic+ |
 | `/crypto/liquidations` | Liquidation map (Hyperliquid) | Pro |
+| `/darkpool` | Dark pool flow — FINRA ATS weekly block trade volume | Pro |
 | `/me` | My Dashboard — profile + watchlist + favorites + copy history | Logged in |
 | `/settings` | Account settings | Logged in |
 
