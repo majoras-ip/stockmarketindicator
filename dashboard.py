@@ -5340,6 +5340,7 @@ HOME_HTML = """<!DOCTYPE html>
     .tick .sym { color: var(--text); font-weight: 700; margin-right: 6px; }
     .tick .up { color: #3fb950; }
     .tick .down { color: #f85149; }
+    @media(max-width:640px){.ticker-tape{display:none;}}
 
     /* Hero */
     .hero {
