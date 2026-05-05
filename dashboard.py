@@ -1834,7 +1834,12 @@ def billing():
 @app.route("/pricing")
 def pricing():
     error = request.args.get("error") == "1"
-    return render_template_string(PRICING_HTML, current_user=current_user(), error=error)
+    trial_used = 1
+    if session.get("user_id"):
+        row = _one("SELECT trial_used FROM users WHERE id=%s", (session["user_id"],))
+        trial_used = row["trial_used"] if row else 1
+    return render_template_string(PRICING_HTML, current_user=current_user(),
+                                  error=error, trial_used=trial_used)
 
 
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "changeme")
@@ -4483,6 +4488,7 @@ PRICING_HTML = """<!DOCTYPE html>
       <div class="plan-name">Basic</div>
       <div class="plan-price" id="basic-price">$9.99<span>/mo</span></div>
       <div class="plan-desc">For active traders who copy often.</div>
+      {% if not trial_used or not current_user %}<div style="font-size:.75rem;color:#3fb950;font-weight:600;margin-top:4px;">✓ 7-day free trial · no charge until then</div>{% endif %}
       <ul class="plan-features">
         <li>8 copies per day</li>
         <li>All indicators</li>
@@ -4511,9 +4517,9 @@ PRICING_HTML = """<!DOCTYPE html>
         <li class="no">Liquidation map</li>
       </ul>
       {% if current_user %}
-      <a href="/subscribe/basic" class="btn-plan btn-basic" id="btn-basic">Get Basic</a>
+      <a href="/subscribe/basic" class="btn-plan btn-basic" id="btn-basic">{% if not trial_used %}Start 7-Day Free Trial{% else %}Get Basic{% endif %}</a>
       {% else %}
-      <a href="/login?next=/subscribe/basic" class="btn-plan btn-basic" id="btn-basic">Get Basic</a>
+      <a href="/login?next=/subscribe/basic" class="btn-plan btn-basic" id="btn-basic">Start 7-Day Free Trial</a>
       {% endif %}
     </div>
     <div class="plan featured">
@@ -4521,6 +4527,7 @@ PRICING_HTML = """<!DOCTYPE html>
       <div class="plan-name">Pro</div>
       <div class="plan-price" id="pro-price">$15.99<span>/mo</span></div>
       <div class="plan-desc">Unlimited access for power users.</div>
+      {% if not trial_used or not current_user %}<div style="font-size:.75rem;color:#3fb950;font-weight:600;margin-top:4px;">✓ 7-day free trial · no charge until then</div>{% endif %}
       <ul class="plan-features">
         <li>Unlimited copies</li>
         <li>All indicators</li>
@@ -4549,9 +4556,9 @@ PRICING_HTML = """<!DOCTYPE html>
         <li>Liquidation map</li>
       </ul>
       {% if current_user %}
-      <a href="/subscribe/pro" class="btn-plan btn-pro" id="btn-pro">Get Pro</a>
+      <a href="/subscribe/pro" class="btn-plan btn-pro" id="btn-pro">{% if not trial_used %}Start 7-Day Free Trial{% else %}Get Pro{% endif %}</a>
       {% else %}
-      <a href="/login?next=/subscribe/pro" class="btn-plan btn-pro" id="btn-pro">Get Pro</a>
+      <a href="/login?next=/subscribe/pro" class="btn-plan btn-pro" id="btn-pro">Start 7-Day Free Trial</a>
       {% endif %}
     </div>
   </div>
