@@ -1447,15 +1447,21 @@ def register():
 
                     # If referred by someone, give new user 7 days Pro trial + reward referrer
                     if ref:
+                        from datetime import datetime, timezone, timedelta
                         referrer = _one("SELECT id, plan FROM users WHERE referral_code=%s", (ref,))
                         if referrer:
-                            _run("UPDATE users SET plan='pro' WHERE id=%s", (user_id,))
+                            trial_expires = datetime.now(timezone.utc) + timedelta(days=7)
+                            _run("UPDATE users SET plan='pro', plan_expires=%s WHERE id=%s",
+                                 (trial_expires, user_id))
                             ref_count = _scalar("SELECT COUNT(*) FROM users WHERE referred_by=%s", (ref,))
                             referrer_plan = referrer["plan"]
-                            if ref_count >= 4 and referrer_plan != "pro":
-                                _run("UPDATE users SET plan='pro' WHERE id=%s", (referrer["id"],))
-                            elif ref_count >= 2 and referrer_plan == "free":
-                                _run("UPDATE users SET plan='basic' WHERE id=%s", (referrer["id"],))
+                            ref_expires = datetime.now(timezone.utc) + timedelta(days=7)
+                            if ref_count >= 4:
+                                _run("UPDATE users SET plan='pro', plan_expires=%s WHERE id=%s",
+                                     (ref_expires, referrer["id"]))
+                            elif ref_count >= 2:
+                                _run("UPDATE users SET plan='basic', plan_expires=%s WHERE id=%s",
+                                     (ref_expires, referrer["id"]))
 
                     # Send welcome email
                     if email:
@@ -1773,7 +1779,7 @@ def stripe_webhook():
                 # If buyer was referred, reward the referrer
                 if buyer["referred_by"]:
                     referrer = _one("SELECT id, plan FROM users WHERE referral_code=%s", (buyer["referred_by"],))
-                    if referrer and referrer["plan"] == "free":
+                    if referrer:
                         _run("UPDATE users SET plan=%s, plan_expires=%s WHERE id=%s",
                              (plan, expires, referrer["id"]))
                 # If buyer referred others, reward referred users who are still free
@@ -3115,7 +3121,6 @@ def heatmap_api():
 
 _TRUMP_INSTRUMENTS = [
     {"label": "S&P 500 (SPY)",       "ticker": "SPY"},
-    {"label": "S&P 500 (VOO)",       "ticker": "VOO"},
     {"label": "NASDAQ 100 (QQQ)",    "ticker": "QQQ"},
     {"label": "Dow Jones (DIA)",      "ticker": "DIA"},
     {"label": "Russell 2000 (IWM)",  "ticker": "IWM"},
@@ -10482,7 +10487,6 @@ TRUMP_HTML = """<!DOCTYPE html>
       <select class="inst-select" id="inst-select">
         <option value="BTC-USD" selected>Bitcoin (BTC)</option>
         <option value="SPY">S&amp;P 500 (SPY)</option>
-        <option value="VOO">S&amp;P 500 (VOO)</option>
         <option value="QQQ">NASDAQ 100 (QQQ)</option>
         <option value="DIA">Dow Jones (DIA)</option>
         <option value="IWM">Russell 2000 (IWM)</option>
