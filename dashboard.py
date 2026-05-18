@@ -645,17 +645,21 @@ def _inject_expiry(script: str, username: str) -> str:
             out.append(chk_a)
             indicator_done = True
 
-        # ~33% through — insert check B at next global-scope (non-indented) line
+        # ~33% through — insert check B at next global-scope standalone line
         elif not chk_b_inserted and i >= max(n // 3, 3) and line and not line[0].isspace():
-            out.append(f"// \u2014 validity \u2014")
-            out.append(chk_b)
-            chk_b_inserted = True
+            next_l = lines[i + 1] if i + 1 < n else ""
+            if not (next_l and next_l[0].isspace()):
+                out.append(f"// \u2014 validity \u2014")
+                out.append(chk_b)
+                chk_b_inserted = True
 
-        # ~66% through — insert check C at next global-scope (non-indented) line
+        # ~66% through — insert check C at next global-scope standalone line
         elif not chk_c_inserted and i >= max(2 * n // 3, 5) and line and not line[0].isspace():
-            out.append(f"// \u2014 runtime guard \u2014")
-            out.append(chk_c)
-            chk_c_inserted = True
+            next_l = lines[i + 1] if i + 1 < n else ""
+            if not (next_l and next_l[0].isspace()):
+                out.append(f"// \u2014 runtime guard \u2014")
+                out.append(chk_c)
+                chk_c_inserted = True
 
     # Wrap every plot(...) call so the value multiplies by _cedge_ok
     # (plots become na when expired, even if someone deletes the if blocks)
