@@ -620,7 +620,9 @@ def _inject_expiry(script: str, username: str) -> str:
     )
     # C: obfuscated — split across expressions
     chk_c = (
-        f"int _cyr = year, int _cmo = month, int _cdy = dayofmonth\n"
+        f"int _cyr = year\n"
+        f"int _cmo = month\n"
+        f"int _cdy = dayofmonth\n"
         f"bool _cexp = (_cyr * 372 + _cmo * 31 + _cdy) > "
         f"{y * 372 + m * 31 + d}\n"
         f'if _cexp\n'
