@@ -1424,10 +1424,10 @@ int nl = array.size(plV)
 
 // ── HEAD & SHOULDERS ──────────────────────────────────────────────────────────
 if showHS and nh >= 3 and barstate.isconfirmed
-float rs = array.get(phV, 0)
+    float rs = array.get(phV, 0)
     int rsi = array.get(phI, 0)
     float hd = array.get(phV, 1)
-float ls = array.get(phV, 2)
+    float ls = array.get(phV, 2)
     int lsi = array.get(phI, 2)
     if hd > ls * (1 + tolPct) and hd > rs * (1 + tolPct) and within(ls, rs) and rsi != lHS
         lHS := rsi
@@ -1439,10 +1439,10 @@ float ls = array.get(phV, 2)
 
 // ── INVERSE HEAD & SHOULDERS ──────────────────────────────────────────────────
 if showIHS and nl >= 3 and barstate.isconfirmed
-float rs = array.get(plV, 0)
+    float rs = array.get(plV, 0)
     int rsi = array.get(plI, 0)
     float hd = array.get(plV, 1)
-float ls = array.get(plV, 2)
+    float ls = array.get(plV, 2)
     int lsi = array.get(plI, 2)
     if hd < ls * (1 - tolPct) and hd < rs * (1 - tolPct) and within(ls, rs) and rsi != lIHS
         lIHS := rsi
@@ -1454,9 +1454,9 @@ float ls = array.get(plV, 2)
 
 // ── DOUBLE TOP ────────────────────────────────────────────────────────────────
 if showDT and nh >= 2 and barstate.isconfirmed
-float p2 = array.get(phV, 0)
+    float p2 = array.get(phV, 0)
     int p2i = array.get(phI, 0)
-float p1 = array.get(phV, 1)
+    float p1 = array.get(phV, 1)
     int p1i = array.get(phI, 1)
     if within(p1, p2) and (p2i - p1i) >= pLen * 3 and p2i != lDT
         lDT := p2i
@@ -1468,9 +1468,9 @@ float p1 = array.get(phV, 1)
 
 // ── DOUBLE BOTTOM ─────────────────────────────────────────────────────────────
 if showDB and nl >= 2 and barstate.isconfirmed
-float p2 = array.get(plV, 0)
+    float p2 = array.get(plV, 0)
     int p2i = array.get(plI, 0)
-float p1 = array.get(plV, 1)
+    float p1 = array.get(plV, 1)
     int p1i = array.get(plI, 1)
     if within(p1, p2) and (p2i - p1i) >= pLen * 3 and p2i != lDB
         lDB := p2i
@@ -1482,22 +1482,22 @@ float p1 = array.get(plV, 1)
 
 // ── TRIANGLES & WEDGES ────────────────────────────────────────────────────────
 if nh >= 2 and nl >= 2 and barstate.isconfirmed
-float h1 = array.get(phV, 1)
+    float h1 = array.get(phV, 1)
     int h1i = array.get(phI, 1)
-float h2 = array.get(phV, 0)
+    float h2 = array.get(phV, 0)
     int h2i = array.get(phI, 0)
-float l1 = array.get(plV, 1)
+    float l1 = array.get(plV, 1)
     int l1i = array.get(plI, 1)
-float l2 = array.get(plV, 0)
+    float l2 = array.get(plV, 0)
     int l2i = array.get(plI, 0)
     float sH  = slp(h1i, h1, h2i, h2)
     float sL  = slp(l1i, l1, l2i, l2)
     float ft  = close * 0.00005
-bool  hFlat = math.abs(sH) < ft
+    bool  hFlat = math.abs(sH) < ft
     bool lFlat = math.abs(sL) < ft
-bool  hUp   = sH > ft
+    bool  hUp   = sH > ft
     bool lUp   = sL > ft
-bool  hDn   = sH < -ft
+    bool  hDn   = sH < -ft
     bool lDn   = sL < -ft
     int   ref   = math.max(h2i, l2i)
 
