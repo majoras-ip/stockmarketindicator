@@ -645,14 +645,14 @@ def _inject_expiry(script: str, username: str) -> str:
             out.append(chk_a)
             indicator_done = True
 
-        # ~33% through — insert check B inside the logic
-        elif not chk_b_inserted and i == max(n // 3, 3):
+        # ~33% through — insert check B at next global-scope (non-indented) line
+        elif not chk_b_inserted and i >= max(n // 3, 3) and line and not line[0].isspace():
             out.append(f"// \u2014 validity \u2014")
             out.append(chk_b)
             chk_b_inserted = True
 
-        # ~66% through — insert check C
-        elif not chk_c_inserted and i == max(2 * n // 3, 5):
+        # ~66% through — insert check C at next global-scope (non-indented) line
+        elif not chk_c_inserted and i >= max(2 * n // 3, 5) and line and not line[0].isspace():
             out.append(f"// \u2014 runtime guard \u2014")
             out.append(chk_c)
             chk_c_inserted = True
