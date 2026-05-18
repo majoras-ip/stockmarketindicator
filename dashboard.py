@@ -1417,11 +1417,12 @@ if showHS and nh >= 3 and barstate.isconfirmed
     int   hdi = array.get(phI, 1)
     float ls  = array.get(phV, 2)
     int   lsi = array.get(phI, 2)
-    if hd > ls * (1 + tolPct) and hd > rs * (1 + tolPct) and within(ls, rs) and rsi != lHS
+    float hsNeck = math.min(ls, rs)
+    if hd > ls * (1 + tolPct) and hd > rs * (1 + tolPct) and within(ls, rs) and close < hsNeck and rsi != lHS
         lHS := rsi
         line.new(lsi, ls,  hdi, hd, color=color.new(color.red, 20), width=2)
         line.new(hdi, hd,  rsi, rs, color=color.new(color.red, 20), width=2)
-        line.new(lsi, math.min(ls, rs), rsi, math.min(ls, rs), color=color.new(color.red, 40), width=1, style=line.style_dashed)
+        line.new(lsi, hsNeck, rsi, hsNeck, color=color.new(color.red, 40), width=1, style=line.style_dashed)
         label.new(bar_index, high, "H&S  ▼", style=label.style_label_down, color=color.new(color.red, 10), textcolor=color.white, size=size.normal)
 
 // ── INVERSE HEAD & SHOULDERS ──────────────────────────────────────────────────
@@ -1432,11 +1433,12 @@ if showIHS and nl >= 3 and barstate.isconfirmed
     int   hdi = array.get(plI, 1)
     float ls  = array.get(plV, 2)
     int   lsi = array.get(plI, 2)
-    if hd < ls * (1 - tolPct) and hd < rs * (1 - tolPct) and within(ls, rs) and rsi != lIHS
+    float ihsNeck = math.max(ls, rs)
+    if hd < ls * (1 - tolPct) and hd < rs * (1 - tolPct) and within(ls, rs) and close > ihsNeck and rsi != lIHS
         lIHS := rsi
         line.new(lsi, ls,  hdi, hd, color=color.new(color.green, 20), width=2)
         line.new(hdi, hd,  rsi, rs, color=color.new(color.green, 20), width=2)
-        line.new(lsi, math.max(ls, rs), rsi, math.max(ls, rs), color=color.new(color.green, 40), width=1, style=line.style_dashed)
+        line.new(lsi, ihsNeck, rsi, ihsNeck, color=color.new(color.green, 40), width=1, style=line.style_dashed)
         label.new(bar_index, low, "IH&S  ▲", style=label.style_label_up, color=color.new(color.green, 10), textcolor=color.white, size=size.normal)
 
 // ── DOUBLE TOP ────────────────────────────────────────────────────────────────
@@ -1445,7 +1447,8 @@ if showDT and nh >= 2 and barstate.isconfirmed
     int   p2i = array.get(phI, 0)
     float p1  = array.get(phV, 1)
     int   p1i = array.get(phI, 1)
-    if within(p1, p2) and (p2i - p1i) >= pLen * 3 and p2i != lDT
+    float dtMid = (p1 + p2) / 2 * (1 - tolPct)
+    if within(p1, p2) and (p2i - p1i) >= pLen * 3 and close < dtMid and p2i != lDT
         lDT := p2i
         float res = math.max(p1, p2)
         line.new(p1i, res, p2i, res, color=color.new(color.red, 20), width=2, style=line.style_dashed)
@@ -1458,7 +1461,8 @@ if showDB and nl >= 2 and barstate.isconfirmed
     int   p2i = array.get(plI, 0)
     float p1  = array.get(plV, 1)
     int   p1i = array.get(plI, 1)
-    if within(p1, p2) and (p2i - p1i) >= pLen * 3 and p2i != lDB
+    float dbMid = (p1 + p2) / 2 * (1 + tolPct)
+    if within(p1, p2) and (p2i - p1i) >= pLen * 3 and close > dbMid and p2i != lDB
         lDB := p2i
         float sup = math.min(p1, p2)
         line.new(p1i, sup, p2i, sup, color=color.new(color.green, 20), width=2, style=line.style_dashed)
