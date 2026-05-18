@@ -1560,27 +1560,30 @@ if nh >= 2 and nl >= 2 and barstate.isconfirmed
     bool  hDn   = sH < -ft
     bool  lDn   = sL < -ft
     int   ref   = math.max(h2i, l2i)
-    if showAT and hFlat and lUp and ref != lAT
+    if showAT and hFlat and lUp and close > h2 and ref != lAT
         lAT := ref
         line.new(h1i, h1, h2i, h2, color=color.new(color.teal, 20), width=2)
         line.new(l1i, l1, l2i, l2, color=color.new(color.teal, 20), width=2)
         label.new(ref, h2, "Asc. Triangle  ▲", style=label.style_label_down, color=color.new(color.teal, 10), textcolor=color.white, size=size.normal)
-    else if showDTri and lFlat and hDn and ref != lDTr
+    else if showDTri and lFlat and hDn and close < l2 and ref != lDTr
         lDTr := ref
         line.new(h1i, h1, h2i, h2, color=color.new(color.orange, 20), width=2)
         line.new(l1i, l1, l2i, l2, color=color.new(color.orange, 20), width=2)
         label.new(ref, l2, "Desc. Triangle  ▼", style=label.style_label_up, color=color.new(color.orange, 10), textcolor=color.white, size=size.normal)
-    else if showST and hDn and lUp and ref != lST
+    else if showST and hDn and lUp and (close > h2 or close < l2) and ref != lST
         lST := ref
         line.new(h1i, h1, h2i, h2, color=color.new(color.blue, 20), width=2)
         line.new(l1i, l1, l2i, l2, color=color.new(color.blue, 20), width=2)
-        label.new(ref, (h2 + l2) / 2, "Sym. Triangle  ◆", style=label.style_label_down, color=color.new(color.blue, 10), textcolor=color.white, size=size.normal)
-    else if showRW and hUp and lUp and math.abs(sL) > math.abs(sH) * 1.2 and ref != lRW
+        if close > h2
+            label.new(ref, h2, "Sym. Triangle  ▲", style=label.style_label_down, color=color.new(color.green, 10), textcolor=color.white, size=size.normal)
+        else
+            label.new(ref, l2, "Sym. Triangle  ▼", style=label.style_label_up, color=color.new(color.red, 10), textcolor=color.white, size=size.normal)
+    else if showRW and hUp and lUp and math.abs(sL) > math.abs(sH) * 1.2 and close < l2 and ref != lRW
         lRW := ref
         line.new(h1i, h1, h2i, h2, color=color.new(color.red, 20), width=2)
         line.new(l1i, l1, l2i, l2, color=color.new(color.red, 20), width=2)
         label.new(ref, h2, "Rising Wedge  ▼", style=label.style_label_down, color=color.new(color.red, 10), textcolor=color.white, size=size.normal)
-    else if showFW and hDn and lDn and math.abs(sH) > math.abs(sL) * 1.2 and ref != lFW
+    else if showFW and hDn and lDn and math.abs(sH) > math.abs(sL) * 1.2 and close > h2 and ref != lFW
         lFW := ref
         line.new(h1i, h1, h2i, h2, color=color.new(color.green, 20), width=2)
         line.new(l1i, l1, l2i, l2, color=color.new(color.green, 20), width=2)
