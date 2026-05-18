@@ -1505,7 +1505,8 @@ INDICATORS = {
     "bbsqueeze":     ("Bollinger Squeeze",      _pine_bb_squeeze,      "Detects when Bollinger Bands contract inside Keltner Channels — a coiling signal before a big move. Orange dot = in squeeze, blue = fired.", "volatility", "Add as a separate panel. Orange dots on the zero line = squeeze is active (market coiling). Blue dots = squeeze just fired (potential breakout). Green histogram = bullish momentum building, red = bearish. The bigger the histogram bars after the squeeze fires, the stronger the move.", ""),
     "unusualopts":   ("Unusual Options Volume", _pine_unusual_options, "Flags bars where volume spikes above a multiple of the 20-bar average. Red = unusual, orange = elevated.", "volume",   "Add as a separate panel. Each bar shows today's volume as a multiple of the average (1.0 = normal). Red bars with a ⚡ label = unusual spike (default 2× threshold). Orange = elevated but not extreme. Adjust the threshold in TradingView settings. High spikes often precede big moves — watch for them before earnings or news.", ""),
     "smallcap_pb":   ("Small Cap Micro Pullback", _pine_smallcap_pullback, "Detects shallow pullbacks to the 9 EMA in an uptrending small cap. Green triangle = reclaim signal. Includes RVOL table and suggested stop.", "smallcap", "Paste onto a 1m, 2m, or 5m intraday chart. Works best on small/mid-cap stocks showing a strong pre-market gap or morning momentum run. The blue shading shows the pullback zone. A green triangle fires when price reclaims the 9 EMA with above-average volume after the pullback. The red dashed line is a suggested ATR-based stop below the pullback low. Adjust 'Max pullback bars' and 'Volume surge ×' in TradingView's indicator settings to tune sensitivity. Best used alongside the VWAP indicator to confirm the reclaim happens above VWAP.", ""),
-    "patterns":      ("Chart Pattern Scanner", _pine_patterns, "Automatically detects 11 chart patterns — H&S, double top/bottom, flags, triangles, wedges — and labels each one with what it signals.", "patterns", "Paste onto any chart. Labels appear directly on the price bars when a pattern is detected. Green labels = bullish signal, red = bearish, blue = neutral (wait for breakout direction). Each label shows the pattern name and a one-line summary of what it typically means. Trendlines are drawn automatically — toggle them off in settings if you want a cleaner chart. Use the Pivot Length setting to tune sensitivity: lower = more signals on shorter timeframes, higher = catches only major swings. Works on any ticker and timeframe.", ""),
+    "patterns":      ("Chart Pattern Scanner", _pine_patterns, "Detects the 6 most reliable chart patterns: H&S, Inverse H&S, Double Top, Double Bottom, Bull Flag, Bear Flag. Each pattern is drawn on the chart with its shape.", "patterns", "Paste onto any price chart. Each pattern is drawn directly — outline lines and a neckline or resistance level. Green labels = bullish, red = bearish. Use Pivot Length to tune sensitivity: lower catches more patterns on short timeframes, higher finds only major swings.", ""),
+    "triangles":     ("Triangle & Wedge Scanner", _pine_triangles, "Detects 5 continuation and neutral patterns: Ascending Triangle, Descending Triangle, Sym. Triangle, Rising Wedge, Falling Wedge. Draws both trendlines on the chart.", "patterns", "Paste onto any price chart. Both bounding trendlines are drawn for each pattern. Teal = Ascending Triangle (bullish breakout expected), Orange = Descending Triangle (bearish), Blue = Sym. Triangle (wait for breakout), Red = Rising Wedge (bearish reversal), Green = Falling Wedge (bullish reversal). Use alongside the Chart Pattern Scanner.", ""),
     # ── Beta indicators ───────────────────────────────────────────────────────
     "bbands":        ("Bollinger Bands",      lambda: "//@version=6\nindicator(\"Bollinger Bands\", overlay=true)\nint   len   = input.int(20, \"Length\", minval=1)\nfloat mult  = input.float(2.0, \"Multiplier\", step=0.5)\nfloat basis = ta.sma(close, len)\nfloat dev   = mult * ta.stdev(close, len)\nfloat upper = basis + dev\nfloat lower = basis - dev\np = plot(upper, \"Upper\", color=color.new(color.blue, 40))\nq = plot(lower, \"Lower\", color=color.new(color.blue, 40))\nplot(basis, \"Basis\", color=color.new(color.orange, 0))\nfill(p, q, color=color.new(color.blue, 90))\nbgcolor(close > upper ? color.new(color.red, 92) : close < lower ? color.new(color.green, 92) : na)\n", "Upper/lower bands ±2 standard deviations from a 20-period MA. Price touching the bands signals overextension.", "volatility", "Paste onto your price chart. Price touching the upper band = overbought, lower band = oversold. Bands squeezing together = low volatility coiling before a big move. Bands expanding = momentum. Best combined with RSI to confirm entries.", ""),
     "stochrsi":      ("Stochastic RSI",       lambda: "//@version=6\nindicator(\"Stochastic RSI\", overlay=false)\nint rsiLen   = input.int(14, \"RSI Length\")\nint stochLen = input.int(14, \"Stoch Length\")\nint smooth_k = input.int(3,  \"Smooth K\")\nint smooth_d = input.int(3,  \"Smooth D\")\nfloat rsi    = ta.rsi(close, rsiLen)\nfloat rsiHi  = ta.highest(rsi, stochLen)\nfloat rsiLo  = ta.lowest(rsi,  stochLen)\nfloat k      = ta.sma(100 * (rsi - rsiLo) / math.max(rsiHi - rsiLo, 0.001), smooth_k)\nfloat d      = ta.sma(k, smooth_d)\nplot(k, \"%K\", color=color.new(color.blue,   0), linewidth=2)\nplot(d, \"%D\", color=color.new(color.orange, 0), linewidth=1)\nhline(80, \"OB\", color=color.new(color.red,   50), linestyle=hline.style_dashed)\nhline(20, \"OS\", color=color.new(color.green, 50), linestyle=hline.style_dashed)\nbgcolor(k > 80 ? color.new(color.red, 92) : k < 20 ? color.new(color.green, 92) : na)\n", "RSI smoothed through the Stochastic formula. More sensitive than RSI — great for timing entries.", "momentum", "Add as a separate panel. K line above 80 = overbought (red zone), below 20 = oversold (green zone). K crossing above D in the oversold zone = buy signal. K crossing below D in the overbought zone = sell signal. Reacts faster than plain RSI.", ""),
@@ -2121,6 +2122,102 @@ ADMIN_LOGIN_HTML = """<!DOCTYPE html>
     <button type="submit">Login</button>
   </form>
 </div></body></html>"""
+
+
+def _pine_triangles() -> str:
+    return """//@version=6
+indicator("Triangle & Wedge Scanner", overlay=true, max_bars_back=500)
+
+// ── Settings ──────────────────────────────────────────────────────────────────
+int   pLen   = input.int(5,    "Pivot Length", minval=2,   maxval=20,  group="Detection")
+float tolPct = input.float(2.0,"Tolerance %",  minval=0.5, maxval=8.0, group="Detection") / 100
+bool showAT   = input.bool(true,"Ascending Triangle",  group="Patterns")
+bool showDTri = input.bool(true,"Descending Triangle", group="Patterns")
+bool showST   = input.bool(true,"Sym. Triangle",       group="Patterns")
+bool showRW   = input.bool(true,"Rising Wedge",        group="Patterns")
+bool showFW   = input.bool(true,"Falling Wedge",       group="Patterns")
+
+// ── Pivot detection ───────────────────────────────────────────────────────────
+float ph = ta.pivothigh(high, pLen, pLen)
+float pl = ta.pivotlow(low,  pLen, pLen)
+
+var array<float> phV = array.new_float(0)
+var array<int>   phI = array.new_int(0)
+var array<float> plV = array.new_float(0)
+var array<int>   plI = array.new_int(0)
+
+if not na(ph)
+    array.unshift(phV, ph)
+    array.unshift(phI, bar_index - pLen)
+    if array.size(phV) > 8
+        array.pop(phV)
+        array.pop(phI)
+
+if not na(pl)
+    array.unshift(plV, pl)
+    array.unshift(plI, bar_index - pLen)
+    if array.size(plV) > 8
+        array.pop(plV)
+        array.pop(plI)
+
+slp(i1, v1, i2, v2) => (v2 - v1) / math.max(i2 - i1, 1)
+
+var int lAT  = -9999
+var int lDTr = -9999
+var int lST  = -9999
+var int lRW  = -9999
+var int lFW  = -9999
+
+int nh = array.size(phV)
+int nl = array.size(plV)
+
+// ── TRIANGLES & WEDGES ────────────────────────────────────────────────────────
+if nh >= 2 and nl >= 2 and barstate.isconfirmed
+    float h1  = array.get(phV, 1)
+    int   h1i = array.get(phI, 1)
+    float h2  = array.get(phV, 0)
+    int   h2i = array.get(phI, 0)
+    float l1  = array.get(plV, 1)
+    int   l1i = array.get(plI, 1)
+    float l2  = array.get(plV, 0)
+    int   l2i = array.get(plI, 0)
+    float sH  = slp(h1i, h1, h2i, h2)
+    float sL  = slp(l1i, l1, l2i, l2)
+    float ft  = close * 0.00005
+    bool  hFlat = math.abs(sH) < ft
+    bool  lFlat = math.abs(sL) < ft
+    bool  hUp   = sH > ft
+    bool  lUp   = sL > ft
+    bool  hDn   = sH < -ft
+    bool  lDn   = sL < -ft
+    int   ref   = math.max(h2i, l2i)
+    if showAT and hFlat and lUp and ref != lAT
+        lAT := ref
+        line.new(h1i, h1, h2i, h2, color=color.new(color.teal, 20), width=2)
+        line.new(l1i, l1, l2i, l2, color=color.new(color.teal, 20), width=2)
+        label.new(ref, h2, "Asc. Triangle  ▲", style=label.style_label_down, color=color.new(color.teal, 10), textcolor=color.white, size=size.normal)
+    else if showDTri and lFlat and hDn and ref != lDTr
+        lDTr := ref
+        line.new(h1i, h1, h2i, h2, color=color.new(color.orange, 20), width=2)
+        line.new(l1i, l1, l2i, l2, color=color.new(color.orange, 20), width=2)
+        label.new(ref, l2, "Desc. Triangle  ▼", style=label.style_label_up, color=color.new(color.orange, 10), textcolor=color.white, size=size.normal)
+    else if showST and hDn and lUp and ref != lST
+        lST := ref
+        line.new(h1i, h1, h2i, h2, color=color.new(color.blue, 20), width=2)
+        line.new(l1i, l1, l2i, l2, color=color.new(color.blue, 20), width=2)
+        label.new(ref, (h2 + l2) / 2, "Sym. Triangle  ◆", style=label.style_label_down, color=color.new(color.blue, 10), textcolor=color.white, size=size.normal)
+    else if showRW and hUp and lUp and math.abs(sL) > math.abs(sH) * 1.2 and ref != lRW
+        lRW := ref
+        line.new(h1i, h1, h2i, h2, color=color.new(color.red, 20), width=2)
+        line.new(l1i, l1, l2i, l2, color=color.new(color.red, 20), width=2)
+        label.new(ref, h2, "Rising Wedge  ▼", style=label.style_label_down, color=color.new(color.red, 10), textcolor=color.white, size=size.normal)
+    else if showFW and hDn and lDn and math.abs(sH) > math.abs(sL) * 1.2 and ref != lFW
+        lFW := ref
+        line.new(h1i, h1, h2i, h2, color=color.new(color.green, 20), width=2)
+        line.new(l1i, l1, l2i, l2, color=color.new(color.green, 20), width=2)
+        label.new(ref, l2, "Falling Wedge  ▲", style=label.style_label_up, color=color.new(color.green, 10), textcolor=color.white, size=size.normal)
+"""
+
 
 
 ADMIN_CODES_HTML = """<!DOCTYPE html>
