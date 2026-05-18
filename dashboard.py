@@ -1590,6 +1590,69 @@ if nh >= 2 and nl >= 2 and barstate.isconfirmed
         label.new(ref, l2, "Falling Wedge  ▲", style=label.style_label_up, color=color.new(color.green, 10), textcolor=color.white, size=size.normal)
 """
 
+def _pine_premarket() -> str:
+    return """//@version=6
+indicator("Pre-Market High / Low", overlay=true, max_lines_count=50, max_labels_count=20)
+
+// ── Settings ──────────────────────────────────────────────────────────────────
+bool showHigh  = input.bool(true,  "Show PM High",   group="Levels")
+bool showLow   = input.bool(true,  "Show PM Low",    group="Levels")
+bool showLabel = input.bool(true,  "Show Labels",    group="Levels")
+bool showTable = input.bool(true,  "Show Info Table",group="Levels")
+color highCol  = input.color(color.new(color.blue,  0), "High Color", group="Style")
+color lowCol   = input.color(color.new(color.fuchsia,0), "Low Color",  group="Style")
+int   lw       = input.int(2, "Line Width", minval=1, maxval=4, group="Style")
+
+// ── Session detection (ET) ─────────────────────────────────────────────────────
+bool isPM  = not na(time(timeframe.period, "0400-0930", "America/New_York"))
+bool isReg = not na(time(timeframe.period, "0930-1600", "America/New_York"))
+
+// ── Track PM high/low ──────────────────────────────────────────────────────────
+var float pmHigh     = na
+var float pmLow      = na
+var int   pmStartBar = na
+
+bool newDay = ta.change(dayofweek) != 0
+
+if newDay
+    pmHigh     := na
+    pmLow      := na
+    pmStartBar := na
+
+if isPM and not isPM[1]
+    pmHigh     := high
+    pmLow      := low
+    pmStartBar := bar_index
+
+if isPM and not na(pmHigh)
+    pmHigh := math.max(pmHigh, high)
+    pmLow  := math.min(pmLow,  low)
+
+// ── Draw lines at market open ──────────────────────────────────────────────────
+bool firstRegBar = isReg and not isReg[1]
+
+if firstRegBar and not na(pmHigh)
+    if showHigh
+        ln = line.new(pmStartBar, pmHigh, bar_index + 390, pmHigh, color=highCol, width=lw, style=line.style_solid)
+        if showLabel
+            label.new(bar_index, pmHigh, "PM High  " + str.tostring(pmHigh, format.mintick), style=label.style_label_left, color=color.new(highCol, 20), textcolor=color.white, size=size.small)
+    if showLow
+        ln = line.new(pmStartBar, pmLow, bar_index + 390, pmLow, color=lowCol, width=lw, style=line.style_solid)
+        if showLabel
+            label.new(bar_index, pmLow, "PM Low  " + str.tostring(pmLow, format.mintick), style=label.style_label_left, color=color.new(lowCol, 20), textcolor=color.white, size=size.small)
+
+// ── Info table ─────────────────────────────────────────────────────────────────
+if barstate.islast and not na(pmHigh) and showTable
+    var table t = table.new(position.top_right, 2, 3, bgcolor=color.new(color.black, 80), border_width=1, border_color=color.new(color.gray, 60))
+    table.cell(t, 0, 0, "Level",   text_color=color.gray,  text_size=size.small, bgcolor=color.new(color.gray, 85))
+    table.cell(t, 1, 0, "Price",   text_color=color.gray,  text_size=size.small, bgcolor=color.new(color.gray, 85))
+    table.cell(t, 0, 1, "PM High", text_color=highCol,     text_size=size.small)
+    table.cell(t, 1, 1, str.tostring(pmHigh, format.mintick), text_color=highCol, text_size=size.small)
+    table.cell(t, 0, 2, "PM Low",  text_color=lowCol,      text_size=size.small)
+    table.cell(t, 1, 2, str.tostring(pmLow,  format.mintick), text_color=lowCol,  text_size=size.small)
+"""
+
+
 # Each entry: (name, fn, short_description, category, how_to_use, tag)
 # tag: "" = none, "beta" = BETA badge
 INDICATORS = {
@@ -1608,6 +1671,7 @@ INDICATORS = {
     "obv":           ("OBV",               _pine_obv,       "On-Balance Volume — tracks whether volume is flowing into or out of a stock. Divergence labels flag when price and OBV disagree.", "volume", "Add as a separate panel. OBV rising = money flowing in (bullish). OBV falling = money flowing out (bearish). When OBV diverges from price — price falling but OBV rising (D+ label) = smart money buying the dip. Orange signal line helps confirm trend direction.", ""),
     "bbsqueeze":     ("Bollinger Squeeze",      _pine_bb_squeeze,      "Detects when Bollinger Bands contract inside Keltner Channels — a coiling signal before a big move. Orange dot = in squeeze, blue = fired.", "volatility", "Add as a separate panel. Orange dots on the zero line = squeeze is active (market coiling). Blue dots = squeeze just fired (potential breakout). Green histogram = bullish momentum building, red = bearish. The bigger the histogram bars after the squeeze fires, the stronger the move.", ""),
     "unusualopts":   ("Unusual Options Volume", _pine_unusual_options, "Flags bars where volume spikes above a multiple of the 20-bar average. Red = unusual, orange = elevated.", "volume",   "Add as a separate panel. Each bar shows today's volume as a multiple of the average (1.0 = normal). Red bars with a ⚡ label = unusual spike (default 2× threshold). Orange = elevated but not extreme. Adjust the threshold in TradingView settings. High spikes often precede big moves — watch for them before earnings or news.", ""),
+    "premarket":     ("Pre-Market High / Low",   _pine_premarket,         "Draws horizontal lines at the pre-market high and low (4–9:30 AM ET) when regular session opens. Key levels for gap plays and breakouts.", "smallcap", "Paste onto any intraday chart (1m–15m). Works on US equities. Blue line = pre-market high, magenta line = pre-market low. These are the first key levels price tests at the open. A break above PM High = bullish gap continuation. A rejection at PM High = potential fade. The info table top-right shows both levels numerically. Best used on 1m–5m charts alongside VWAP.", ""),
     "smallcap_pb":   ("Small Cap Micro Pullback", _pine_smallcap_pullback, "Detects shallow pullbacks to the 9 EMA in an uptrending small cap. Green triangle = reclaim signal. Includes RVOL table and suggested stop.", "smallcap", "Paste onto a 1m, 2m, or 5m intraday chart. Works best on small/mid-cap stocks showing a strong pre-market gap or morning momentum run. The blue shading shows the pullback zone. A green triangle fires when price reclaims the 9 EMA with above-average volume after the pullback. The red dashed line is a suggested ATR-based stop below the pullback low. Adjust 'Max pullback bars' and 'Volume surge ×' in TradingView's indicator settings to tune sensitivity. Best used alongside the VWAP indicator to confirm the reclaim happens above VWAP.", ""),
     "patterns":      ("Chart Pattern Scanner", _pine_patterns, "Detects the 6 most reliable chart patterns: H&S, Inverse H&S, Double Top, Double Bottom, Bull Flag, Bear Flag. Each pattern is drawn on the chart with its shape.", "patterns", "Paste onto any price chart. Each pattern is drawn directly — outline lines and a neckline or resistance level. Green labels = bullish, red = bearish. Use Pivot Length to tune sensitivity: lower catches more patterns on short timeframes, higher finds only major swings.", ""),
     "triangles":     ("Triangle & Wedge Scanner", _pine_triangles, "Detects 5 continuation and neutral patterns: Ascending Triangle, Descending Triangle, Sym. Triangle, Rising Wedge, Falling Wedge. Draws both trendlines on the chart.", "patterns", "Paste onto any price chart. Both bounding trendlines are drawn for each pattern. Teal = Ascending Triangle (bullish breakout expected), Orange = Descending Triangle (bearish), Blue = Sym. Triangle (wait for breakout), Red = Rising Wedge (bearish reversal), Green = Falling Wedge (bullish reversal). Use alongside the Chart Pattern Scanner.", ""),
