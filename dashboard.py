@@ -1365,22 +1365,16 @@ def _pine_patterns() -> str:
 indicator("Chart Pattern Scanner", overlay=true, max_bars_back=500)
 
 // ── Settings ──────────────────────────────────────────────────────────────────
-int   pLen   = input.int(5,   "Pivot Length",  minval=2,   maxval=20,  group="Detection")
+int   pLen   = input.int(5,    "Pivot Length", minval=2,   maxval=20,  group="Detection")
 float tolPct = input.float(2.0,"Tolerance %",  minval=0.5, maxval=8.0, group="Detection") / 100
-bool  drawTL = input.bool(true,"Draw Trendlines",                       group="Display")
-bool showHS   = input.bool(true,"Head & Shoulders",    group="Reversal")
-bool showIHS  = input.bool(true,"Inverse H&S",         group="Reversal")
-bool showDT   = input.bool(true,"Double Top",          group="Reversal")
-bool showDB   = input.bool(true,"Double Bottom",       group="Reversal")
-bool showBF   = input.bool(true,"Bull Flag",           group="Continuation")
-bool showBrF  = input.bool(true,"Bear Flag",           group="Continuation")
-bool showAT   = input.bool(true,"Ascending Triangle",  group="Continuation")
-bool showDTri = input.bool(true,"Descending Triangle", group="Continuation")
-bool showST   = input.bool(true,"Sym. Triangle",       group="Neutral")
-bool showFW   = input.bool(true,"Falling Wedge",       group="Neutral")
-bool showRW   = input.bool(true,"Rising Wedge",        group="Neutral")
+bool showHS   = input.bool(true,"Head & Shoulders",  group="Patterns")
+bool showIHS  = input.bool(true,"Inverse H&S",       group="Patterns")
+bool showDT   = input.bool(true,"Double Top",        group="Patterns")
+bool showDB   = input.bool(true,"Double Bottom",     group="Patterns")
+bool showBF   = input.bool(true,"Bull Flag",         group="Patterns")
+bool showBrF  = input.bool(true,"Bear Flag",         group="Patterns")
 
-// ── Pivot Arrays ──────────────────────────────────────────────────────────────
+// ── Pivot detection ───────────────────────────────────────────────────────────
 float ph = ta.pivothigh(high, pLen, pLen)
 float pl = ta.pivotlow(low,  pLen, pLen)
 
@@ -1403,9 +1397,7 @@ if not na(pl)
         array.pop(plV)
         array.pop(plI)
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
 within(a, b) => math.abs(a - b) / math.max(a, b) < tolPct
-slp(i1, v1, i2, v2) => (v2 - v1) / math.max(i2 - i1, 1)
 
 var int lHS  = -9999
 var int lIHS = -9999
@@ -1413,138 +1405,69 @@ var int lDT  = -9999
 var int lDB  = -9999
 var int lBF  = -9999
 var int lBrF = -9999
-var int lAT  = -9999
-var int lDTr = -9999
-var int lST  = -9999
-var int lFW  = -9999
-var int lRW  = -9999
 
 int nh = array.size(phV)
 int nl = array.size(plV)
 
 // ── HEAD & SHOULDERS ──────────────────────────────────────────────────────────
 if showHS and nh >= 3 and barstate.isconfirmed
-    float rs = array.get(phV, 0)
-    int rsi = array.get(phI, 0)
-    float hd = array.get(phV, 1)
-    float ls = array.get(phV, 2)
-    int lsi = array.get(phI, 2)
+    float rs  = array.get(phV, 0)
+    int   rsi = array.get(phI, 0)
+    float hd  = array.get(phV, 1)
+    int   hdi = array.get(phI, 1)
+    float ls  = array.get(phV, 2)
+    int   lsi = array.get(phI, 2)
     if hd > ls * (1 + tolPct) and hd > rs * (1 + tolPct) and within(ls, rs) and rsi != lHS
         lHS := rsi
-        label.new(rsi, rs, "Head & Shoulders\\n▼ Bearish reversal",
-                  style=label.style_label_down, color=color.new(color.red, 5),
-                  textcolor=color.white, size=size.small)
-        if drawTL
-            line.new(lsi, ls, rsi, rs, color=color.new(color.red, 50), width=1, style=line.style_dashed)
+        line.new(lsi, ls,  hdi, hd, color=color.new(color.red, 20), width=2)
+        line.new(hdi, hd,  rsi, rs, color=color.new(color.red, 20), width=2)
+        line.new(lsi, math.min(ls, rs), rsi, math.min(ls, rs), color=color.new(color.red, 40), width=1, style=line.style_dashed)
+        label.new(hdi, hd, "H&S  ▼", style=label.style_label_down, color=color.new(color.red, 10), textcolor=color.white, size=size.normal)
 
 // ── INVERSE HEAD & SHOULDERS ──────────────────────────────────────────────────
 if showIHS and nl >= 3 and barstate.isconfirmed
-    float rs = array.get(plV, 0)
-    int rsi = array.get(plI, 0)
-    float hd = array.get(plV, 1)
-    float ls = array.get(plV, 2)
-    int lsi = array.get(plI, 2)
+    float rs  = array.get(plV, 0)
+    int   rsi = array.get(plI, 0)
+    float hd  = array.get(plV, 1)
+    int   hdi = array.get(plI, 1)
+    float ls  = array.get(plV, 2)
+    int   lsi = array.get(plI, 2)
     if hd < ls * (1 - tolPct) and hd < rs * (1 - tolPct) and within(ls, rs) and rsi != lIHS
         lIHS := rsi
-        label.new(rsi, rs, "Inv. Head & Shoulders\\n▲ Bullish reversal",
-                  style=label.style_label_up, color=color.new(color.green, 5),
-                  textcolor=color.white, size=size.small)
-        if drawTL
-            line.new(lsi, ls, rsi, rs, color=color.new(color.green, 50), width=1, style=line.style_dashed)
+        line.new(lsi, ls,  hdi, hd, color=color.new(color.green, 20), width=2)
+        line.new(hdi, hd,  rsi, rs, color=color.new(color.green, 20), width=2)
+        line.new(lsi, math.max(ls, rs), rsi, math.max(ls, rs), color=color.new(color.green, 40), width=1, style=line.style_dashed)
+        label.new(hdi, hd, "IH&S  ▲", style=label.style_label_up, color=color.new(color.green, 10), textcolor=color.white, size=size.normal)
 
 // ── DOUBLE TOP ────────────────────────────────────────────────────────────────
 if showDT and nh >= 2 and barstate.isconfirmed
-    float p2 = array.get(phV, 0)
-    int p2i = array.get(phI, 0)
-    float p1 = array.get(phV, 1)
-    int p1i = array.get(phI, 1)
+    float p2  = array.get(phV, 0)
+    int   p2i = array.get(phI, 0)
+    float p1  = array.get(phV, 1)
+    int   p1i = array.get(phI, 1)
     if within(p1, p2) and (p2i - p1i) >= pLen * 3 and p2i != lDT
         lDT := p2i
-        label.new(p2i, p2, "Double Top\\n▼ Trend may reverse down",
-                  style=label.style_label_down, color=color.new(color.red, 5),
-                  textcolor=color.white, size=size.small)
-        if drawTL
-            line.new(p1i, p1, p2i, p2, color=color.new(color.red, 60), width=1, style=line.style_dotted)
+        float res = math.max(p1, p2)
+        line.new(p1i, res, p2i, res, color=color.new(color.red, 20), width=2, style=line.style_dashed)
+        line.new(p1i, p1,  p2i, p2,  color=color.new(color.red, 40), width=1)
+        label.new(p2i, p2, "Double Top  ▼", style=label.style_label_down, color=color.new(color.red, 10), textcolor=color.white, size=size.normal)
 
 // ── DOUBLE BOTTOM ─────────────────────────────────────────────────────────────
 if showDB and nl >= 2 and barstate.isconfirmed
-    float p2 = array.get(plV, 0)
-    int p2i = array.get(plI, 0)
-    float p1 = array.get(plV, 1)
-    int p1i = array.get(plI, 1)
+    float p2  = array.get(plV, 0)
+    int   p2i = array.get(plI, 0)
+    float p1  = array.get(plV, 1)
+    int   p1i = array.get(plI, 1)
     if within(p1, p2) and (p2i - p1i) >= pLen * 3 and p2i != lDB
         lDB := p2i
-        label.new(p2i, p2, "Double Bottom\\n▲ Trend may reverse up",
-                  style=label.style_label_up, color=color.new(color.green, 5),
-                  textcolor=color.white, size=size.small)
-        if drawTL
-            line.new(p1i, p1, p2i, p2, color=color.new(color.green, 60), width=1, style=line.style_dotted)
-
-// ── TRIANGLES & WEDGES ────────────────────────────────────────────────────────
-if nh >= 2 and nl >= 2 and barstate.isconfirmed
-    float h1 = array.get(phV, 1)
-    int h1i = array.get(phI, 1)
-    float h2 = array.get(phV, 0)
-    int h2i = array.get(phI, 0)
-    float l1 = array.get(plV, 1)
-    int l1i = array.get(plI, 1)
-    float l2 = array.get(plV, 0)
-    int l2i = array.get(plI, 0)
-    float sH  = slp(h1i, h1, h2i, h2)
-    float sL  = slp(l1i, l1, l2i, l2)
-    float ft  = close * 0.00005
-    bool  hFlat = math.abs(sH) < ft
-    bool lFlat = math.abs(sL) < ft
-    bool  hUp   = sH > ft
-    bool lUp   = sL > ft
-    bool  hDn   = sH < -ft
-    bool lDn   = sL < -ft
-    int   ref   = math.max(h2i, l2i)
-
-    if showAT and hFlat and lUp and ref != lAT
-        lAT := ref
-        label.new(ref, h2, "Ascending Triangle\\n▲ Bullish — watch for breakout above",
-                  style=label.style_label_down, color=color.new(color.teal, 5),
-                  textcolor=color.white, size=size.small)
-        if drawTL
-            line.new(h1i, h1, h2i, h2, color=color.new(color.teal, 40), width=1)
-            line.new(l1i, l1, l2i, l2, color=color.new(color.teal, 40), width=1)
-    else if showDTri and lFlat and hDn and ref != lDTr
-        lDTr := ref
-        label.new(ref, l2, "Descending Triangle\\n▼ Bearish — watch for breakdown below",
-                  style=label.style_label_up, color=color.new(color.orange, 5),
-                  textcolor=color.white, size=size.small)
-        if drawTL
-            line.new(h1i, h1, h2i, h2, color=color.new(color.orange, 40), width=1)
-            line.new(l1i, l1, l2i, l2, color=color.new(color.orange, 40), width=1)
-    else if showST and hDn and lUp and ref != lST
-        lST := ref
-        label.new(ref, (h2 + l2) / 2, "Sym. Triangle\\n◆ Coiling — wait for breakout direction",
-                  style=label.style_label_down, color=color.new(color.blue, 5),
-                  textcolor=color.white, size=size.small)
-        if drawTL
-            line.new(h1i, h1, h2i, h2, color=color.new(color.blue, 40), width=1)
-            line.new(l1i, l1, l2i, l2, color=color.new(color.blue, 40), width=1)
-    else if showRW and hUp and lUp and math.abs(sL) > math.abs(sH) * 1.2 and ref != lRW
-        lRW := ref
-        label.new(ref, h2, "Rising Wedge\\n▼ Bearish — expect reversal",
-                  style=label.style_label_down, color=color.new(color.red, 30),
-                  textcolor=color.white, size=size.small)
-        if drawTL
-            line.new(h1i, h1, h2i, h2, color=color.new(color.red, 60), width=1)
-            line.new(l1i, l1, l2i, l2, color=color.new(color.red, 60), width=1)
-    else if showFW and hDn and lDn and math.abs(sH) > math.abs(sL) * 1.2 and ref != lFW
-        lFW := ref
-        label.new(ref, l2, "Falling Wedge\\n▲ Bullish — expect reversal",
-                  style=label.style_label_up, color=color.new(color.green, 30),
-                  textcolor=color.white, size=size.small)
-        if drawTL
-            line.new(h1i, h1, h2i, h2, color=color.new(color.green, 60), width=1)
-            line.new(l1i, l1, l2i, l2, color=color.new(color.green, 60), width=1)
+        float sup = math.min(p1, p2)
+        line.new(p1i, sup, p2i, sup, color=color.new(color.green, 20), width=2, style=line.style_dashed)
+        line.new(p1i, p1,  p2i, p2,  color=color.new(color.green, 40), width=1)
+        label.new(p2i, p2, "Double Bottom  ▲", style=label.style_label_up, color=color.new(color.green, 10), textcolor=color.white, size=size.normal)
 
 // ── FLAGS ─────────────────────────────────────────────────────────────────────
 if (showBF or showBrF) and barstate.isconfirmed
-    float poleUp = (close[8] - close[15]) / math.max(close[15], 0.01)
+    float poleUp = (close[8]  - close[15]) / math.max(close[15], 0.01)
     float poleDn = (close[15] - close[8])  / math.max(close[15], 0.01)
     float fHigh  = ta.highest(high, 8)
     float fLow   = ta.lowest(low,  8)
@@ -1552,15 +1475,15 @@ if (showBF or showBrF) and barstate.isconfirmed
     float fSlope = (close - close[8]) / math.max(close[8], 0.01)
     if showBF and poleUp > 0.04 and fSlope < -0.003 and fSlope > -0.04 and fRange < poleUp * 0.5 and bar_index != lBF
         lBF := bar_index
-        label.new(bar_index, fLow, "Bull Flag\\n▲ Continuation up likely",
-                  style=label.style_label_up, color=color.new(color.green, 5),
-                  textcolor=color.white, size=size.small)
+        line.new(bar_index - 15, close[15], bar_index - 8, close[8], color=color.new(color.green, 10), width=3)
+        line.new(bar_index - 8,  fHigh,     bar_index,     fLow,     color=color.new(color.green, 40), width=1, style=line.style_dashed)
+        label.new(bar_index, fLow, "Bull Flag  ▲", style=label.style_label_up, color=color.new(color.green, 10), textcolor=color.white, size=size.normal)
     if showBrF and poleDn > 0.04 and fSlope > 0.003 and fSlope < 0.04 and fRange < poleDn * 0.5 and bar_index != lBrF
         lBrF := bar_index
-        label.new(bar_index, fHigh, "Bear Flag\\n▼ Continuation down likely",
-                  style=label.style_label_down, color=color.new(color.red, 5),
-                  textcolor=color.white, size=size.small)
-"""
+        line.new(bar_index - 15, close[15], bar_index - 8, close[8], color=color.new(color.red,   10), width=3)
+        line.new(bar_index - 8,  fLow,      bar_index,     fHigh,    color=color.new(color.red,   40), width=1, style=line.style_dashed)
+        label.new(bar_index, fHigh, "Bear Flag  ▼", style=label.style_label_down, color=color.new(color.red, 10), textcolor=color.white, size=size.normal)
+
 
 
 # Each entry: (name, fn, short_description, category, how_to_use, tag)
