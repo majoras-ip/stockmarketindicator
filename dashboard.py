@@ -1486,6 +1486,103 @@ if (showBF or showBrF) and barstate.isconfirmed
 
 
 
+"""
+
+
+def _pine_triangles() -> str:
+    return """//@version=6
+indicator("Triangle & Wedge Scanner", overlay=true, max_bars_back=500)
+
+// ── Settings ──────────────────────────────────────────────────────────────────
+int   pLen   = input.int(5,    "Pivot Length", minval=2,   maxval=20,  group="Detection")
+float tolPct = input.float(2.0,"Tolerance %",  minval=0.5, maxval=8.0, group="Detection") / 100
+bool showAT   = input.bool(true,"Ascending Triangle",  group="Patterns")
+bool showDTri = input.bool(true,"Descending Triangle", group="Patterns")
+bool showST   = input.bool(true,"Sym. Triangle",       group="Patterns")
+bool showRW   = input.bool(true,"Rising Wedge",        group="Patterns")
+bool showFW   = input.bool(true,"Falling Wedge",       group="Patterns")
+
+// ── Pivot detection ───────────────────────────────────────────────────────────
+float ph = ta.pivothigh(high, pLen, pLen)
+float pl = ta.pivotlow(low,  pLen, pLen)
+
+var array<float> phV = array.new_float(0)
+var array<int>   phI = array.new_int(0)
+var array<float> plV = array.new_float(0)
+var array<int>   plI = array.new_int(0)
+
+if not na(ph)
+    array.unshift(phV, ph)
+    array.unshift(phI, bar_index - pLen)
+    if array.size(phV) > 8
+        array.pop(phV)
+        array.pop(phI)
+
+if not na(pl)
+    array.unshift(plV, pl)
+    array.unshift(plI, bar_index - pLen)
+    if array.size(plV) > 8
+        array.pop(plV)
+        array.pop(plI)
+
+slp(i1, v1, i2, v2) => (v2 - v1) / math.max(i2 - i1, 1)
+
+var int lAT  = -9999
+var int lDTr = -9999
+var int lST  = -9999
+var int lRW  = -9999
+var int lFW  = -9999
+
+int nh = array.size(phV)
+int nl = array.size(plV)
+
+// ── TRIANGLES & WEDGES ────────────────────────────────────────────────────────
+if nh >= 2 and nl >= 2 and barstate.isconfirmed
+    float h1  = array.get(phV, 1)
+    int   h1i = array.get(phI, 1)
+    float h2  = array.get(phV, 0)
+    int   h2i = array.get(phI, 0)
+    float l1  = array.get(plV, 1)
+    int   l1i = array.get(plI, 1)
+    float l2  = array.get(plV, 0)
+    int   l2i = array.get(plI, 0)
+    float sH  = slp(h1i, h1, h2i, h2)
+    float sL  = slp(l1i, l1, l2i, l2)
+    float ft  = close * 0.00005
+    bool  hFlat = math.abs(sH) < ft
+    bool  lFlat = math.abs(sL) < ft
+    bool  hUp   = sH > ft
+    bool  lUp   = sL > ft
+    bool  hDn   = sH < -ft
+    bool  lDn   = sL < -ft
+    int   ref   = math.max(h2i, l2i)
+    if showAT and hFlat and lUp and ref != lAT
+        lAT := ref
+        line.new(h1i, h1, h2i, h2, color=color.new(color.teal, 20), width=2)
+        line.new(l1i, l1, l2i, l2, color=color.new(color.teal, 20), width=2)
+        label.new(ref, h2, "Asc. Triangle  ▲", style=label.style_label_down, color=color.new(color.teal, 10), textcolor=color.white, size=size.normal)
+    else if showDTri and lFlat and hDn and ref != lDTr
+        lDTr := ref
+        line.new(h1i, h1, h2i, h2, color=color.new(color.orange, 20), width=2)
+        line.new(l1i, l1, l2i, l2, color=color.new(color.orange, 20), width=2)
+        label.new(ref, l2, "Desc. Triangle  ▼", style=label.style_label_up, color=color.new(color.orange, 10), textcolor=color.white, size=size.normal)
+    else if showST and hDn and lUp and ref != lST
+        lST := ref
+        line.new(h1i, h1, h2i, h2, color=color.new(color.blue, 20), width=2)
+        line.new(l1i, l1, l2i, l2, color=color.new(color.blue, 20), width=2)
+        label.new(ref, (h2 + l2) / 2, "Sym. Triangle  ◆", style=label.style_label_down, color=color.new(color.blue, 10), textcolor=color.white, size=size.normal)
+    else if showRW and hUp and lUp and math.abs(sL) > math.abs(sH) * 1.2 and ref != lRW
+        lRW := ref
+        line.new(h1i, h1, h2i, h2, color=color.new(color.red, 20), width=2)
+        line.new(l1i, l1, l2i, l2, color=color.new(color.red, 20), width=2)
+        label.new(ref, h2, "Rising Wedge  ▼", style=label.style_label_down, color=color.new(color.red, 10), textcolor=color.white, size=size.normal)
+    else if showFW and hDn and lDn and math.abs(sH) > math.abs(sL) * 1.2 and ref != lFW
+        lFW := ref
+        line.new(h1i, h1, h2i, h2, color=color.new(color.green, 20), width=2)
+        line.new(l1i, l1, l2i, l2, color=color.new(color.green, 20), width=2)
+        label.new(ref, l2, "Falling Wedge  ▲", style=label.style_label_up, color=color.new(color.green, 10), textcolor=color.white, size=size.normal)
+"""
+
 # Each entry: (name, fn, short_description, category, how_to_use, tag)
 # tag: "" = none, "beta" = BETA badge
 INDICATORS = {
@@ -2122,101 +2219,6 @@ ADMIN_LOGIN_HTML = """<!DOCTYPE html>
     <button type="submit">Login</button>
   </form>
 </div></body></html>"""
-
-
-def _pine_triangles() -> str:
-    return """//@version=6
-indicator("Triangle & Wedge Scanner", overlay=true, max_bars_back=500)
-
-// ── Settings ──────────────────────────────────────────────────────────────────
-int   pLen   = input.int(5,    "Pivot Length", minval=2,   maxval=20,  group="Detection")
-float tolPct = input.float(2.0,"Tolerance %",  minval=0.5, maxval=8.0, group="Detection") / 100
-bool showAT   = input.bool(true,"Ascending Triangle",  group="Patterns")
-bool showDTri = input.bool(true,"Descending Triangle", group="Patterns")
-bool showST   = input.bool(true,"Sym. Triangle",       group="Patterns")
-bool showRW   = input.bool(true,"Rising Wedge",        group="Patterns")
-bool showFW   = input.bool(true,"Falling Wedge",       group="Patterns")
-
-// ── Pivot detection ───────────────────────────────────────────────────────────
-float ph = ta.pivothigh(high, pLen, pLen)
-float pl = ta.pivotlow(low,  pLen, pLen)
-
-var array<float> phV = array.new_float(0)
-var array<int>   phI = array.new_int(0)
-var array<float> plV = array.new_float(0)
-var array<int>   plI = array.new_int(0)
-
-if not na(ph)
-    array.unshift(phV, ph)
-    array.unshift(phI, bar_index - pLen)
-    if array.size(phV) > 8
-        array.pop(phV)
-        array.pop(phI)
-
-if not na(pl)
-    array.unshift(plV, pl)
-    array.unshift(plI, bar_index - pLen)
-    if array.size(plV) > 8
-        array.pop(plV)
-        array.pop(plI)
-
-slp(i1, v1, i2, v2) => (v2 - v1) / math.max(i2 - i1, 1)
-
-var int lAT  = -9999
-var int lDTr = -9999
-var int lST  = -9999
-var int lRW  = -9999
-var int lFW  = -9999
-
-int nh = array.size(phV)
-int nl = array.size(plV)
-
-// ── TRIANGLES & WEDGES ────────────────────────────────────────────────────────
-if nh >= 2 and nl >= 2 and barstate.isconfirmed
-    float h1  = array.get(phV, 1)
-    int   h1i = array.get(phI, 1)
-    float h2  = array.get(phV, 0)
-    int   h2i = array.get(phI, 0)
-    float l1  = array.get(plV, 1)
-    int   l1i = array.get(plI, 1)
-    float l2  = array.get(plV, 0)
-    int   l2i = array.get(plI, 0)
-    float sH  = slp(h1i, h1, h2i, h2)
-    float sL  = slp(l1i, l1, l2i, l2)
-    float ft  = close * 0.00005
-    bool  hFlat = math.abs(sH) < ft
-    bool  lFlat = math.abs(sL) < ft
-    bool  hUp   = sH > ft
-    bool  lUp   = sL > ft
-    bool  hDn   = sH < -ft
-    bool  lDn   = sL < -ft
-    int   ref   = math.max(h2i, l2i)
-    if showAT and hFlat and lUp and ref != lAT
-        lAT := ref
-        line.new(h1i, h1, h2i, h2, color=color.new(color.teal, 20), width=2)
-        line.new(l1i, l1, l2i, l2, color=color.new(color.teal, 20), width=2)
-        label.new(ref, h2, "Asc. Triangle  ▲", style=label.style_label_down, color=color.new(color.teal, 10), textcolor=color.white, size=size.normal)
-    else if showDTri and lFlat and hDn and ref != lDTr
-        lDTr := ref
-        line.new(h1i, h1, h2i, h2, color=color.new(color.orange, 20), width=2)
-        line.new(l1i, l1, l2i, l2, color=color.new(color.orange, 20), width=2)
-        label.new(ref, l2, "Desc. Triangle  ▼", style=label.style_label_up, color=color.new(color.orange, 10), textcolor=color.white, size=size.normal)
-    else if showST and hDn and lUp and ref != lST
-        lST := ref
-        line.new(h1i, h1, h2i, h2, color=color.new(color.blue, 20), width=2)
-        line.new(l1i, l1, l2i, l2, color=color.new(color.blue, 20), width=2)
-        label.new(ref, (h2 + l2) / 2, "Sym. Triangle  ◆", style=label.style_label_down, color=color.new(color.blue, 10), textcolor=color.white, size=size.normal)
-    else if showRW and hUp and lUp and math.abs(sL) > math.abs(sH) * 1.2 and ref != lRW
-        lRW := ref
-        line.new(h1i, h1, h2i, h2, color=color.new(color.red, 20), width=2)
-        line.new(l1i, l1, l2i, l2, color=color.new(color.red, 20), width=2)
-        label.new(ref, h2, "Rising Wedge  ▼", style=label.style_label_down, color=color.new(color.red, 10), textcolor=color.white, size=size.normal)
-    else if showFW and hDn and lDn and math.abs(sH) > math.abs(sL) * 1.2 and ref != lFW
-        lFW := ref
-        line.new(h1i, h1, h2i, h2, color=color.new(color.green, 20), width=2)
-        line.new(l1i, l1, l2i, l2, color=color.new(color.green, 20), width=2)
-        label.new(ref, l2, "Falling Wedge  ▲", style=label.style_label_up, color=color.new(color.green, 10), textcolor=color.white, size=size.normal)
-"""
 
 
 
