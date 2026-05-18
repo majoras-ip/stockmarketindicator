@@ -1640,11 +1640,11 @@ bool firstRegBar = isReg and not isReg[1]
 
 if firstRegBar and pmCaptured
     if showHigh
-        line.new(pmStartBar, pmHigh, bar_index + 390, pmHigh, color=highCol, width=lw, style=line.style_solid)
+        line.new(pmStartBar, pmHigh, bar_index, pmHigh, color=highCol, width=lw, style=line.style_solid, extend=extend.right)
         if showLabel
             label.new(bar_index, pmHigh, "PM High  " + str.tostring(pmHigh, format.mintick), style=label.style_label_left, color=color.new(highCol, 20), textcolor=color.white, size=size.small)
     if showLow
-        line.new(pmStartBar, pmLow, bar_index + 390, pmLow, color=lowCol, width=lw, style=line.style_solid)
+        line.new(pmStartBar, pmLow, bar_index, pmLow, color=lowCol, width=lw, style=line.style_solid, extend=extend.right)
         if showLabel
             label.new(bar_index, pmLow, "PM Low  " + str.tostring(pmLow, format.mintick), style=label.style_label_left, color=color.new(lowCol, 20), textcolor=color.white, size=size.small)
 
