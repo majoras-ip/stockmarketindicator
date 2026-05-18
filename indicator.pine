@@ -35,20 +35,18 @@ float f4h = map.get(data, "f4_hi")
 float f5h = map.get(data, "f5_hi")
 float f6h = map.get(data, "f6_hi")
 
-getColor(float v, float t) =>
-    v < low_t ? color.new(color.green, t) : v < med_t ? color.new(color.yellow, t) : v < high_t ? color.new(color.orange, t) : color.new(color.red, t)
+plot(low_t,  "Low",    color=color.new(color.green,  40), linewidth=1)
+plot(med_t,  "Medium", color=color.new(color.yellow, 40), linewidth=1)
+plot(high_t, "High",   color=color.new(color.orange, 40), linewidth=1)
 
-hline(low_t,  "Low",    color=color.new(color.green,  40), linestyle=hline.style_dashed)
-hline(med_t,  "Medium", color=color.new(color.yellow, 40), linestyle=hline.style_dashed)
-hline(high_t, "High",   color=color.new(color.orange, 40), linestyle=hline.style_dashed)
-
-bgcolor(na(f1) ? na : getColor(f1, 92), title="Regime")
+regimeCol = na(f1) ? na : f1 < low_t ? color.new(color.green, 92) : f1 < med_t ? color.new(color.yellow, 92) : f1 < high_t ? color.new(color.orange, 92) : color.new(color.red, 92)
+bgcolor(regimeCol, title="Regime")
 
 if barstate.islast and not na(f1)
-    arrow = dir_up == 1 ? "▲ UP" : "▼ DOWN"
+    arrow = dir_up == 1 ? "UP" : "DOWN"
     dcol  = dir_up == 1 ? color.new(color.green, 20) : color.new(color.red, 20)
     label.new(bar_index, high_t * 1.15, arrow + "  " + str.tostring(math.round(conf * 100)) + "%", style=label.style_label_down, size=size.normal, color=dcol, textcolor=color.white)
-    label.new(bar_index, f1, "▶ live", style=label.style_label_left, size=size.small, color=color.new(color.blue, 50), textcolor=color.white)
+    label.new(bar_index, f1, "live", style=label.style_label_left, size=size.small, color=color.new(color.blue, 50), textcolor=color.white)
     fv  = array.from(f1,  f2,  f3,  f4,  f5,  f6)
     flo = array.from(f1l, f2l, f3l, f4l, f5l, f6l)
     fhi = array.from(f1h, f2h, f3h, f4h, f5h, f6h)
@@ -57,8 +55,8 @@ if barstate.islast and not na(f1)
         lo   = array.get(flo, i)
         hi   = array.get(fhi, i)
         fi   = bar_index + i + 1
-        fc   = getColor(v, 30.0)
+        fc   = v < low_t ? color.new(color.green, 30) : v < med_t ? color.new(color.yellow, 30) : v < high_t ? color.new(color.orange, 30) : color.new(color.red, 30)
         prev = i == 0 ? f1 : array.get(fv, i - 1)
         line.new(bar_index + i, prev, fi, v, color=fc, width=2, style=line.style_dotted)
         line.new(fi, lo, fi, hi, color=color.new(fc, 70), width=6, style=line.style_solid)
-        label.new(fi, v, "+" + str.tostring((i + 1) * 5) + "m\n" + str.tostring(v, "#.#####"), style=label.style_label_down, size=size.tiny, color=color.new(fc, 60), textcolor=color.white)
+        label.new(fi, v, "+" + str.tostring((i + 1) * 5) + "m " + str.tostring(v, "#.#####"), style=label.style_label_down, size=size.tiny, color=color.new(fc, 60), textcolor=color.white)
