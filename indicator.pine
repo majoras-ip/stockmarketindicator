@@ -45,25 +45,20 @@ hline(high_t, "High",   color=color.new(color.orange, 40), linestyle=hline.style
 bgcolor(na(f1) ? na : getColor(f1, 92), title="Regime")
 
 if barstate.islast and not na(f1)
-    string arrow = dir_up == 1 ? "▲ UP" : "▼ DOWN"
-    color  dcol  = dir_up == 1 ? color.new(color.green, 20) : color.new(color.red, 20)
+    arrow = dir_up == 1 ? "▲ UP" : "▼ DOWN"
+    dcol  = dir_up == 1 ? color.new(color.green, 20) : color.new(color.red, 20)
     label.new(bar_index, high_t * 1.15, arrow + "  " + str.tostring(math.round(conf * 100)) + "%", style=label.style_label_down, size=size.normal, color=dcol, textcolor=color.white)
-
-    float pv = f1
-    int   pi = bar_index
-
+    label.new(bar_index, f1, "▶ live", style=label.style_label_left, size=size.small, color=color.new(color.blue, 50), textcolor=color.white)
+    fv  = array.from(f1,  f2,  f3,  f4,  f5,  f6)
+    flo = array.from(f1l, f2l, f3l, f4l, f5l, f6l)
+    fhi = array.from(f1h, f2h, f3h, f4h, f5h, f6h)
     for i = 0 to 5
-        float v  = i == 0 ? f1 : i == 1 ? f2 : i == 2 ? f3 : i == 3 ? f4 : i == 4 ? f5 : f6
-        float lo = i == 0 ? f1l : i == 1 ? f2l : i == 2 ? f3l : i == 3 ? f4l : i == 4 ? f5l : f6l
-        float hi = i == 0 ? f1h : i == 1 ? f2h : i == 2 ? f3h : i == 3 ? f4h : i == 4 ? f5h : f6h
-        int   fi = bar_index + i + 1
-        color fc = getColor(v, 30.0)
-
-        line.new(pi, pv, fi, v, color=fc, width=2, style=line.style_dotted)
+        v    = array.get(fv,  i)
+        lo   = array.get(flo, i)
+        hi   = array.get(fhi, i)
+        fi   = bar_index + i + 1
+        fc   = getColor(v, 30.0)
+        prev = i == 0 ? f1 : array.get(fv, i - 1)
+        line.new(bar_index + i, prev, fi, v, color=fc, width=2, style=line.style_dotted)
         line.new(fi, lo, fi, hi, color=color.new(fc, 70), width=6, style=line.style_solid)
         label.new(fi, v, "+" + str.tostring((i + 1) * 5) + "m\n" + str.tostring(v, "#.#####"), style=label.style_label_down, size=size.tiny, color=color.new(fc, 60), textcolor=color.white)
-
-        pv := v
-        pi := fi
-
-    label.new(bar_index, f1, "▶ live", style=label.style_label_left, size=size.small, color=color.new(color.blue, 50), textcolor=color.white)
