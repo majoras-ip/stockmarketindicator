@@ -1423,7 +1423,7 @@ if showHS and nh >= 3 and barstate.isconfirmed
         line.new(lsi, ls,  hdi, hd, color=color.new(color.red, 20), width=2)
         line.new(hdi, hd,  rsi, rs, color=color.new(color.red, 20), width=2)
         line.new(lsi, hsNeck, rsi, hsNeck, color=color.new(color.red, 40), width=1, style=line.style_dashed)
-        label.new(bar_index, high, "H&S  ▼", style=label.style_label_down, color=color.new(color.red, 10), textcolor=color.white, size=size.normal)
+        label.new(rsi, rs, "H&S  ▼", style=label.style_label_down, color=color.new(color.red, 10), textcolor=color.white, size=size.normal)
 
 // ── INVERSE HEAD & SHOULDERS ──────────────────────────────────────────────────
 if showIHS and nl >= 3 and barstate.isconfirmed
@@ -1439,7 +1439,7 @@ if showIHS and nl >= 3 and barstate.isconfirmed
         line.new(lsi, ls,  hdi, hd, color=color.new(color.green, 20), width=2)
         line.new(hdi, hd,  rsi, rs, color=color.new(color.green, 20), width=2)
         line.new(lsi, ihsNeck, rsi, ihsNeck, color=color.new(color.green, 40), width=1, style=line.style_dashed)
-        label.new(bar_index, low, "IH&S  ▲", style=label.style_label_up, color=color.new(color.green, 10), textcolor=color.white, size=size.normal)
+        label.new(rsi, rs, "IH&S  ▲", style=label.style_label_up, color=color.new(color.green, 10), textcolor=color.white, size=size.normal)
 
 // ── DOUBLE TOP ────────────────────────────────────────────────────────────────
 if showDT and nh >= 2 and barstate.isconfirmed
@@ -1453,7 +1453,7 @@ if showDT and nh >= 2 and barstate.isconfirmed
         float res = math.max(p1, p2)
         line.new(p1i, res, p2i, res, color=color.new(color.red, 20), width=2, style=line.style_dashed)
         line.new(p1i, p1,  p2i, p2,  color=color.new(color.red, 40), width=1)
-        label.new(bar_index, high, "Double Top  ▼", style=label.style_label_down, color=color.new(color.red, 10), textcolor=color.white, size=size.normal)
+        label.new(p2i, p2, "Double Top  ▼", style=label.style_label_down, color=color.new(color.red, 10), textcolor=color.white, size=size.normal)
 
 // ── DOUBLE BOTTOM ─────────────────────────────────────────────────────────────
 if showDB and nl >= 2 and barstate.isconfirmed
@@ -1467,7 +1467,7 @@ if showDB and nl >= 2 and barstate.isconfirmed
         float sup = math.min(p1, p2)
         line.new(p1i, sup, p2i, sup, color=color.new(color.green, 20), width=2, style=line.style_dashed)
         line.new(p1i, p1,  p2i, p2,  color=color.new(color.green, 40), width=1)
-        label.new(bar_index, low, "Double Bottom  ▲", style=label.style_label_up, color=color.new(color.green, 10), textcolor=color.white, size=size.normal)
+        label.new(p2i, p2, "Double Bottom  ▲", style=label.style_label_up, color=color.new(color.green, 10), textcolor=color.white, size=size.normal)
 
 // ── FLAGS ─────────────────────────────────────────────────────────────────────
 if (showBF or showBrF) and barstate.isconfirmed
