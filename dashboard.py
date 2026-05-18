@@ -1599,12 +1599,12 @@ def _pine_premarket() -> str:
 indicator("Pre-Market High / Low", overlay=true, max_lines_count=50, max_labels_count=20)
 
 // ── Settings ──────────────────────────────────────────────────────────────────
-bool showHigh  = input.bool(true,  "Show PM High",   group="Levels")
-bool showLow   = input.bool(true,  "Show PM Low",    group="Levels")
-bool showLabel = input.bool(true,  "Show Labels",    group="Levels")
-bool showTable = input.bool(true,  "Show Info Table",group="Levels")
-color highCol  = input.color(color.new(color.blue,  0), "High Color", group="Style")
-color lowCol   = input.color(color.new(color.fuchsia,0), "Low Color",  group="Style")
+bool showHigh  = input.bool(true,  "Show PM High",    group="Levels")
+bool showLow   = input.bool(true,  "Show PM Low",     group="Levels")
+bool showLabel = input.bool(true,  "Show Labels",     group="Levels")
+bool showTable = input.bool(true,  "Show Info Table", group="Levels")
+color highCol  = input.color(color.new(color.blue,    0), "High Color", group="Style")
+color lowCol   = input.color(color.new(color.fuchsia, 0), "Low Color",  group="Style")
 int   lw       = input.int(2, "Line Width", minval=1, maxval=4, group="Style")
 
 // ── Session detection (ET) ─────────────────────────────────────────────────────
@@ -1615,6 +1615,7 @@ bool isReg = not na(time(timeframe.period, "0930-1600", "America/New_York"))
 var float pmHigh     = na
 var float pmLow      = na
 var int   pmStartBar = na
+var bool  pmCaptured = false
 
 bool newDay = ta.change(dayofweek) != 0
 
@@ -1622,6 +1623,7 @@ if newDay
     pmHigh     := na
     pmLow      := na
     pmStartBar := na
+    pmCaptured := false
 
 if isPM and not isPM[1]
     pmHigh     := high
@@ -1629,31 +1631,38 @@ if isPM and not isPM[1]
     pmStartBar := bar_index
 
 if isPM and not na(pmHigh)
-    pmHigh := math.max(pmHigh, high)
-    pmLow  := math.min(pmLow,  low)
+    pmHigh     := math.max(pmHigh, high)
+    pmLow      := math.min(pmLow,  low)
+    pmCaptured := true
 
 // ── Draw lines at market open ──────────────────────────────────────────────────
 bool firstRegBar = isReg and not isReg[1]
 
-if firstRegBar and not na(pmHigh)
+if firstRegBar and pmCaptured
     if showHigh
-        ln = line.new(pmStartBar, pmHigh, bar_index + 390, pmHigh, color=highCol, width=lw, style=line.style_solid)
+        line.new(pmStartBar, pmHigh, bar_index + 390, pmHigh, color=highCol, width=lw, style=line.style_solid)
         if showLabel
             label.new(bar_index, pmHigh, "PM High  " + str.tostring(pmHigh, format.mintick), style=label.style_label_left, color=color.new(highCol, 20), textcolor=color.white, size=size.small)
     if showLow
-        ln = line.new(pmStartBar, pmLow, bar_index + 390, pmLow, color=lowCol, width=lw, style=line.style_solid)
+        line.new(pmStartBar, pmLow, bar_index + 390, pmLow, color=lowCol, width=lw, style=line.style_solid)
         if showLabel
             label.new(bar_index, pmLow, "PM Low  " + str.tostring(pmLow, format.mintick), style=label.style_label_left, color=color.new(lowCol, 20), textcolor=color.white, size=size.small)
 
 // ── Info table ─────────────────────────────────────────────────────────────────
-if barstate.islast and not na(pmHigh) and showTable
+if barstate.islast and showTable
     var table t = table.new(position.top_right, 2, 3, bgcolor=color.new(color.black, 80), border_width=1, border_color=color.new(color.gray, 60))
-    table.cell(t, 0, 0, "Level",   text_color=color.gray,  text_size=size.small, bgcolor=color.new(color.gray, 85))
-    table.cell(t, 1, 0, "Price",   text_color=color.gray,  text_size=size.small, bgcolor=color.new(color.gray, 85))
-    table.cell(t, 0, 1, "PM High", text_color=highCol,     text_size=size.small)
-    table.cell(t, 1, 1, str.tostring(pmHigh, format.mintick), text_color=highCol, text_size=size.small)
-    table.cell(t, 0, 2, "PM Low",  text_color=lowCol,      text_size=size.small)
-    table.cell(t, 1, 2, str.tostring(pmLow,  format.mintick), text_color=lowCol,  text_size=size.small)
+    table.cell(t, 0, 0, "Level",   text_color=color.gray, text_size=size.small, bgcolor=color.new(color.gray, 85))
+    table.cell(t, 1, 0, "Price",   text_color=color.gray, text_size=size.small, bgcolor=color.new(color.gray, 85))
+    if pmCaptured
+        table.cell(t, 0, 1, "PM High", text_color=highCol, text_size=size.small)
+        table.cell(t, 1, 1, str.tostring(pmHigh, format.mintick), text_color=highCol, text_size=size.small)
+        table.cell(t, 0, 2, "PM Low",  text_color=lowCol,  text_size=size.small)
+        table.cell(t, 1, 2, str.tostring(pmLow,  format.mintick), text_color=lowCol,  text_size=size.small)
+    else
+        table.cell(t, 0, 1, "Enable", text_color=color.orange, text_size=size.small)
+        table.cell(t, 1, 1, "Ext Hours", text_color=color.orange, text_size=size.small)
+        table.cell(t, 0, 2, "in chart", text_color=color.gray, text_size=size.small)
+        table.cell(t, 1, 2, "settings", text_color=color.gray, text_size=size.small)
 """
 
 
