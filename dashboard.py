@@ -1732,8 +1732,12 @@ float hist   = macd - signal
 
 color hColor = hist >= 0 ? hist > hist[1] ? #26a69a : #b2dfdb : hist > hist[1] ? #ffcdd2 : #ff5252
 
+bool showLines = input.bool(false, "Show MACD / Signal lines")
+
 hline(0, "Zero", #787b8680)
 plot(hist, "Histogram", hColor, style=plot.style_columns)
+plot(showLines ? macd   : na, "MACD",   color=#2962ff, linewidth=2)
+plot(showLines ? signal : na, "Signal", color=#ff6d00, linewidth=1)
 
 alertcondition(hist[1] >= 0 and hist < 0, "Rising to falling", "MACD histogram switched from rising to falling")
 alertcondition(hist[1] <= 0 and hist > 0, "Falling to rising", "MACD histogram switched from falling to rising")
