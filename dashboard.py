@@ -1770,12 +1770,72 @@ fill(pH, pL, color=showFill ? fillCol : na)
 """
 
 
+def _pine_multi_vwap() -> str:
+    return """//@version=6
+indicator("Multi-Period VWAP", overlay=true, max_bars_back=500)
+
+// ── Visibility ────────────────────────────────────────────────────────────────
+bool showD = input.bool(true,  "Daily VWAP",   group="Visibility")
+bool showW = input.bool(true,  "Weekly VWAP",  group="Visibility")
+bool showM = input.bool(true,  "Monthly VWAP", group="Visibility")
+bool showY = input.bool(false, "Yearly VWAP",  group="Visibility")
+
+// ── Colors ────────────────────────────────────────────────────────────────────
+color dCol = input.color(color.new(color.aqua,   0), "Daily",   group="Colors")
+color wCol = input.color(color.new(color.purple, 0), "Weekly",  group="Colors")
+color mCol = input.color(color.new(color.orange, 0), "Monthly", group="Colors")
+color yCol = input.color(color.new(color.yellow, 0), "Yearly",  group="Colors")
+
+// ── VWAP calculations ─────────────────────────────────────────────────────────
+float pv = hlc3 * volume
+
+// Daily
+bool newD     = ta.change(time("D")) != 0
+var float dPV = 0.0
+var float dV  = 0.0
+dPV := newD ? pv : dPV + pv
+dV  := newD ? volume : dV + volume
+float dVwap = dPV / dV
+
+// Weekly
+bool newW     = ta.change(time("W")) != 0
+var float wPV = 0.0
+var float wV  = 0.0
+wPV := newW ? pv : wPV + pv
+wV  := newW ? volume : wV + volume
+float wVwap = wPV / wV
+
+// Monthly
+bool newM     = ta.change(time("M")) != 0
+var float mPV = 0.0
+var float mV  = 0.0
+mPV := newM ? pv : mPV + pv
+mV  := newM ? volume : mV + volume
+float mVwap = mPV / mV
+
+// Yearly
+bool newY     = year != year[1]
+var float yPV = 0.0
+var float yV  = 0.0
+yPV := newY ? pv : yPV + pv
+yV  := newY ? volume : yV + volume
+float yVwap = yPV / yV
+
+// ── Plots ─────────────────────────────────────────────────────────────────────
+plot(showD ? dVwap : na, "Daily VWAP",   color=dCol, linewidth=1)
+plot(showW ? wVwap : na, "Weekly VWAP",  color=wCol, linewidth=2)
+plot(showM ? mVwap : na, "Monthly VWAP", color=mCol, linewidth=2)
+plot(showY ? yVwap : na, "Yearly VWAP",  color=yCol, linewidth=3)
+"""
+
+
 # Each entry: (name, fn, short_description, category, how_to_use, tag)
 # tag: "" = none, "beta" = BETA badge
 INDICATORS = {
     "volume":    ("24h Volume",      _pine_volume,    "Cumulative volume since market open vs 20-day average daily volume. Red = above average day.",          "volume",     "Add to any chart. Appears as a separate panel below the price. Green bars = normal up-volume, red bars = unusually high volume (1.5× avg). Orange line is the average daily volume benchmark — when the bars are tracking above it, today is an active day.", ""),
     "vwap":      ("VWAP + Bands",    _pine_vwap,      "VWAP with configurable ±1, ±2, ±3 standard deviation bands. Overlaid directly on the price chart.",    "volume",     "Select which bands to show, then copy and paste onto your chart. Price above VWAP = buyers in control. Price near the ±2 red band = overextended, often snaps back. Use on intraday charts (1m–1h) — VWAP resets each day.", ""),
     "vwap_only": ("VWAP Only",       lambda: "//@version=6\nindicator(\"VWAP\", overlay=true, max_bars_back=500)\n\nplot(ta.vwap(hlc3), \"VWAP\", color=color.new(color.blue, 0), linewidth=2)\n", "Just the VWAP line, no bands. Clean and simple, overlaid on the price chart.", "volume", "Paste onto any intraday chart. A single blue line shows the volume-weighted average price for the session. Price above = bullish bias, price below = bearish bias. Resets at market open each day.", ""),
+    "multivwap":  ("Multi-Period VWAP", _pine_multi_vwap, "Daily, weekly, monthly, and yearly VWAP lines on one chart. Toggle each period on/off independently.", "volume", "Paste onto your price chart. Daily VWAP (aqua) resets each session — best for intraday bias. Weekly (purple) shows the medium-term mean. Monthly (orange) and Yearly (yellow) act as major support/resistance magnets. Turn each one on or off in TradingView settings. Price above all VWAPs = strong bullish bias.", ""),
     "atr":       ("ATR",             _pine_atr,       "Average True Range (14). Shows how much the asset moves per bar. Red = elevated volatility.",           "volatility", "Add to any chart as a separate panel. The red line shows raw volatility per bar. Toggle the orange average line to see whether current volatility is above or below normal. High ATR = bigger stops needed. Low ATR = tight, choppy market.", ""),
     "rsi":       ("RSI",               _pine_rsi,       "Relative Strength Index with overbought/oversold zones, signal MA, and automatic bullish/bearish divergence labels.", "momentum", "Add as a separate panel. Above 70 = overbought (red zone), below 30 = oversold (green zone). The orange signal line is a 9-bar EMA of RSI — crossovers can signal entries. D+ labels mark bullish divergence (price falling but RSI rising), D- marks bearish divergence. Best used with a trend indicator to filter signals.", ""),
     "ema":       ("EMA Ribbon",       _pine_ema,       "8, 21, 50, 100, and 200 EMAs overlaid on the price chart. Green/red fill between the 50 and 200 shows trend direction.", "trend", "Paste onto your price chart. Toggle which EMAs you want in TradingView settings. Green fill between the 50 and 200 EMA = bullish trend, red = bearish. The 8/21 EMAs react fast and are good for short-term entries. The 50/200 are slower and better for trend confirmation. A label on the last bar shows the current trend.", ""),
