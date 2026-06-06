@@ -5503,7 +5503,7 @@ INDICATORS_HTML = """<!DOCTYPE html>
     .tutorial-wrap { display: none; }
     .tutorial-wrap.active { display: block; }
     .video-container { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; margin-bottom: 28px; }
-    .video-container iframe { display: block; width: 100%; aspect-ratio: 16/9; border: none; }
+    .video-container video { display: block; width: 100%; height: auto; background: #000; }
     .steps { list-style: none; counter-reset: steps; display: flex; flex-direction: column; gap: 12px; }
     .steps li { counter-increment: steps; display: flex; gap: 14px; align-items: flex-start; background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 16px; font-size: .88rem; line-height: 1.6; }
     .steps li::before { content: counter(steps); background: var(--accent); color: #fff; font-weight: 700; font-size: .78rem; min-width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 2px; }
@@ -5568,7 +5568,7 @@ INDICATORS_HTML = """<!DOCTYPE html>
   <!-- Tutorial tab -->
   <div id="tab-tutorial" class="tutorial-wrap">
     <div class="video-container">
-      <iframe src="https://www.youtube.com/embed/q8hcp4K4rNM?rel=0&modestbranding=1&iv_load_policy=3&fs=1&controls=1&mute=1" allowfullscreen allow="autoplay; fullscreen"></iframe>
+      <video src="/static/tutorial.mp4" muted controls playsinline preload="metadata"></video>
     </div>
     <ol class="steps">
       <li>
