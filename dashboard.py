@@ -4912,206 +4912,372 @@ PRICING_HTML = """<!DOCTYPE html>
   <title>Pricing · ChartEdge.trade</title>
 """ + _META + """
   <style>
-    :root{--bg:#0d1117;--bg2:#161b22;--text:#e6edf3;--muted:#8b949e;--border:#30363d;--accent:#58a6ff;}
-    [data-theme="light"]{--bg:#fff;--bg2:#f6f8fa;--text:#1f2328;--muted:#636c76;--border:#d0d7de;--accent:#0969da;}
+    :root{--bg:#0d1117;--bg2:#161b22;--bg3:#21262d;--text:#e6edf3;--muted:#8b949e;--border:#30363d;--accent:#58a6ff;}
     *{box-sizing:border-box;margin:0;padding:0;}
-    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);}
-    nav{display:flex;align-items:center;justify-content:space-between;padding:14px 28px;border-bottom:1px solid var(--border);background:var(--bg2);position:sticky;top:0;z-index:100;flex-wrap:wrap;gap:8px;}
-    .logo{font-size:1.2rem;font-weight:700;text-decoration:none;}
-    .nav-links{display:flex;align-items:center;gap:4px;flex-wrap:wrap;}
-    .drop-btn{background:none;border:none;color:var(--text);font-size:.85rem;cursor:pointer;padding:6px 10px;border-radius:6px;}
-    .drop-btn:hover,.drop-btn.open{background:var(--border);}
-    .dropdown{position:relative;}
-    .drop-menu{display:none;position:absolute;top:calc(100% + 6px);left:0;background:var(--bg2);border:1px solid var(--border);border-radius:8px;min-width:180px;z-index:200;padding:4px 0;box-shadow:0 8px 24px rgba(0,0,0,.4);}
-    .drop-menu.open{display:block;}
-    .drop-menu a{display:block;padding:8px 14px;font-size:.85rem;color:var(--text);text-decoration:none;}
-    .drop-menu a:hover{background:var(--border);}
-    .theme-toggle{background:none;border:1px solid var(--border);color:var(--muted);font-size:.78rem;cursor:pointer;padding:5px 10px;border-radius:6px;}
-    .hamburger{display:none;background:none;border:1px solid var(--border);color:var(--text);font-size:1.1rem;cursor:pointer;padding:4px 10px;border-radius:6px;}
-    @media(max-width:640px){.hamburger{display:block;}.nav-links{display:none;flex-direction:column;align-items:flex-start;width:100%;padding:8px 0;}.nav-links.open{display:flex;}.dropdown{width:100%;}.drop-btn{width:100%;text-align:left;}.drop-menu{position:static;box-shadow:none;border:none;padding-left:12px;}.drop-menu.open{display:block;}}
-    .page{max-width:860px;margin:0 auto;padding:48px 24px 80px;}
-    .page h1{font-size:2rem;text-align:center;margin-bottom:8px;} .page h1 span{color:var(--accent);}
-    .subtitle{text-align:center;color:var(--muted);margin-bottom:40px;}
-    .plans{display:flex;gap:20px;justify-content:center;flex-wrap:wrap;}
-    .plan{flex:1;min-width:220px;max-width:260px;background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:28px 24px;position:relative;}
-    .plan.featured{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent);}
-    .plan-badge{position:absolute;top:-12px;left:50%;transform:translateX(-50%);background:var(--accent);color:#fff;font-size:.72rem;font-weight:700;padding:3px 12px;border-radius:20px;white-space:nowrap;}
-    .plan-name{font-size:1rem;font-weight:700;margin-bottom:4px;}
-    .plan-price{font-size:2rem;font-weight:800;margin:12px 0 4px;} .plan-price span{font-size:1rem;font-weight:400;color:var(--muted);}
-    .plan-desc{color:var(--muted);font-size:.83rem;margin-bottom:20px;}
-    .plan-features{list-style:none;margin-bottom:24px;}
-    .plan-features li{font-size:.85rem;padding:6px 0;border-bottom:1px solid var(--border);color:var(--muted);}
-    .plan-features li:last-child{border:none;} .plan-features li::before{content:"✓ ";color:#3fb950;}
-    .plan-features li.no::before{content:"🔒 ";font-size:.75rem;} .plan-features li.no{opacity:.45;color:var(--muted);}
-    .btn-plan{display:block;text-align:center;padding:11px;border-radius:8px;font-size:.9rem;font-weight:600;text-decoration:none;}
-    .btn-free{background:var(--bg);border:1px solid var(--border);color:var(--text);}
-    .btn-basic{background:var(--bg);border:2px solid var(--accent);color:var(--accent);}
-    .btn-pro{background:var(--accent);color:#fff;} .btn-plan:hover{opacity:.88;}
-    .error-box{background:#2d1f1f;border:1px solid #f85149;border-radius:8px;padding:12px 16px;margin-bottom:20px;color:#f85149;font-size:.88rem;text-align:center;}
-    .billing-toggle{display:flex;align-items:center;justify-content:center;gap:12px;margin-bottom:36px;}
-    .toggle-track{width:48px;height:26px;background:var(--border);border-radius:13px;cursor:pointer;position:relative;transition:background .2s;}
-    .toggle-track.on{background:var(--accent);}
-    .toggle-thumb{width:20px;height:20px;background:#fff;border-radius:50%;position:absolute;top:3px;left:3px;transition:left .2s;}
-    .toggle-track.on .toggle-thumb{left:25px;}
-    .toggle-label{font-size:.9rem;color:var(--muted);}
-    .toggle-label.active{color:var(--text);font-weight:600;}
-    .save-badge{background:#1f2d1f;color:#3fb950;font-size:.75rem;padding:2px 8px;border-radius:10px;font-weight:600;}
-    footer{text-align:center;padding:32px 24px;color:var(--muted);font-size:.8rem;border-top:1px solid var(--border);}
+    html,body{background:#000;color:#fff;}
+    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;overflow-x:hidden;}
+    a{color:inherit;}
+    nav { background: var(--bg2); border-bottom: 1px solid var(--border); padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; }
+    .logo { font-size: 1.1rem; font-weight: bold; text-decoration: none; }
+""" + _NAV_CSS + """
+
+    /* ---- Pricing shell ---- */
+    .pricing-shell { position: relative; min-height: 100vh; background: #000; overflow: hidden; padding-bottom: 96px; }
+
+    /* Grid pattern overlay */
+    .px-grid {
+      position: absolute; inset: 0; pointer-events: none;
+      background-image:
+        linear-gradient(to right, rgba(255,255,255,.045) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(255,255,255,.025) 1px, transparent 1px);
+      background-size: 70px 80px;
+      -webkit-mask-image: radial-gradient(50% 40% at 50% 22%, white, transparent);
+              mask-image: radial-gradient(50% 40% at 50% 22%, white, transparent);
+    }
+
+    /* Sparkles canvas */
+    .px-sparkles {
+      position: absolute; inset: 0; pointer-events: none;
+      -webkit-mask-image: radial-gradient(50% 50% at 50% 25%, white, transparent 85%);
+              mask-image: radial-gradient(50% 50% at 50% 25%, white, transparent 85%);
+    }
+
+    /* Big blue radial glow */
+    .px-glow {
+      position: absolute; top: -180px; left: 8%; right: 8%; height: 760px;
+      background: radial-gradient(circle at 50% 30%, #3131f5 0%, transparent 60%);
+      filter: blur(80px); opacity: .42; pointer-events: none;
+    }
+
+    /* ---- Heading ---- */
+    .px-head { position: relative; z-index: 5; max-width: 820px; margin: 0 auto; padding: clamp(56px, 12vh, 110px) 24px 0; text-align: center; }
+    .px-head h1 {
+      font-size: clamp(2rem, 4.4vw, 3rem);
+      font-weight: 600; letter-spacing: -.02em; line-height: 1.1;
+      color: #fff; margin-bottom: 16px;
+    }
+    .px-sub { color: #c9d1d9; font-size: 1rem; max-width: 560px; margin: 0 auto 30px; line-height: 1.65; }
+
+    /* Vertical cut reveal */
+    .vcr { display: inline-flex; flex-wrap: wrap; justify-content: center; gap: 0 .35em; }
+    .vcr-w { display: inline-block; overflow: hidden; line-height: 1.1; vertical-align: bottom; }
+    .vcr-w > span { display: inline-block; transform: translateY(110%); animation: vcr-up .9s cubic-bezier(.45,1.25,.5,1) var(--d,0s) forwards; }
+    @keyframes vcr-up { to { transform: translateY(0); } }
+
+    /* Fade-in-blur (TimelineContent) */
+    .tl { opacity: 0; transform: translateY(-18px); filter: blur(10px); animation: tl-in .75s ease-out forwards; animation-delay: var(--d,0s); }
+    @keyframes tl-in { to { opacity: 1; transform: translateY(0); filter: blur(0); } }
+
+    /* ---- Pill toggle ---- */
+    .bill-pill {
+      position: relative; display: inline-flex;
+      background: #0a0a0a; border: 1px solid #2a2d34; border-radius: 999px; padding: 4px;
+      box-shadow: 0 6px 24px rgba(0,0,0,.5);
+    }
+    .bp-btn {
+      z-index: 2; padding: 9px 22px; border: none; background: none;
+      color: #c9d1d9; font-weight: 600; font-size: .92rem; border-radius: 999px;
+      cursor: pointer; transition: color .25s; min-width: 96px;
+      display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    }
+    .bp-btn.active { color: #fff; }
+    .bp-slider {
+      position: absolute; top: 4px; left: 4px;
+      height: calc(100% - 8px); width: calc(50% - 4px);
+      background: linear-gradient(180deg, #4493f8 0%, #1f6feb 100%);
+      border: 1px solid #1f6feb; border-radius: 999px;
+      box-shadow: 0 6px 22px rgba(31,111,235,.45);
+      transition: transform .35s cubic-bezier(.4,0,.2,1);
+      z-index: 1;
+    }
+    .bill-pill[data-bill="1"] .bp-slider { transform: translateX(100%); }
+    .save-chip {
+      display: inline-flex; align-items: center;
+      background: rgba(63,185,80,.18); color: #56d364;
+      font-size: .66rem; font-weight: 700; padding: 1px 7px; border-radius: 6px;
+      letter-spacing: .03em;
+    }
+
+    /* ---- Plans grid ---- */
+    .plans-grid {
+      position: relative; z-index: 5;
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      max-width: 1080px; gap: 16px;
+      padding: 36px 24px 0; margin: 0 auto;
+    }
+    .plan {
+      position: relative; overflow: hidden;
+      background: linear-gradient(180deg, #0f1117 0%, #1a1d24 55%, #0f1117 100%);
+      border: 1px solid #2a2d34; border-radius: 18px;
+      padding: 28px 26px 30px; color: #fff;
+    }
+    .plan.popular {
+      border-color: rgba(88,166,255,.45);
+      box-shadow: 0 0 0 1px rgba(88,166,255,.22), 0 -10px 90px rgba(9,0,255,.38), 0 24px 60px rgba(0,0,0,.65);
+      transform: translateY(-6px); z-index: 2;
+    }
+    .pop-tag {
+      position: absolute; top: 14px; right: 14px;
+      background: linear-gradient(135deg, #4493f8 0%, #1f6feb 100%);
+      color: #fff; font-size: .62rem; font-weight: 800;
+      padding: 4px 10px; border-radius: 999px; letter-spacing: .08em;
+      box-shadow: 0 4px 14px rgba(31,111,235,.45);
+    }
+    .plan-name { font-size: 1.7rem; font-weight: 700; margin-bottom: 10px; }
+    .plan-price-wrap { display: flex; align-items: baseline; }
+    .plan-price-wrap .currency { font-size: 1.6rem; font-weight: 700; }
+    .plan-price { font-size: 2.6rem; font-weight: 700; letter-spacing: -.025em; font-variant-numeric: tabular-nums; }
+    .plan-per { color: #c9d1d9; font-size: .92rem; margin-left: 6px; }
+    .plan-desc { color: #c9d1d9; font-size: .82rem; margin: 10px 0 18px; line-height: 1.5; }
+    .trial-line {
+      display: inline-block;
+      background: rgba(63,185,80,.14); color: #56d364;
+      font-size: .72rem; font-weight: 700;
+      padding: 3px 9px; border-radius: 6px;
+      margin: 2px 0 14px;
+    }
+    .btn-plan {
+      display: block; text-align: center; padding: 14px;
+      border-radius: 12px; font-size: 1.05rem; font-weight: 600;
+      text-decoration: none; margin-bottom: 22px;
+      transition: transform .15s, box-shadow .2s, border-color .2s;
+    }
+    .btn-pop {
+      background: linear-gradient(180deg, #4493f8 0%, #1f6feb 100%);
+      border: 1px solid #1f6feb; color: #fff;
+      box-shadow: 0 10px 28px rgba(9,0,255,.35);
+    }
+    .btn-pop:hover { transform: translateY(-2px); box-shadow: 0 14px 36px rgba(9,0,255,.5); }
+    .btn-ghost {
+      background: linear-gradient(180deg, #0a0a0a 0%, #2b2b2b 100%);
+      border: 1px solid #2a2d34; color: #fff;
+      box-shadow: 0 6px 20px rgba(0,0,0,.45);
+    }
+    .btn-ghost:hover { transform: translateY(-2px); border-color: rgba(255,255,255,.18); }
+
+    .feat-head { font-size: .9rem; font-weight: 600; color: #fff; padding-top: 16px; border-top: 1px solid rgba(255,255,255,.08); margin-bottom: 12px; }
+    .feat-list { list-style: none; display: flex; flex-direction: column; gap: 7px; }
+    .feat-list li { display: flex; align-items: center; gap: 10px; color: #c9d1d9; font-size: .85rem; line-height: 1.5; }
+    .feat-list li::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: rgba(255,255,255,.32); flex-shrink: 0; }
+    .plan.popular .feat-list li::before { background: rgba(88,166,255,.7); box-shadow: 0 0 6px rgba(88,166,255,.5); }
+
+    .error-box {
+      max-width: 600px; margin: 24px auto 0;
+      background: rgba(248,81,73,.15); border: 1px solid #f85149; border-radius: 8px;
+      padding: 12px 16px; color: #ff8e88; font-size: .9rem; text-align: center;
+      position: relative; z-index: 5;
+    }
+
+    footer { text-align: center; padding: 32px 24px; color: #8b949e; font-size: .8rem; border-top: 1px solid #1a1d24; background: #000; position: relative; z-index: 5; }
+
+    @media (max-width: 640px) {
+      .plan.popular { transform: none; }
+      .px-glow { height: 580px; }
+      .px-head { padding-top: 64px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .vcr-w > span, .tl { animation: none; opacity: 1; transform: none; filter: none; }
+    }
   </style>
 </head>
 <body>
 <nav>
-  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span><span style="color:var(--muted);font-weight:500;">.trade</span></a>
+  <a class="logo" href="/"><span style="color:#e6edf3">Chart</span><span style="color:#58a6ff">Edge</span><span style="color:#8b949e;font-weight:500;">.trade</span></a>
   <button class="hamburger" onclick="toggleMobileNav(event)">☰</button>
   <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
 </nav>
-<div class="page">
-  <h1>Simple <span>Pricing</span></h1>
-  <p class="subtitle">Start free. Upgrade when you need more.</p>
+
+<div class="pricing-shell">
+  <div class="px-grid"></div>
+  <canvas class="px-sparkles" id="px-sparkles"></canvas>
+  <div class="px-glow"></div>
+
   {% if error %}<div class="error-box">Something went wrong with checkout. Please try again.</div>{% endif %}
 
-  <div class="billing-toggle">
-    <span class="toggle-label active" id="lbl-monthly">Monthly</span>
-    <div class="toggle-track" id="billing-toggle" onclick="toggleBilling()">
-      <div class="toggle-thumb"></div>
-    </div>
-    <span class="toggle-label" id="lbl-yearly">Yearly <span class="save-badge">Save up to 25%</span></span>
-  </div>
+  <header class="px-head">
+    <h1 class="vcr">
+      <span class="vcr-w"><span style="--d:0s">Plans</span></span>
+      <span class="vcr-w"><span style="--d:.08s">that</span></span>
+      <span class="vcr-w"><span style="--d:.16s">fit</span></span>
+      <span class="vcr-w"><span style="--d:.24s">how</span></span>
+      <span class="vcr-w"><span style="--d:.32s">you</span></span>
+      <span class="vcr-w"><span style="--d:.40s">trade.</span></span>
+    </h1>
+    <p class="px-sub tl" style="--d:.55s">Start free, upgrade when you need more. 7-day trial on every paid plan — cancel anytime.</p>
 
-  <div class="plans">
-    <div class="plan">
-      <div class="plan-name">Free</div>
-      <div class="plan-price">$0<span>/mo</span></div>
-      <div class="plan-desc">Get started with no commitment.</div>
-      <ul class="plan-features">
+    <div class="tl" style="--d:.75s">
+      <div class="bill-pill" id="bill-pill" data-bill="0">
+        <div class="bp-slider"></div>
+        <button type="button" class="bp-btn active" onclick="setBill(0)">Monthly</button>
+        <button type="button" class="bp-btn" onclick="setBill(1)">Yearly <span class="save-chip">25% OFF</span></button>
+      </div>
+    </div>
+  </header>
+
+  <div class="plans-grid">
+    <!-- Free -->
+    <div class="plan tl" style="--d:.95s">
+      <h3 class="plan-name">Free</h3>
+      <div class="plan-price-wrap">
+        <span class="currency">$</span>
+        <span class="plan-price" data-price="0">0</span>
+        <span class="plan-per" data-per>/mo</span>
+      </div>
+      <p class="plan-desc">Get started with no commitment. No credit card required.</p>
+      <a href="/indicators" class="btn-plan btn-ghost">Start Free</a>
+      <div class="feat-head">Free includes:</div>
+      <ul class="feat-list">
         <li>3 copies per day</li>
-        <li>All indicators</li>
-        <li>Live chart &amp; forecast</li>
+        <li>20+ Pine Script indicators</li>
+        <li>Live chart &amp; volatility forecast</li>
         <li>Market news</li>
-        <li>Earnings calendar</li>
+        <li>Earnings, IPO &amp; dividend calendars</li>
         <li>Market heatmap</li>
-        <li>Dividends calendar</li>
-        <li>IPO calendar</li>
+        <li>Crypto Fear &amp; Greed + heatmap</li>
         <li>Economic calendar</li>
-        <li>Crypto fear &amp; greed</li>
-        <li>Crypto heatmap</li>
-        <li>Trending coins</li>
-        <li class="no">Trump tracker</li>
-        <li class="no">Ticker news</li>
-        <li class="no">Gamma exposure</li>
-        <li class="no">Greeks dashboard</li>
-        <li class="no">Volatility forecast</li>
-        <li class="no">BTC dominance</li>
-        <li class="no">Funding rates</li>
-        <li class="no">On-chain metrics</li>
-        <li class="no">LSTM forecast</li>
-        <li class="no">Options flow</li>
-        <li class="no">Insider trading</li>
-        <li class="no">Pre-market scanner</li>
-        <li class="no">Liquidation map</li>
       </ul>
-      <a href="/indicators" class="btn-plan btn-free">Start Free</a>
     </div>
-    <div class="plan">
-      <div class="plan-name">Basic</div>
-      <div class="plan-price" id="basic-price">$9.99<span>/mo</span></div>
-      <div class="plan-desc">For active traders who copy often.</div>
-      {% if not trial_used or not current_user %}<div style="font-size:.75rem;color:#3fb950;font-weight:600;margin-top:4px;">✓ 7-day free trial · no charge until then</div>{% endif %}
-      <ul class="plan-features">
-        <li>8 copies per day</li>
-        <li>All indicators</li>
-        <li>Live chart &amp; forecast</li>
-        <li>Market news</li>
-        <li>Earnings calendar</li>
-        <li>Market heatmap</li>
-        <li>Dividends calendar</li>
-        <li>IPO calendar</li>
-        <li>Economic calendar</li>
-        <li>Crypto fear &amp; greed</li>
-        <li>Crypto heatmap</li>
-        <li>Trending coins</li>
-        <li>Trump tracker</li>
-        <li>Ticker news</li>
-        <li>Gamma exposure</li>
-        <li>Greeks dashboard</li>
-        <li>Volatility forecast</li>
-        <li>BTC dominance</li>
-        <li>Funding rates</li>
-        <li>On-chain metrics</li>
-        <li class="no">LSTM forecast</li>
-        <li class="no">Options flow</li>
-        <li class="no">Insider trading</li>
-        <li class="no">Pre-market scanner</li>
-        <li class="no">Liquidation map</li>
-      </ul>
+
+    <!-- Basic -->
+    <div class="plan tl" style="--d:1.08s">
+      <h3 class="plan-name">Basic</h3>
+      <div class="plan-price-wrap">
+        <span class="currency">$</span>
+        <span class="plan-price" data-price="9.99" data-yearly="89.99">9.99</span>
+        <span class="plan-per" data-per>/mo</span>
+      </div>
+      {% if not trial_used or not current_user %}<div class="trial-line">✓ 7-day free trial — no charge until then</div>{% endif %}
+      <p class="plan-desc">For active traders who copy often.</p>
       {% if current_user %}
-      <a href="/subscribe/basic" class="btn-plan btn-basic" id="btn-basic">{% if not trial_used %}Start 7-Day Free Trial{% else %}Get Basic{% endif %}</a>
+      <a href="/subscribe/basic" class="btn-plan btn-ghost" data-base="/subscribe/basic">{% if not trial_used %}Start 7-Day Free Trial{% else %}Get Basic{% endif %}</a>
       {% else %}
-      <a href="/login?next=/subscribe/basic" class="btn-plan btn-basic" id="btn-basic">Start 7-Day Free Trial</a>
+      <a href="/login?next=/subscribe/basic" class="btn-plan btn-ghost" data-base="/login?next=/subscribe/basic">Start 7-Day Free Trial</a>
       {% endif %}
-    </div>
-    <div class="plan featured">
-      <div class="plan-badge">MOST POPULAR</div>
-      <div class="plan-name">Pro</div>
-      <div class="plan-price" id="pro-price">$15.99<span>/mo</span></div>
-      <div class="plan-desc">Unlimited access for power users.</div>
-      {% if not trial_used or not current_user %}<div style="font-size:.75rem;color:#3fb950;font-weight:600;margin-top:4px;">✓ 7-day free trial · no charge until then</div>{% endif %}
-      <ul class="plan-features">
-        <li>Unlimited copies</li>
-        <li>All indicators</li>
-        <li>Live chart &amp; forecast</li>
-        <li>Market news</li>
-        <li>Earnings calendar</li>
-        <li>Market heatmap</li>
-        <li>Dividends calendar</li>
-        <li>IPO calendar</li>
-        <li>Economic calendar</li>
-        <li>Crypto fear &amp; greed</li>
-        <li>Crypto heatmap</li>
-        <li>Trending coins</li>
-        <li>Trump tracker</li>
+      <div class="feat-head">Everything in Free, plus:</div>
+      <ul class="feat-list">
+        <li>8 copies per day</li>
+        <li>Trump Tracker</li>
         <li>Ticker news</li>
         <li>Gamma exposure</li>
         <li>Greeks dashboard</li>
         <li>Volatility forecast</li>
-        <li>BTC dominance</li>
-        <li>Funding rates</li>
+        <li>BTC dominance &amp; funding rates</li>
         <li>On-chain metrics</li>
-        <li>LSTM forecast</li>
+      </ul>
+    </div>
+
+    <!-- Pro -->
+    <div class="plan popular tl" style="--d:1.22s">
+      <span class="pop-tag">MOST POPULAR</span>
+      <h3 class="plan-name">Pro</h3>
+      <div class="plan-price-wrap">
+        <span class="currency">$</span>
+        <span class="plan-price" data-price="15.99" data-yearly="149.99">15.99</span>
+        <span class="plan-per" data-per>/mo</span>
+      </div>
+      {% if not trial_used or not current_user %}<div class="trial-line">✓ 7-day free trial — no charge until then</div>{% endif %}
+      <p class="plan-desc">Unlimited access for power users.</p>
+      {% if current_user %}
+      <a href="/subscribe/pro" class="btn-plan btn-pop" data-base="/subscribe/pro">{% if not trial_used %}Start 7-Day Free Trial{% else %}Get Pro{% endif %}</a>
+      {% else %}
+      <a href="/login?next=/subscribe/pro" class="btn-plan btn-pop" data-base="/login?next=/subscribe/pro">Start 7-Day Free Trial</a>
+      {% endif %}
+      <div class="feat-head">Everything in Basic, plus:</div>
+      <ul class="feat-list">
+        <li>Unlimited copies</li>
+        <li>LSTM volatility forecast</li>
         <li>Options flow</li>
         <li>Insider trading</li>
         <li>Pre-market scanner</li>
         <li>Liquidation map</li>
       </ul>
-      {% if current_user %}
-      <a href="/subscribe/pro" class="btn-plan btn-pro" id="btn-pro">{% if not trial_used %}Start 7-Day Free Trial{% else %}Get Pro{% endif %}</a>
-      {% else %}
-      <a href="/login?next=/subscribe/pro" class="btn-plan btn-pro" id="btn-pro">Start 7-Day Free Trial</a>
-      {% endif %}
     </div>
   </div>
 </div>
+
 <footer>© 2026 ChartEdge.trade · <a href="/privacy" style="color:inherit">Privacy</a> · <a href="/terms" style="color:inherit">Terms</a></footer>
+
 <script>
-var yearly = false;
-function toggleBilling() {
-  yearly = !yearly;
-  var track = document.getElementById('billing-toggle');
-  track.classList.toggle('on', yearly);
-  document.getElementById('lbl-monthly').classList.toggle('active', !yearly);
-  document.getElementById('lbl-yearly').classList.toggle('active', yearly);
-  if (yearly) {
-    document.getElementById('basic-price').innerHTML = '$89.99<span>/yr</span>';
-    document.getElementById('pro-price').innerHTML   = '$149.99<span>/yr</span>';
-    document.getElementById('btn-basic').href = document.getElementById('btn-basic').href.split('?')[0] + '?billing=yearly';
-    document.getElementById('btn-pro').href   = document.getElementById('btn-pro').href.split('?')[0]   + '?billing=yearly';
-  } else {
-    document.getElementById('basic-price').innerHTML = '$9.99<span>/mo</span>';
-    document.getElementById('pro-price').innerHTML   = '$15.99<span>/mo</span>';
-    document.getElementById('btn-basic').href = document.getElementById('btn-basic').href.split('?')[0];
-    document.getElementById('btn-pro').href   = document.getElementById('btn-pro').href.split('?')[0];
-  }
+// Billing toggle with animated number
+function setBill(mode){
+  var pill = document.getElementById('bill-pill');
+  var was = parseInt(pill.getAttribute('data-bill'), 10);
+  if (was === mode) return;
+  pill.setAttribute('data-bill', mode);
+  pill.querySelectorAll('.bp-btn').forEach(function(b, i){ b.classList.toggle('active', i === mode); });
+  document.querySelectorAll('.plan-price').forEach(function(el){
+    var monthly = parseFloat(el.dataset.price);
+    var yearly  = parseFloat(el.dataset.yearly);
+    if (isNaN(yearly)) { el.textContent = monthly === 0 ? '0' : monthly.toFixed(2); return; }
+    var from = parseFloat(el.textContent.replace(/,/g, ''));
+    var to   = mode === 1 ? yearly : monthly;
+    animateNum(el, from, to, 480);
+  });
+  document.querySelectorAll('[data-per]').forEach(function(el){ el.textContent = mode === 1 ? '/yr' : '/mo'; });
+  document.querySelectorAll('[data-base]').forEach(function(a){
+    var base = a.getAttribute('data-base');
+    a.href = mode === 1 ? base + (base.indexOf('?') >= 0 ? '&' : '?') + 'billing=yearly' : base;
+  });
 }
+function animateNum(el, from, to, dur){
+  var start = performance.now();
+  function step(now){
+    var t = Math.min(1, (now - start) / dur);
+    var k = t < 0.5 ? 2*t*t : 1 - Math.pow(-2*t+2, 2)/2;
+    var v = from + (to - from) * k;
+    if (t >= 1) {
+      el.textContent = to === 0 ? '0' : to.toFixed(2);
+    } else {
+      el.textContent = v.toFixed(2);
+    }
+    if (t < 1) requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
+}
+
+// Sparkles (white drifting dots)
+(function(){
+  var c = document.getElementById('px-sparkles');
+  if (!c) return;
+  var ctx = c.getContext('2d');
+  var dpr = Math.min(window.devicePixelRatio || 1, 2);
+  function resize(){
+    c.width  = Math.floor(c.offsetWidth  * dpr);
+    c.height = Math.floor(c.offsetHeight * dpr);
+  }
+  resize();
+  window.addEventListener('resize', resize);
+  var N = 140;
+  var P = [];
+  for (var i = 0; i < N; i++) {
+    P.push({
+      x: Math.random() * c.width,
+      y: Math.random() * c.height,
+      r: (Math.random() * 1.6 + 0.4) * dpr,
+      vx: (Math.random() - 0.5) * 0.22 * dpr,
+      vy: (Math.random() * 0.45 + 0.12) * dpr,
+      a: Math.random() * 0.6 + 0.2,
+      da: (Math.random() - 0.5) * 0.018
+    });
+  }
+  function loop(){
+    ctx.clearRect(0, 0, c.width, c.height);
+    for (var i = 0; i < P.length; i++) {
+      var p = P[i];
+      p.x += p.vx; p.y += p.vy; p.a += p.da;
+      if (p.a < 0.1 || p.a > 0.85) p.da = -p.da;
+      if (p.y > c.height + 10) { p.y = -10; p.x = Math.random() * c.width; }
+      if (p.x < -10) p.x = c.width + 10;
+      if (p.x > c.width + 10) p.x = -10;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255,255,255,' + p.a + ')';
+      ctx.fill();
+    }
+    requestAnimationFrame(loop);
+  }
+  loop();
+})();
 """ + _THEME_JS + """
 </script>
 </body>
