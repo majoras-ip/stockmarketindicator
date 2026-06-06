@@ -4970,15 +4970,17 @@ PRICING_HTML = """<!DOCTYPE html>
 
     /* ---- Pill toggle ---- */
     .bill-pill {
-      position: relative; display: inline-flex;
+      position: relative;
+      display: inline-grid; grid-template-columns: 1fr 1fr;
       background: #0a0a0a; border: 1px solid #2a2d34; border-radius: 999px; padding: 4px;
       box-shadow: 0 6px 24px rgba(0,0,0,.5);
     }
     .bp-btn {
       z-index: 2; padding: 9px 22px; border: none; background: none;
       color: #c9d1d9; font-weight: 600; font-size: .92rem; border-radius: 999px;
-      cursor: pointer; transition: color .25s; min-width: 96px;
+      cursor: pointer; transition: color .25s; width: 100%;
       display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+      white-space: nowrap;
     }
     .bp-btn.active { color: #fff; }
     .bp-slider {
