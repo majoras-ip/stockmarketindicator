@@ -5331,96 +5331,216 @@ AUTH_HTML = """<!DOCTYPE html>
   <title>{{ 'Register' if mode == 'register' else 'Login' }} — ChartEdge.trade</title>
   {% if mode == 'register' %}<script src="https://js.hcaptcha.com/1/api.js" async defer></script>{% endif %}
   <style>
-    :root[data-theme="dark"]  { --bg:#0d1117; --bg2:#161b22; --bg3:#21262d; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --red:#f85149; }
-    :root[data-theme="light"] { --bg:#ffffff; --bg2:#f6f8fa; --bg3:#eaeef2; --border:#d0d7de; --text:#1f2328; --muted:#636c76; --accent:#0969da; --red:#cf222e; }
+    :root[data-theme="dark"]  { --bg:#0d1117; --bg2:#161b22; --bg3:#21262d; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --red:#f85149; --green:#3fb950; }
+    :root[data-theme="light"] { --bg:#ffffff; --bg2:#f6f8fa; --bg3:#eaeef2; --border:#d0d7de; --text:#1f2328; --muted:#636c76; --accent:#0969da; --red:#cf222e; --green:#1a7f37; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; display: flex; flex-direction: column; }
     nav { background: var(--bg2); border-bottom: 1px solid var(--border); padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; }
-    .logo { color: var(--accent); font-size: 1.1rem; font-weight: bold; text-decoration: none; }
+    .logo { font-size: 1.1rem; font-weight: bold; text-decoration: none; }
 """ + _NAV_CSS + """
-    .center { flex: 1; display: flex; align-items: center; justify-content: center; padding: 40px 24px; }
-    .card { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 32px; width: 100%; max-width: 380px; }
-    h2 { font-size: 1.2rem; margin-bottom: 24px; text-align: center; }
-    .form-group { margin-bottom: 16px; }
-    label { display: block; color: var(--muted); font-size: 0.8rem; margin-bottom: 6px; }
-    input[type=text], input[type=password] {
+
+    .auth-shell {
+      flex: 1; display: flex; align-items: center; justify-content: center;
+      padding: 56px 24px 80px;
+      background:
+        radial-gradient(ellipse 50% 40% at 50% 0%, rgba(88,166,255,.06), transparent 70%),
+        var(--bg);
+    }
+    .auth-card {
+      width: 100%; max-width: 440px;
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 36px 36px 28px;
+      box-shadow: 0 24px 60px rgba(0,0,0,.4), 0 0 0 1px rgba(255,255,255,.02);
+    }
+    .auth-head { margin-bottom: 26px; }
+    .auth-title { font-size: 1.5rem; font-weight: 700; letter-spacing: -.015em; margin-bottom: 8px; color: var(--text); }
+    .auth-desc { color: var(--muted); font-size: .88rem; line-height: 1.55; }
+    .auth-error { background: rgba(248,81,73,.12); border: 1px solid var(--red); border-radius: 8px; padding: 10px 14px; color: var(--red); font-size: .85rem; margin-bottom: 16px; }
+    .auth-social {
+      display: flex; align-items: center; justify-content: center; gap: 10px;
+      width: 100%; padding: 11px 16px; text-decoration: none;
+      background: var(--bg3); color: var(--text);
+      border: 1px solid var(--border); border-radius: 9px;
+      font-weight: 600; font-size: .92rem;
+      transition: background .15s, border-color .15s;
+      margin-bottom: 4px;
+    }
+    .auth-social:hover { background: var(--bg); border-color: var(--accent); }
+    .auth-social svg { flex-shrink: 0; }
+    .auth-divider {
+      display: flex; align-items: center; gap: 12px;
+      color: var(--muted); font-size: .72rem; letter-spacing: .14em;
+      margin: 20px 0;
+    }
+    .auth-divider::before, .auth-divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+    .auth-form { display: flex; flex-direction: column; gap: 14px; }
+    .auth-field { display: flex; flex-direction: column; gap: 6px; }
+    .auth-field label { font-size: .78rem; color: var(--text); font-weight: 600; }
+    .auth-opt { color: var(--muted); font-weight: 400; font-size: .72rem; margin-left: 4px; }
+    .auth-input { position: relative; display: flex; align-items: center; }
+    .auth-input-icon {
+      position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
+      width: 16px; height: 16px; color: var(--muted); pointer-events: none;
+    }
+    .auth-input input {
       width: 100%; background: var(--bg); color: var(--text);
-      border: 1px solid var(--border); padding: 9px 14px;
-      border-radius: 6px; font-family: monospace; font-size: 0.9rem;
+      border: 1px solid var(--border); border-radius: 9px;
+      padding: 10px 14px 10px 38px; font-size: .92rem;
+      transition: border-color .15s, box-shadow .15s;
     }
-    input:focus { outline: none; border-color: var(--accent); }
-    .btn-submit { width: 100%; background: var(--accent); color: #fff; border: none; padding: 10px; border-radius: 6px; font-family: monospace; font-size: 0.95rem; font-weight: bold; cursor: pointer; margin-top: 8px; }
-    .btn-submit:hover { opacity: 0.88; }
-    .btn-google {
-      width: 100%; display: flex; align-items: center; justify-content: center; gap: 10px;
-      background: #fff; color: #3c4043; border: 1px solid #dadce0;
-      padding: 10px; border-radius: 6px; font-family: monospace; font-size: 0.95rem;
-      font-weight: bold; cursor: pointer; text-decoration: none; margin-bottom: 16px;
+    .auth-input input::placeholder { color: var(--muted); opacity: .6; }
+    .auth-input input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(88,166,255,.18); }
+    .auth-input input.has-toggle { padding-right: 42px; }
+    .auth-pw-toggle {
+      position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+      background: none; border: none; color: var(--muted); cursor: pointer;
+      width: 30px; height: 30px; border-radius: 6px;
+      display: flex; align-items: center; justify-content: center;
+      transition: color .15s, background .15s;
     }
-    .btn-google:hover { background: #f8f9fa; border-color: #c6c9cc; }
-    .btn-google svg { flex-shrink: 0; }
-    .divider { display: flex; align-items: center; gap: 10px; margin: 16px 0; color: var(--muted); font-size: 0.8rem; }
-    .divider::before, .divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
-    .error { background: #2d1316; border: 1px solid var(--red); border-radius: 6px; padding: 10px 14px; color: var(--red); font-size: 0.85rem; margin-bottom: 16px; }
-    .switch { text-align: center; margin-top: 20px; color: var(--muted); font-size: 0.85rem; }
-    .switch a { color: var(--accent); text-decoration: none; }
+    .auth-pw-toggle:hover { background: var(--bg3); color: var(--text); }
+    .auth-ref {
+      background: rgba(63,185,80,.12); border: 1px solid var(--green); border-radius: 8px;
+      padding: 9px 12px; color: var(--green); font-size: .8rem; font-weight: 600;
+    }
+    .auth-submit {
+      width: 100%; background: var(--accent); color: #fff; border: none;
+      padding: 12px; border-radius: 9px;
+      font-weight: 700; font-size: .95rem; cursor: pointer;
+      transition: opacity .15s, transform .15s, box-shadow .2s;
+      margin-top: 6px;
+      box-shadow: 0 8px 20px rgba(88,166,255,.22);
+    }
+    .auth-submit:hover { opacity: .94; transform: translateY(-1px); box-shadow: 0 12px 28px rgba(88,166,255,.34); }
+    .auth-switch { color: var(--muted); font-size: .85rem; text-align: center; margin-top: 24px; }
+    .auth-switch a { color: var(--accent); text-decoration: none; font-weight: 600; }
+    .auth-switch a:hover { text-decoration: underline; }
+    .auth-tos { color: var(--muted); font-size: .72rem; text-align: center; margin-top: 14px; line-height: 1.6; }
+    .auth-tos a { color: var(--muted); text-decoration: underline; }
+    .auth-tos a:hover { color: var(--text); }
+    @media (max-width: 480px) {
+      .auth-card { padding: 28px 22px 22px; border-radius: 14px; }
+    }
   </style>
 </head>
 <body>
 <nav>
   <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span><span style="color:var(--muted);font-weight:500;">.trade</span></a>
-  <div class="nav-links">
-""" + _NAV_LINKS + """
-  </div>
+  <button class="hamburger" onclick="toggleMobileNav(event)">☰</button>
+  <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
 </nav>
-<div class="center">
-  <div class="card">
-    <h2>{{ 'Create account' if mode == 'register' else 'Sign in' }}</h2>
-    {% if error %}<div class="error">{{ error }}</div>{% endif %}
 
-    <a class="btn-google" href="/login/google">
-      <svg width="18" height="18" viewBox="0 0 18 18"><path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.874 2.684-6.615z"/><path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.258c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z"/><path fill="#FBBC05" d="M3.964 10.707A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.707V4.961H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.039l3.007-2.332z"/><path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.961L3.964 6.293C4.672 4.169 6.656 3.58 9 3.58z"/></svg>
-      {{ 'Sign up with Google' if mode == 'register' else 'Sign in with Google' }}
+<div class="auth-shell">
+  <div class="auth-card">
+    <div class="auth-head">
+      <h1 class="auth-title">{{ 'Create your account' if mode == 'register' else 'Welcome back' }}</h1>
+      <p class="auth-desc">
+        {% if mode == 'register' %}
+          Start with the free tier — 20+ Pine Script indicators, live charts, and market data. Upgrade anytime.
+        {% else %}
+          Sign in to access your indicators, watchlists, and Pro tools.
+        {% endif %}
+      </p>
+    </div>
+
+    {% if error %}<div class="auth-error">{{ error }}</div>{% endif %}
+
+    <a class="auth-social" href="/login/google">
+      <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
+        <path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.874 2.684-6.615z"/>
+        <path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.258c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z"/>
+        <path fill="#FBBC05" d="M3.964 10.707A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.707V4.961H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.039l3.007-2.332z"/>
+        <path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.961L3.964 6.293C4.672 4.169 6.656 3.58 9 3.58z"/>
+      </svg>
+      {{ 'Sign up with Google' if mode == 'register' else 'Continue with Google' }}
     </a>
 
-    <div class="divider">or</div>
+    <div class="auth-divider"><span>OR</span></div>
 
-    <form method="POST">
-      <div class="form-group">
-        <label>Username</label>
-        <input type="text" name="username" required autofocus>
+    <form method="POST" class="auth-form">
+      <div class="auth-field">
+        <label for="auth-username">Username</label>
+        <div class="auth-input">
+          <svg class="auth-input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+            <circle cx="12" cy="7" r="4"/>
+          </svg>
+          <input id="auth-username" type="text" name="username" required autofocus placeholder="your_username">
+        </div>
       </div>
+
       {% if mode == 'register' %}
-      <div class="form-group">
-        <label>Email <span style="color:var(--muted);font-size:.75rem;">(optional — for welcome email)</span></label>
-        <input type="text" name="email" placeholder="you@example.com">
+      <div class="auth-field">
+        <label for="auth-email">Email<span class="auth-opt">optional — for welcome mail</span></label>
+        <div class="auth-input">
+          <svg class="auth-input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="2" y="4" width="20" height="16" rx="2"/>
+            <path d="m22 7-10 5L2 7"/>
+          </svg>
+          <input id="auth-email" type="email" name="email" placeholder="you@example.com">
+        </div>
       </div>
       {% endif %}
-      <div class="form-group">
-        <label>Password{% if mode == 'register' %} (min 6 chars){% endif %}</label>
-        <input type="password" name="password" required>
+
+      <div class="auth-field">
+        <label for="auth-pw">Password{% if mode == 'register' %}<span class="auth-opt">min 6 chars</span>{% endif %}</label>
+        <div class="auth-input">
+          <svg class="auth-input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="3" y="11" width="18" height="11" rx="2"/>
+            <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+          </svg>
+          <input id="auth-pw" type="password" name="password" required placeholder="••••••••" class="has-toggle">
+          <button type="button" class="auth-pw-toggle" onclick="togglePw()" aria-label="Show or hide password">
+            <svg id="auth-pw-eye" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/>
+              <circle cx="12" cy="12" r="3"/>
+            </svg>
+          </button>
+        </div>
       </div>
+
       {% if mode == 'register' and ref %}
       <input type="hidden" name="ref" value="{{ ref }}">
-      <div style="background:#1f2d1f;border:1px solid #3fb950;border-radius:6px;padding:8px 12px;font-size:.82rem;color:#3fb950;margin-bottom:12px;">
-        ✓ Referral code applied — you'll get 7 days of Pro free!
-      </div>
+      <div class="auth-ref">✓ Referral code applied — you'll get 7 days of Pro free!</div>
       {% endif %}
+
       {% if mode == 'register' %}
-      <div class="h-captcha" data-sitekey="b06c575c-981a-4884-bbc0-5aa8c1d8aaa0" style="margin-bottom:12px;"></div>
+      <div class="h-captcha" data-sitekey="b06c575c-981a-4884-bbc0-5aa8c1d8aaa0"></div>
       {% endif %}
-      <button class="btn-submit" type="submit">{{ 'Create account' if mode == 'register' else 'Sign in' }}</button>
+
+      <button class="auth-submit" type="submit">{{ 'Create account' if mode == 'register' else 'Sign in' }}</button>
     </form>
-    <div class="switch">
+
+    <p class="auth-switch">
       {% if mode == 'register' %}
         Already have an account? <a href="/login">Sign in</a>
       {% else %}
-        No account? <a href="/register">Create one</a>
+        New to ChartEdge.trade? <a href="/register">Create one</a>
       {% endif %}
-    </div>
+    </p>
+
+    <p class="auth-tos">
+      By {{ 'creating an account' if mode == 'register' else 'signing in' }}, you agree to our
+      <a href="/terms">Terms</a> &amp; <a href="/privacy">Privacy Policy</a>.
+    </p>
   </div>
 </div>
-<script>""" + _THEME_JS + """</script>
+<script>
+function togglePw(){
+  var i = document.getElementById('auth-pw');
+  var e = document.getElementById('auth-pw-eye');
+  if (i.type === 'password') {
+    i.type = 'text';
+    e.innerHTML = '<path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" y1="2" x2="22" y2="22"/>';
+  } else {
+    i.type = 'password';
+    e.innerHTML = '<path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/>';
+  }
+}
+""" + _THEME_JS + """
+</script>
 </body>
 </html>"""
 
