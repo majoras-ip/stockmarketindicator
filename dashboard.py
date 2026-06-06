@@ -5959,6 +5959,90 @@ HOME_HTML = """<!DOCTYPE html>
       .edge-chart { min-height: 220px; }
     }
 
+    /* Shader hero — bull/bear cosmic WebGL2 background */
+    .shader-hero {
+      position: relative; width: 100%; min-height: 78vh;
+      overflow: hidden; background: #000; border-bottom: 1px solid var(--border);
+    }
+    .shader-hero canvas {
+      position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none;
+    }
+    .shader-hero::after {
+      content: ''; position: absolute; inset: 0; pointer-events: none;
+      background:
+        radial-gradient(ellipse 90% 70% at 50% 50%, transparent 30%, rgba(0,0,0,0.55) 100%),
+        linear-gradient(180deg, transparent 60%, rgba(13,17,23,0.85) 100%);
+    }
+    .shader-overlay {
+      position: relative; z-index: 2; max-width: 980px; margin: 0 auto;
+      padding: clamp(56px, 12vh, 120px) 24px; text-align: center; color: #fff;
+    }
+    .shader-badge {
+      display: inline-flex; align-items: center; gap: 10px;
+      padding: 7px 16px; margin-bottom: 28px;
+      background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.14);
+      -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+      border-radius: 999px; font-size: .82rem; color: #d6dde6;
+      opacity: 0; animation: shader-fade-down .8s .1s ease-out forwards;
+    }
+    .shader-badge .icon { color: #3fb950; }
+    .shader-headline {
+      font-weight: 800; letter-spacing: -.025em; line-height: 1.02;
+      font-size: clamp(2.6rem, 6vw, 5rem); margin-bottom: 22px;
+    }
+    .shader-headline .bear, .shader-headline .bull { display: block; }
+    .shader-headline .bear {
+      background: linear-gradient(180deg, #ffb1ad 0%, #f85149 55%, #b8302a 100%);
+      -webkit-background-clip: text; background-clip: text; color: transparent;
+      opacity: 0; animation: shader-fade-up .9s .25s ease-out forwards;
+    }
+    .shader-headline .bull {
+      background: linear-gradient(180deg, #98ecaa 0%, #3fb950 55%, #237a36 100%);
+      -webkit-background-clip: text; background-clip: text; color: transparent;
+      opacity: 0; animation: shader-fade-up .9s .45s ease-out forwards;
+    }
+    .shader-sub {
+      max-width: 680px; margin: 0 auto 32px;
+      color: rgba(230,237,243,0.85); font-size: clamp(1rem, 1.5vw, 1.18rem);
+      line-height: 1.65; font-weight: 400;
+      opacity: 0; animation: shader-fade-up .9s .65s ease-out forwards;
+    }
+    .shader-btns {
+      display: flex; gap: 14px; justify-content: center; flex-wrap: wrap;
+      opacity: 0; animation: shader-fade-up .9s .85s ease-out forwards;
+    }
+    .shader-btn-primary {
+      padding: 14px 30px; border-radius: 999px;
+      font-weight: 700; font-size: .98rem; color: #06120a;
+      background: linear-gradient(135deg, #56d364, #3fb950);
+      text-decoration: none; box-shadow: 0 12px 36px rgba(63,185,80,.35);
+      transition: transform .2s, box-shadow .2s;
+    }
+    .shader-btn-primary:hover { transform: translateY(-2px); box-shadow: 0 16px 44px rgba(63,185,80,.5); }
+    .shader-btn-ghost {
+      padding: 14px 30px; border-radius: 999px;
+      font-weight: 600; font-size: .98rem; color: #fff;
+      background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.18);
+      -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+      text-decoration: none; transition: background .2s, border-color .2s, transform .2s;
+    }
+    .shader-btn-ghost:hover { background: rgba(255,255,255,0.12); border-color: rgba(255,255,255,0.34); transform: translateY(-2px); }
+    @keyframes shader-fade-down {
+      from { opacity: 0; transform: translateY(-12px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes shader-fade-up {
+      from { opacity: 0; transform: translateY(18px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    @media (max-width: 640px) {
+      .shader-hero { min-height: 70vh; }
+      .shader-overlay { padding: 56px 20px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .shader-badge, .shader-headline .bear, .shader-headline .bull, .shader-sub, .shader-btns { animation: none; opacity: 1; }
+    }
+
     /* Hero */
     .hero {
       text-align: center; padding: 40px 24px 56px;
@@ -6133,134 +6217,133 @@ HOME_HTML = """<!DOCTYPE html>
 })();
 </script>
 
-<!-- Edge hero card with spotlight + animated candlestick -->
-<section class="edge-hero">
-  <div class="edge-card" id="edge-card">
-    <div class="edge-left">
-      <div class="edge-eyebrow"><span class="dot"></span> Live · Options · Insider · AI forecasts</div>
-      <h1 class="edge-title">Your Edge<br>in the <span class="accent">Market.</span></h1>
-      <p class="edge-sub">20+ free Pine Script indicators, real-time options flow, gamma exposure, insider trades, and LSTM volatility forecasts — all in one terminal.</p>
-      <div class="edge-btns">
-        {% if not current_user %}<a class="edge-btn-primary" href="/register">Get Started Free</a>{% endif %}
-        <a class="edge-btn-ghost" href="/indicators">Browse Indicators →</a>
-      </div>
+<!-- Bull/bear shader hero -->
+<section class="shader-hero">
+  <canvas id="shader-canvas"></canvas>
+  <div class="shader-overlay">
+    <div class="shader-badge">
+      <span class="icon">📈</span>
+      <span>Live · 20+ free indicators · Pro tools</span>
     </div>
-    <div class="edge-right">
-      <div class="edge-ticker">
-        <div><span class="sym">SPY</span><span class="px" id="edge-price">472.18</span></div>
-        <span class="chg" id="edge-change" style="color:#3fb950;background:rgba(63,185,80,.12);">+1.24%</span>
-      </div>
-      <div class="edge-chart">
-        <svg viewBox="0 0 480 320" preserveAspectRatio="none" aria-hidden="true">
-          <g stroke="rgba(255,255,255,0.04)" stroke-width="1">
-            <line x1="0" y1="80"  x2="480" y2="80"/>
-            <line x1="0" y1="160" x2="480" y2="160"/>
-            <line x1="0" y1="240" x2="480" y2="240"/>
-          </g>
-          <defs>
-            <linearGradient id="edge-fill" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%"   stop-color="#58a6ff" stop-opacity="0.32"/>
-              <stop offset="100%" stop-color="#58a6ff" stop-opacity="0"/>
-            </linearGradient>
-            <filter id="edge-glow" x="-20%" y="-20%" width="140%" height="140%">
-              <feGaussianBlur stdDeviation="3" result="b"/>
-              <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
-            </filter>
-          </defs>
-          <path id="edge-line-area" fill="url(#edge-fill)" stroke="none"/>
-          <path id="edge-line" stroke="#58a6ff" stroke-width="2" fill="none" filter="url(#edge-glow)"/>
-          <g id="edge-candles"></g>
-        </svg>
-      </div>
+    <h1 class="shader-headline">
+      <span class="bear">Trade the Bear.</span>
+      <span class="bull">Ride the Bull.</span>
+    </h1>
+    <p class="shader-sub">Real-time options flow, gamma exposure, insider trades, and LSTM volatility forecasts — built so you never trade blind.</p>
+    <div class="shader-btns">
+      {% if not current_user %}<a class="shader-btn-primary" href="/register">Get Started Free</a>{% endif %}
+      <a class="shader-btn-ghost" href="/indicators">Browse Indicators →</a>
     </div>
   </div>
 </section>
 <script>
 (function(){
-  var card = document.getElementById('edge-card');
-  if (!card) return;
-  card.addEventListener('mousemove', function(e){
-    var r = card.getBoundingClientRect();
-    card.style.setProperty('--mx', ((e.clientX - r.left) / r.width * 100) + '%');
-    card.style.setProperty('--my', ((e.clientY - r.top)  / r.height * 100) + '%');
-  });
-  card.addEventListener('mouseleave', function(){
-    card.style.setProperty('--mx','30%');
-    card.style.setProperty('--my','25%');
-  });
+  var canvas = document.getElementById('shader-canvas');
+  if (!canvas) return;
+  var gl = canvas.getContext('webgl2', { antialias: false, alpha: false, premultipliedAlpha: false });
+  if (!gl) { canvas.style.display = 'none'; return; }
 
-  var N = 36, candles = [], lastClose = 472;
-  for (var i = 0; i < N; i++) {
-    var o = lastClose;
-    var c = o + (Math.random() - 0.48) * 4.5;
-    var h = Math.max(o, c) + Math.random() * 1.6;
-    var l = Math.min(o, c) - Math.random() * 1.6;
-    candles.push({o: o, c: c, h: h, l: l});
-    lastClose = c;
+  var VS = `#version 300 es
+precision highp float;
+in vec4 position;
+void main(){ gl_Position = position; }`;
+
+  var FS = `#version 300 es
+precision highp float;
+out vec4 O;
+uniform vec2 resolution;
+uniform float time;
+#define FC gl_FragCoord.xy
+#define T time
+#define R resolution
+#define MN min(R.x,R.y)
+float rnd(vec2 p){ p=fract(p*vec2(12.9898,78.233)); p+=dot(p,p+34.56); return fract(p.x*p.y); }
+float noise(in vec2 p){
+  vec2 i=floor(p), f=fract(p), u=f*f*(3.-2.*f);
+  float a=rnd(i), b=rnd(i+vec2(1,0)), c=rnd(i+vec2(0,1)), d=rnd(i+1.);
+  return mix(mix(a,b,u.x), mix(c,d,u.x), u.y);
+}
+float fbm(vec2 p){
+  float t=.0, a=1.; mat2 m=mat2(1.,-.5,.2,1.2);
+  for(int i=0;i<5;i++){ t+=a*noise(p); p*=2.*m; a*=.5; }
+  return t;
+}
+float clouds(vec2 p){
+  float d=1., t=.0;
+  for(float i=.0;i<3.;i++){
+    float a=d*fbm(i*10.+p.x*.2+.2*(1.+i)*p.y+d+i*i+p);
+    t=mix(t,d,a); d=a; p*=2./(i+1.);
   }
-
-  var W = 480, H = 320, pad = 10;
-  var cwidth = (W - pad * 2) / N;
-  function render(){
-    var minP = Infinity, maxP = -Infinity;
-    for (var i = 0; i < candles.length; i++) {
-      if (candles[i].l < minP) minP = candles[i].l;
-      if (candles[i].h > maxP) maxP = candles[i].h;
-    }
-    var range = maxP - minP || 1;
-    function yScale(p){ return pad + (1 - (p - minP) / range) * (H - pad * 2); }
-
-    var cg = '';
-    for (var j = 0; j < candles.length; j++) {
-      var cd = candles[j];
-      var cx = pad + j * cwidth + cwidth / 2;
-      var up = cd.c >= cd.o;
-      var col = up ? '#3fb950' : '#f85149';
-      var yh = yScale(cd.h), yl = yScale(cd.l);
-      var yo = yScale(cd.o), yc = yScale(cd.c);
-      var top = Math.min(yo, yc), bot = Math.max(yo, yc);
-      var bw = Math.max(2, cwidth * 0.55);
-      cg += '<line x1="'+cx+'" y1="'+yh+'" x2="'+cx+'" y2="'+yl+'" stroke="'+col+'" stroke-width="1" opacity=".85"/>';
-      cg += '<rect x="'+(cx - bw/2)+'" y="'+top+'" width="'+bw+'" height="'+Math.max(1, bot - top)+'" fill="'+col+'" opacity=".88"/>';
-    }
-    document.getElementById('edge-candles').innerHTML = cg;
-
-    var lp = '';
-    for (var k = 0; k < candles.length; k++) {
-      var x = pad + k * cwidth + cwidth / 2;
-      var y = yScale(candles[k].c);
-      lp += (k === 0 ? 'M ' : 'L ') + x + ' ' + y + ' ';
-    }
-    document.getElementById('edge-line').setAttribute('d', lp);
-    var firstX = pad + cwidth / 2;
-    var lastX  = pad + (N - 1) * cwidth + cwidth / 2;
-    document.getElementById('edge-line-area').setAttribute('d', lp + 'L ' + lastX + ' ' + (H - pad) + ' L ' + firstX + ' ' + (H - pad) + ' Z');
-
-    var price = candles[candles.length - 1].c;
-    var first = candles[0].c;
-    var chg = (price - first) / first * 100;
-    var pEl = document.getElementById('edge-price');
-    var cEl = document.getElementById('edge-change');
-    if (pEl) pEl.textContent = price.toFixed(2);
-    if (cEl) {
-      var s = chg >= 0 ? '+' : '';
-      cEl.textContent = s + chg.toFixed(2) + '%';
-      cEl.style.color = chg >= 0 ? '#3fb950' : '#f85149';
-      cEl.style.background = chg >= 0 ? 'rgba(63,185,80,.12)' : 'rgba(248,81,73,.12)';
-    }
+  return t;
+}
+void main(void){
+  vec2 uv=(FC-.5*R)/MN, st=uv*vec2(2,1);
+  vec3 col=vec3(0);
+  float bg=clouds(vec2(st.x+T*.5,-st.y));
+  uv*=1.-.3*(sin(T*.2)*.5+.5);
+  float bullbear = smoothstep(-1.0, 1.0, st.x);
+  vec3 bear = vec3(1.0, 0.32, 0.28);
+  vec3 bull = vec3(0.25, 0.93, 0.40);
+  for(float i=1.; i<12.; i++){
+    uv += .1*cos(i*vec2(.1+.01*i, .8) + i*i + T*.5 + .1*uv.x);
+    vec2 p=uv;
+    float d=length(p);
+    float k = fract(i*.5 + bullbear*.6);
+    vec3 pcol = mix(bear, bull, smoothstep(0.35, 0.65, k));
+    col += .0014/d * (pcol*0.65 + 0.35);
+    float b = noise(i + p + bg*1.731);
+    col += .0018 * b / length(max(p, vec2(b*p.x*.02, p.y)));
+    vec3 cloudCol = mix(bear, bull, bullbear) * bg * 0.22;
+    col = mix(col, cloudCol, d);
   }
-  function tick(){
-    candles.shift();
-    var prev = candles[candles.length - 1].c;
-    var o = prev;
-    var c = o + (Math.random() - 0.48) * 4.5;
-    var h = Math.max(o, c) + Math.random() * 1.6;
-    var l = Math.min(o, c) - Math.random() * 1.6;
-    candles.push({o: o, c: c, h: h, l: l});
-    render();
+  O = vec4(col, 1);
+}`;
+
+  function mk(type, src){
+    var s = gl.createShader(type);
+    gl.shaderSource(s, src);
+    gl.compileShader(s);
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+      console.error('Shader compile error:', gl.getShaderInfoLog(s));
+    }
+    return s;
   }
-  render();
-  setInterval(tick, 1700);
+  var prog = gl.createProgram();
+  gl.attachShader(prog, mk(gl.VERTEX_SHADER, VS));
+  gl.attachShader(prog, mk(gl.FRAGMENT_SHADER, FS));
+  gl.linkProgram(prog);
+  if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+    console.error('Program link error:', gl.getProgramInfoLog(prog));
+    canvas.style.display = 'none';
+    return;
+  }
+  var buf = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,1,-1,-1,1,1,1,-1]), gl.STATIC_DRAW);
+  var posLoc = gl.getAttribLocation(prog, 'position');
+  gl.enableVertexAttribArray(posLoc);
+  gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 0, 0);
+  gl.useProgram(prog);
+  var uRes  = gl.getUniformLocation(prog, 'resolution');
+  var uTime = gl.getUniformLocation(prog, 'time');
+
+  function resize(){
+    var dpr = Math.max(1, 0.5 * (window.devicePixelRatio || 1));
+    var r = canvas.getBoundingClientRect();
+    canvas.width  = Math.max(1, Math.floor(r.width  * dpr));
+    canvas.height = Math.max(1, Math.floor(r.height * dpr));
+    gl.viewport(0, 0, canvas.width, canvas.height);
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  function loop(t){
+    gl.uniform2f(uRes, canvas.width, canvas.height);
+    gl.uniform1f(uTime, t * 0.001);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
 })();
 </script>
 
