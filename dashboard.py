@@ -5105,7 +5105,7 @@ PRICING_HTML = """<!DOCTYPE html>
     </h1>
     <p class="px-sub tl" style="--d:.55s">Start free, upgrade when you need more. 7-day trial on every paid plan — cancel anytime.</p>
 
-    <div class="tl" style="--d:.75s">
+    <div class="tl" style="--d:.75s; display:flex; justify-content:center;">
       <div class="bill-pill" id="bill-pill" data-bill="0">
         <div class="bp-slider"></div>
         <button type="button" class="bp-btn active" onclick="setBill(0)">Monthly</button>
@@ -5128,13 +5128,17 @@ PRICING_HTML = """<!DOCTYPE html>
       <div class="feat-head">Free includes:</div>
       <ul class="feat-list">
         <li>3 copies per day</li>
-        <li>20+ Pine Script indicators</li>
-        <li>Live chart &amp; volatility forecast</li>
+        <li>All indicators</li>
+        <li>Live chart &amp; forecast</li>
         <li>Market news</li>
-        <li>Earnings, IPO &amp; dividend calendars</li>
+        <li>Earnings calendar</li>
         <li>Market heatmap</li>
-        <li>Crypto Fear &amp; Greed + heatmap</li>
+        <li>Dividends calendar</li>
+        <li>IPO calendar</li>
         <li>Economic calendar</li>
+        <li>Crypto fear &amp; greed</li>
+        <li>Crypto heatmap</li>
+        <li>Trending coins</li>
       </ul>
     </div>
 
@@ -5153,15 +5157,27 @@ PRICING_HTML = """<!DOCTYPE html>
       {% else %}
       <a href="/login?next=/subscribe/basic" class="btn-plan btn-ghost" data-base="/login?next=/subscribe/basic">Start 7-Day Free Trial</a>
       {% endif %}
-      <div class="feat-head">Everything in Free, plus:</div>
+      <div class="feat-head">Basic includes:</div>
       <ul class="feat-list">
         <li>8 copies per day</li>
-        <li>Trump Tracker</li>
+        <li>All indicators</li>
+        <li>Live chart &amp; forecast</li>
+        <li>Market news</li>
+        <li>Earnings calendar</li>
+        <li>Market heatmap</li>
+        <li>Dividends calendar</li>
+        <li>IPO calendar</li>
+        <li>Economic calendar</li>
+        <li>Crypto fear &amp; greed</li>
+        <li>Crypto heatmap</li>
+        <li>Trending coins</li>
+        <li>Trump tracker</li>
         <li>Ticker news</li>
         <li>Gamma exposure</li>
         <li>Greeks dashboard</li>
         <li>Volatility forecast</li>
-        <li>BTC dominance &amp; funding rates</li>
+        <li>BTC dominance</li>
+        <li>Funding rates</li>
         <li>On-chain metrics</li>
       </ul>
     </div>
@@ -5182,10 +5198,29 @@ PRICING_HTML = """<!DOCTYPE html>
       {% else %}
       <a href="/login?next=/subscribe/pro" class="btn-plan btn-pop" data-base="/login?next=/subscribe/pro">Start 7-Day Free Trial</a>
       {% endif %}
-      <div class="feat-head">Everything in Basic, plus:</div>
+      <div class="feat-head">Pro includes:</div>
       <ul class="feat-list">
         <li>Unlimited copies</li>
-        <li>LSTM volatility forecast</li>
+        <li>All indicators</li>
+        <li>Live chart &amp; forecast</li>
+        <li>Market news</li>
+        <li>Earnings calendar</li>
+        <li>Market heatmap</li>
+        <li>Dividends calendar</li>
+        <li>IPO calendar</li>
+        <li>Economic calendar</li>
+        <li>Crypto fear &amp; greed</li>
+        <li>Crypto heatmap</li>
+        <li>Trending coins</li>
+        <li>Trump tracker</li>
+        <li>Ticker news</li>
+        <li>Gamma exposure</li>
+        <li>Greeks dashboard</li>
+        <li>Volatility forecast</li>
+        <li>BTC dominance</li>
+        <li>Funding rates</li>
+        <li>On-chain metrics</li>
+        <li>LSTM forecast</li>
         <li>Options flow</li>
         <li>Insider trading</li>
         <li>Pre-market scanner</li>
