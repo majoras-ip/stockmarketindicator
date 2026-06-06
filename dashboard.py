@@ -6257,6 +6257,7 @@ uniform float time;
 #define T time
 #define R resolution
 #define MN min(R.x,R.y)
+
 float rnd(vec2 p){ p=fract(p*vec2(12.9898,78.233)); p+=dot(p,p+34.56); return fract(p.x*p.y); }
 float noise(in vec2 p){
   vec2 i=floor(p), f=fract(p), u=f*f*(3.-2.*f);
@@ -6276,26 +6277,59 @@ float clouds(vec2 p){
   }
   return t;
 }
+float hash11(float n){ return fract(sin(n*43758.5453)*7654.321); }
+float sdBox(vec2 p, vec2 b){
+  vec2 d = abs(p) - b;
+  return length(max(d, 0.0)) + min(max(d.x, d.y), 0.0);
+}
+
+// One layer of scrolling candlesticks
+vec3 candleLayer(vec2 uv, float dx, float bw, float ww, float speed, vec2 offset, float seed, vec3 bull, vec3 bear, float alpha){
+  float xs = uv.x + T * speed + offset.x;
+  float i = floor(xs / dx);
+  float localX = xs - (i + 0.5) * dx;
+
+  float o = (hash11(i*1.3 + seed) - 0.5) * 0.55;
+  float c = o + (hash11(i*2.7 + seed + 9.1) - 0.45) * 0.42;
+  float h = max(o, c) + hash11(i*3.5 + seed + 19.7) * 0.18 + 0.012;
+  float l = min(o, c) - hash11(i*4.9 + seed + 29.3) * 0.18 - 0.012;
+  vec3 cc = c > o ? bull : bear;
+
+  float yShift = offset.y + (hash11(i*0.7 + seed + 3.0) - 0.5) * 0.05;
+  float bodyCenter = (o + c) * 0.5 + yShift;
+  float bodyHalfH = max(abs(c - o) * 0.5, 0.006);
+  float dBody = sdBox(vec2(localX, uv.y - bodyCenter), vec2(bw, bodyHalfH));
+
+  float wickCenter = (h + l) * 0.5 + yShift;
+  float wickHalfH = (h - l) * 0.5;
+  float dWick = sdBox(vec2(localX, uv.y - wickCenter), vec2(ww, wickHalfH));
+
+  float d = min(dBody, dWick);
+  float aa = 1.5 / MN;
+  float mask = 1.0 - smoothstep(-aa, aa, d);
+  float glow = exp(-d * 38.0) * 0.30;
+  return cc * (mask * 0.90 + glow) * alpha;
+}
+
 void main(void){
-  vec2 uv=(FC-.5*R)/MN, st=uv*vec2(2,1);
-  vec3 col=vec3(0);
-  float bg=clouds(vec2(st.x+T*.5,-st.y));
-  uv*=1.-.3*(sin(T*.2)*.5+.5);
+  vec2 uv = (FC - .5*R) / MN;
+  vec2 st = uv * vec2(2, 1);
+
+  // Bull/bear cosmic cloud background
+  float bg = clouds(vec2(st.x + T*.5, -st.y));
   float bullbear = smoothstep(-1.0, 1.0, st.x);
   vec3 bear = vec3(1.0, 0.32, 0.28);
   vec3 bull = vec3(0.25, 0.93, 0.40);
-  for(float i=1.; i<12.; i++){
-    uv += .1*cos(i*vec2(.1+.01*i, .8) + i*i + T*.5 + .1*uv.x);
-    vec2 p=uv;
-    float d=length(p);
-    float k = fract(i*.5 + bullbear*.6);
-    vec3 pcol = mix(bear, bull, smoothstep(0.35, 0.65, k));
-    col += .0014/d * (pcol*0.65 + 0.35);
-    float b = noise(i + p + bg*1.731);
-    col += .0018 * b / length(max(p, vec2(b*p.x*.02, p.y)));
-    vec3 cloudCol = mix(bear, bull, bullbear) * bg * 0.22;
-    col = mix(col, cloudCol, d);
-  }
+  vec3 cloudCol = mix(bear, bull, bullbear) * bg * 0.24;
+  vec3 col = cloudCol;
+
+  // Back layer: small dim candles, slow scroll
+  col += candleLayer(uv * 1.4, 0.13, 0.018, 0.0030, 0.045, vec2(0.0, 0.15), 11.0, bull, bear, 0.45);
+  // Mid layer: medium candles
+  col += candleLayer(uv * 1.0, 0.20, 0.028, 0.0045, 0.085, vec2(7.3, -0.05), 23.0, bull, bear, 0.75);
+  // Front layer: larger crisp candles, faster
+  col += candleLayer(uv * 0.75, 0.30, 0.045, 0.0070, 0.140, vec2(3.1, 0.10), 47.0, bull, bear, 0.95);
+
   O = vec4(col, 1);
 }`;
 
