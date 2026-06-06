@@ -4431,7 +4431,32 @@ _META = """
 # ── Shared nav macro ─────────────────────────────────────────────────────────
 
 _NAV_CSS = """
-  nav { position: relative; z-index: 1000; overflow: visible !important; }
+  nav {
+    position: fixed; top: 0; left: 0; right: 0;
+    z-index: 1000; overflow: visible !important;
+    transition: transform .35s cubic-bezier(.4,0,.2,1), background-color .3s ease, -webkit-backdrop-filter .3s ease, backdrop-filter .3s ease, box-shadow .3s ease, border-color .3s ease, padding .25s ease;
+    will-change: transform;
+  }
+  nav.nav-hidden { transform: translateY(-110%); }
+  nav.nav-scrolled {
+    background: rgba(13,17,23,.72);
+    -webkit-backdrop-filter: saturate(180%) blur(14px);
+    backdrop-filter: saturate(180%) blur(14px);
+    box-shadow: 0 8px 32px rgba(0,0,0,.35);
+    border-bottom-color: rgba(48,54,61,.4);
+    padding-top: 10px; padding-bottom: 10px;
+  }
+  :root[data-theme="light"] nav.nav-scrolled {
+    background: rgba(255,255,255,.78);
+    box-shadow: 0 8px 32px rgba(140,150,160,.18);
+    border-bottom-color: rgba(208,215,222,.55);
+  }
+  body { padding-top: 56px; }
+  @media (max-width: 640px) { body { padding-top: 52px; } }
+  @media (prefers-reduced-motion: reduce) {
+    nav { transition: background-color .2s ease, box-shadow .2s ease; }
+    nav.nav-hidden { transform: none; }
+  }
   .nav-links { display: flex; align-items: center; gap: 4px; }
   .nav-links a { color: var(--muted); text-decoration: none; font-size: 0.9rem; padding: 6px 12px; border-radius: 6px; }
   .nav-links a:hover { color: var(--text); background: var(--bg3); }
@@ -4609,6 +4634,30 @@ function toggleTheme() {
     const btn = document.querySelector('.theme-toggle');
     if (btn) btn.textContent = saved === 'dark' ? '☀ Light' : '☾ Dark';
   });
+})();
+(function initScrollNav() {
+  let lastY = window.scrollY || 0;
+  let ticking = false;
+  function update() {
+    const nav = document.querySelector('nav');
+    if (!nav) { ticking = false; return; }
+    const y = window.scrollY;
+    nav.classList.toggle('nav-scrolled', y > 8);
+    if (y > lastY + 4 && y > 80) {
+      if (!nav.classList.contains('nav-hidden')) {
+        nav.classList.add('nav-hidden');
+        document.querySelectorAll('.drop-menu.open').forEach(m => m.classList.remove('open'));
+        document.querySelectorAll('.drop-btn.open').forEach(b => b.classList.remove('open'));
+      }
+    } else if (y < lastY - 4 || y <= 80) {
+      nav.classList.remove('nav-hidden');
+    }
+    lastY = y;
+    ticking = false;
+  }
+  window.addEventListener('scroll', function() {
+    if (!ticking) { requestAnimationFrame(update); ticking = true; }
+  }, { passive: true });
 })();
 """
 
