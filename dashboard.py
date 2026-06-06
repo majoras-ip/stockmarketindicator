@@ -63,17 +63,17 @@ def send_welcome_email(to_email: str, username: str, referral_code: str) -> None
         return
     try:
         resend.Emails.send({
-            "from": "ChartEdge <onboarding@resend.dev>",
+            "from": "ChartEdge.trade <onboarding@resend.dev>",
             "to": to_email,
-            "subject": "Welcome to ChartEdge!",
+            "subject": "Welcome to ChartEdge.trade!",
             "html": f"""
             <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:520px;margin:0 auto;padding:32px;background:#0d1117;color:#e6edf3;border-radius:10px;">
-              <h1 style="color:#58a6ff;margin-bottom:8px;">Welcome to ChartEdge!</h1>
+              <h1 style="color:#58a6ff;margin-bottom:8px;">Welcome to ChartEdge.trade!</h1>
               <p style="color:#8b949e;margin-bottom:24px;">Hi {username}, your account is ready. Start copying free Pine Script indicators to your TradingView charts in seconds.</p>
               <a href="{APP_URL}/indicators" style="display:inline-block;background:#58a6ff;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:600;margin-bottom:24px;">Browse Indicators →</a>
               <hr style="border:none;border-top:1px solid #30363d;margin:24px 0;">
               <p style="color:#8b949e;font-size:.88rem;">Your referral code: <strong style="color:#e6edf3;letter-spacing:2px;">{referral_code}</strong><br>Share it with friends — they get 7 days of Pro free when they sign up.</p>
-              <p style="color:#636c76;font-size:.78rem;margin-top:24px;">© 2026 ChartEdge · Not financial advice</p>
+              <p style="color:#636c76;font-size:.78rem;margin-top:24px;">© 2026 ChartEdge.trade · Not financial advice</p>
             </div>
             """,
         })
@@ -593,7 +593,7 @@ def api_pine():
 def _inject_expiry(script: str, username: str) -> str:
     """
     Embeds daily expiry checks throughout a Pine Script so it breaks
-    after the generation date, forcing users to return to ChartEdge.
+    after the generation date, forcing users to return to ChartEdge.trade.
     """
     from datetime import date as _date
     today = _date.today()
@@ -641,7 +641,7 @@ def _inject_expiry(script: str, username: str) -> str:
 
         # After indicator(...) declaration — insert header + check A
         if not indicator_done and line.strip().startswith("indicator("):
-            out.append(f'// ChartEdge \u00b7 {user_lbl} \u00b7 {today.strftime("%b %d %Y")} \u00b7 {site}')
+            out.append(f'// ChartEdge.trade \u00b7 {user_lbl} \u00b7 {today.strftime("%b %d %Y")} \u00b7 {site}')
             out.append(chk_a)
             indicator_done = True
 
@@ -672,7 +672,7 @@ def _inject_expiry(script: str, username: str) -> str:
         wrapped.append(line)
 
     # Final guard at very end — belt + suspenders
-    wrapped.append(f'\n// ChartEdge guard')
+    wrapped.append(f'\n// ChartEdge.trade guard')
     wrapped.append(f'if not _cedge_ok\n    runtime.error("{msg}")')
 
     return "\n".join(wrapped)
@@ -2451,7 +2451,7 @@ def profile():
 
 ADMIN_LOGIN_HTML = """<!DOCTYPE html>
 <html data-theme="dark">
-<head><meta charset="UTF-8"><title>Admin · ChartEdge</title>
+<head><meta charset="UTF-8"><title>Admin · ChartEdge.trade</title>
 <style>
   :root{--bg:#0d1117;--bg2:#161b22;--text:#e6edf3;--muted:#8b949e;--border:#30363d;--accent:#58a6ff;}
   *{box-sizing:border-box;margin:0;padding:0;}
@@ -2474,7 +2474,7 @@ ADMIN_LOGIN_HTML = """<!DOCTYPE html>
 
 ADMIN_CODES_HTML = """<!DOCTYPE html>
 <html data-theme="dark">
-<head><meta charset="UTF-8"><title>Studio · ChartEdge</title>
+<head><meta charset="UTF-8"><title>Studio · ChartEdge.trade</title>
 <style>
   :root{--bg:#0d1117;--bg2:#161b22;--text:#e6edf3;--muted:#8b949e;--border:#30363d;--accent:#58a6ff;--green:#3fb950;}
   *{box-sizing:border-box;margin:0;padding:0;}
@@ -2502,7 +2502,7 @@ ADMIN_CODES_HTML = """<!DOCTYPE html>
   .section-title{font-size:.95rem;font-weight:600;margin-bottom:12px;color:var(--text);}
 </style></head>
 <body>
-<h1>ChartEdge <span>Studio</span></h1>
+<h1>ChartEdge.trade <span>Studio</span></h1>
 <p style="color:var(--muted);font-size:.85rem;margin-bottom:24px;">Admin dashboard · promo codes · user management</p>
 
 <!-- Stats -->
@@ -4413,12 +4413,12 @@ _META = """
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📈</text></svg>">
   <meta name="description" content="Free TradingView Pine Script indicators — VWAP, RSI, MACD, Supertrend, Bollinger Squeeze and more. Works on any free TradingView account.">
   <meta name="keywords" content="TradingView indicators, Pine Script, free indicators, VWAP, RSI, MACD, Bollinger Bands, Supertrend">
-  <meta property="og:title" content="ChartEdge — Free TradingView Indicators">
+  <meta property="og:title" content="ChartEdge.trade — Free TradingView Indicators">
   <meta property="og:description" content="Free Pine Script indicators for TradingView. No paid plan required.">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://chartedge.trade">
   <meta name="twitter:card" content="summary">
-  <meta name="twitter:title" content="ChartEdge — Free TradingView Indicators">
+  <meta name="twitter:title" content="ChartEdge.trade — Free TradingView Indicators">
   <meta name="twitter:description" content="Free Pine Script indicators for TradingView. No paid plan required.">""" + _GA_SCRIPT + """
   <script>
     (function() {
@@ -4617,7 +4617,7 @@ PROFILE_HTML = """<!DOCTYPE html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">""" + _META + """
-  <title>Profile · ChartEdge</title>
+  <title>Profile · ChartEdge.trade</title>
   <style>
     :root[data-theme="dark"]  { --bg:#0d1117; --bg2:#161b22; --bg3:#21262d; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --green:#3fb950; --red:#f85149; }
     :root[data-theme="light"] { --bg:#ffffff; --bg2:#f6f8fa; --bg3:#eaeef2; --border:#d0d7de; --text:#1f2328; --muted:#636c76; --accent:#0969da; --green:#1a7f37; --red:#cf222e; }
@@ -4658,7 +4658,7 @@ PROFILE_HTML = """<!DOCTYPE html>
 </head>
 <body>
 <nav>
-  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span></a>
+  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span><span style="color:var(--muted);font-weight:500;">.trade</span></a>
   <button class="hamburger" onclick="toggleMobileNav(event)">☰</button>
   <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
 </nav>
@@ -4725,7 +4725,7 @@ PROFILE_HTML = """<!DOCTYPE html>
   </div>
 </div>
 
-<footer>© 2026 ChartEdge</footer>
+<footer>© 2026 ChartEdge.trade</footer>
 <script>""" + _THEME_JS + """</script>
 </body>
 </html>"""
@@ -4736,7 +4736,7 @@ REDEEM_HTML = """<!DOCTYPE html>
 <html data-theme="dark">
 <head>
   <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Redeem Code · ChartEdge</title>
+  <title>Redeem Code · ChartEdge.trade</title>
 """ + _META + """
   <style>
     :root{--bg:#0d1117;--bg2:#161b22;--text:#e6edf3;--muted:#8b949e;--border:#30363d;--accent:#58a6ff;}
@@ -4769,7 +4769,7 @@ REDEEM_HTML = """<!DOCTYPE html>
 </head>
 <body>
 <nav>
-  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span></a>
+  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span><span style="color:var(--muted);font-weight:500;">.trade</span></a>
   <button class="hamburger" onclick="toggleMobileNav(event)">☰</button>
   <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
 </nav>
@@ -4783,7 +4783,7 @@ REDEEM_HTML = """<!DOCTYPE html>
     <button class="btn-redeem" type="submit">Redeem</button>
   </form>
 </div>
-<footer>© 2026 ChartEdge · <a href="/privacy" style="color:inherit">Privacy</a> · <a href="/terms" style="color:inherit">Terms</a></footer>
+<footer>© 2026 ChartEdge.trade · <a href="/privacy" style="color:inherit">Privacy</a> · <a href="/terms" style="color:inherit">Terms</a></footer>
 <script>""" + _THEME_JS + """</script>
 </body>
 </html>"""
@@ -4793,7 +4793,7 @@ BILLING_HTML = """<!DOCTYPE html>
 <html data-theme="dark">
 <head>
   <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Billing · ChartEdge</title>
+  <title>Billing · ChartEdge.trade</title>
 """ + _META + """
   <style>
     :root{--bg:#0d1117;--bg2:#161b22;--text:#e6edf3;--muted:#8b949e;--border:#30363d;--accent:#58a6ff;}
@@ -4827,7 +4827,7 @@ BILLING_HTML = """<!DOCTYPE html>
 </head>
 <body>
 <nav>
-  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span></a>
+  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span><span style="color:var(--muted);font-weight:500;">.trade</span></a>
   <button class="hamburger" onclick="toggleMobileNav(event)">☰</button>
   <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
 </nav>
@@ -4850,7 +4850,7 @@ BILLING_HTML = """<!DOCTYPE html>
   </div>
   <a href="/indicators" style="color:var(--muted);font-size:.85rem;">← Back to indicators</a>
 </div>
-<footer>© 2026 ChartEdge · <a href="/privacy" style="color:inherit">Privacy</a> · <a href="/terms" style="color:inherit">Terms</a></footer>
+<footer>© 2026 ChartEdge.trade · <a href="/privacy" style="color:inherit">Privacy</a> · <a href="/terms" style="color:inherit">Terms</a></footer>
 <script>""" + _THEME_JS + """</script>
 </body>
 </html>"""
@@ -4860,7 +4860,7 @@ PRICING_HTML = """<!DOCTYPE html>
 <html data-theme="dark">
 <head>
   <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Pricing · ChartEdge</title>
+  <title>Pricing · ChartEdge.trade</title>
 """ + _META + """
   <style>
     :root{--bg:#0d1117;--bg2:#161b22;--text:#e6edf3;--muted:#8b949e;--border:#30363d;--accent:#58a6ff;}
@@ -4912,7 +4912,7 @@ PRICING_HTML = """<!DOCTYPE html>
 </head>
 <body>
 <nav>
-  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span></a>
+  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span><span style="color:var(--muted);font-weight:500;">.trade</span></a>
   <button class="hamburger" onclick="toggleMobileNav(event)">☰</button>
   <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
 </nav>
@@ -5042,7 +5042,7 @@ PRICING_HTML = """<!DOCTYPE html>
     </div>
   </div>
 </div>
-<footer>© 2026 ChartEdge · <a href="/privacy" style="color:inherit">Privacy</a> · <a href="/terms" style="color:inherit">Terms</a></footer>
+<footer>© 2026 ChartEdge.trade · <a href="/privacy" style="color:inherit">Privacy</a> · <a href="/terms" style="color:inherit">Terms</a></footer>
 <script>
 var yearly = false;
 function toggleBilling() {
@@ -5076,7 +5076,7 @@ AUTH_HTML = """<!DOCTYPE html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">""" + _META + """
-  <title>{{ 'Register' if mode == 'register' else 'Login' }} — ChartEdge</title>
+  <title>{{ 'Register' if mode == 'register' else 'Login' }} — ChartEdge.trade</title>
   {% if mode == 'register' %}<script src="https://js.hcaptcha.com/1/api.js" async defer></script>{% endif %}
   <style>
     :root[data-theme="dark"]  { --bg:#0d1117; --bg2:#161b22; --bg3:#21262d; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --red:#f85149; }
@@ -5116,7 +5116,7 @@ AUTH_HTML = """<!DOCTYPE html>
 </head>
 <body>
 <nav>
-  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span></a>
+  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span><span style="color:var(--muted);font-weight:500;">.trade</span></a>
   <div class="nav-links">
 """ + _NAV_LINKS + """
   </div>
@@ -5180,7 +5180,7 @@ FAVORITES_HTML = """<!DOCTYPE html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">""" + _META + """
-  <title>Favorites — ChartEdge</title>
+  <title>Favorites — ChartEdge.trade</title>
   <style>
     :root[data-theme="dark"]  { --bg:#0d1117; --bg2:#161b22; --bg3:#21262d; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --red:#f85149; }
     :root[data-theme="light"] { --bg:#ffffff; --bg2:#f6f8fa; --bg3:#eaeef2; --border:#d0d7de; --text:#1f2328; --muted:#636c76; --accent:#0969da; --red:#cf222e; }
@@ -5209,7 +5209,7 @@ FAVORITES_HTML = """<!DOCTYPE html>
 </head>
 <body>
 <nav>
-  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span></a>
+  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span><span style="color:var(--muted);font-weight:500;">.trade</span></a>
   <button class="hamburger" onclick="toggleMobileNav(event)">☰</button>
   <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
 </nav>
@@ -5235,7 +5235,7 @@ FAVORITES_HTML = """<!DOCTYPE html>
   </div>
   {% endif %}
 </div>
-<footer>© 2026 ChartEdge · Free Pine Script indicators · Not financial advice · <a href="/privacy" style="color:inherit">Privacy</a> · <a href="/terms" style="color:inherit">Terms</a></footer>
+<footer>© 2026 ChartEdge.trade · Free Pine Script indicators · Not financial advice · <a href="/privacy" style="color:inherit">Privacy</a> · <a href="/terms" style="color:inherit">Terms</a></footer>
 <script>""" + _THEME_JS + """</script>
 </body>
 </html>"""
@@ -5248,7 +5248,7 @@ REQUEST_HTML = """<!DOCTYPE html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">""" + _META + """
-  <title>Request an Indicator — ChartEdge</title>
+  <title>Request an Indicator — ChartEdge.trade</title>
   <style>
     :root[data-theme="dark"]  { --bg:#0d1117; --bg2:#161b22; --bg3:#21262d; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --green:#3fb950; --red:#f85149; }
     :root[data-theme="light"] { --bg:#ffffff; --bg2:#f6f8fa; --bg3:#eaeef2; --border:#d0d7de; --text:#1f2328; --muted:#636c76; --accent:#0969da; --green:#1a7f37; --red:#cf222e; }
@@ -5295,7 +5295,7 @@ REQUEST_HTML = """<!DOCTYPE html>
 </head>
 <body>
 <nav>
-  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span></a>
+  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span><span style="color:var(--muted);font-weight:500;">.trade</span></a>
   <button class="hamburger" onclick="toggleMobileNav(event)">☰</button>
   <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
 </nav>
@@ -5349,7 +5349,7 @@ REQUEST_HTML = """<!DOCTYPE html>
     {% endif %}
   </div>
 </div>
-<footer>© 2026 ChartEdge · Free Pine Script indicators · Not financial advice · <a href="/privacy" style="color:inherit">Privacy</a> · <a href="/terms" style="color:inherit">Terms</a></footer>
+<footer>© 2026 ChartEdge.trade · Free Pine Script indicators · Not financial advice · <a href="/privacy" style="color:inherit">Privacy</a> · <a href="/terms" style="color:inherit">Terms</a></footer>
 <script>
 async function vote(id) {
   const res  = await fetch('/api/request/' + id + '/vote', {method: 'POST'});
@@ -5514,7 +5514,7 @@ INDICATORS_HTML = """<!DOCTYPE html>
 </head>
 <body>
 <nav>
-  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span></a>
+  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span><span style="color:var(--muted);font-weight:500;">.trade</span></a>
   <button class="hamburger" onclick="toggleMobileNav(event)">☰</button>
   <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
 </nav>
@@ -5612,7 +5612,7 @@ INDICATORS_HTML = """<!DOCTYPE html>
 
 <div class="copy-toast" id="copy-toast">✓ Copied to clipboard</div>
 
-<footer>© 2026 ChartEdge · Free Pine Script indicators · Not financial advice · <a href="/privacy" style="color:inherit">Privacy</a> · <a href="/terms" style="color:inherit">Terms</a></footer>
+<footer>© 2026 ChartEdge.trade · Free Pine Script indicators · Not financial advice · <a href="/privacy" style="color:inherit">Privacy</a> · <a href="/terms" style="color:inherit">Terms</a></footer>
 
 <script>
 const COPY_TOAST_ENABLED = {{ copy_toast }};
@@ -5793,7 +5793,7 @@ HOME_HTML = """<!DOCTYPE html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">""" + _META + """
-  <title>ChartEdge — Market Intelligence for Retail Traders</title>
+  <title>ChartEdge.trade — Market Intelligence for Retail Traders</title>
   <style>
     :root[data-theme="dark"]  { --bg:#0d1117; --bg2:#161b22; --bg3:#21262d; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --green:#3fb950; --red:#f85149; }
     :root[data-theme="light"] { --bg:#ffffff; --bg2:#f6f8fa; --bg3:#eaeef2; --border:#d0d7de; --text:#1f2328; --muted:#636c76; --accent:#0969da; --green:#1a7f37; --red:#cf222e; }
@@ -5960,7 +5960,7 @@ HOME_HTML = """<!DOCTYPE html>
 </head>
 <body>
 <nav>
-  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span></a>
+  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span><span style="color:var(--muted);font-weight:500;">.trade</span></a>
   <button class="hamburger" onclick="toggleMobileNav(event)">☰</button>
   <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
 </nav>
@@ -6002,7 +6002,7 @@ HOME_HTML = """<!DOCTYPE html>
     Live market data · Options · Insider trades · AI forecasts
   </div>
   <h1>Stop trading <span>blind.</span></h1>
-  <p>ChartEdge gives retail traders the same intelligence layer used by professionals — options flow, insider activity, gamma exposure, LSTM forecasts, and 20+ Pine Script indicators in one dashboard.</p>
+  <p>ChartEdge.trade gives retail traders the same intelligence layer used by professionals — options flow, insider activity, gamma exposure, LSTM forecasts, and 20+ Pine Script indicators in one dashboard.</p>
   <div class="hero-btns">
     {% if not current_user %}<a class="btn-primary" href="/register">Get Started Free</a>{% endif %}
     <a class="btn-secondary" href="/indicators">Browse Indicators</a>
@@ -6269,7 +6269,7 @@ HOME_HTML = """<!DOCTYPE html>
       <span style="background:#0d3349;border:1px solid #1f6feb;color:#58a6ff;font-size:.72rem;font-weight:700;padding:3px 12px;border-radius:20px;letter-spacing:.06em;">AI-POWERED</span>
     </div>
     <h2 style="font-size:1.6rem;text-align:center;margin-bottom:12px;">Not just indicators. <span style="color:#58a6ff;">Machine learning</span> built in.</h2>
-    <p style="text-align:center;color:var(--muted);font-size:.93rem;max-width:600px;margin:0 auto 48px;line-height:1.7;">The forecast engine running behind ChartEdge was trained on years of real market data using an LSTM neural network — the same architecture used in institutional quant research.</p>
+    <p style="text-align:center;color:var(--muted);font-size:.93rem;max-width:600px;margin:0 auto 48px;line-height:1.7;">The forecast engine running behind ChartEdge.trade was trained on years of real market data using an LSTM neural network — the same architecture used in institutional quant research.</p>
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:20px;">
       <div style="background:rgba(255,255,255,.03);border:1px solid #21262d;border-radius:10px;padding:24px;">
         <div style="font-size:1.5rem;margin-bottom:10px;">🧠</div>
@@ -6366,9 +6366,9 @@ HOME_HTML = """<!DOCTYPE html>
 
 <hr class="divider">
 
-<!-- Why ChartEdge -->
+<!-- Why ChartEdge.trade -->
 <div class="section">
-  <h2>Why <span>ChartEdge</span>?</h2>
+  <h2>Why <span>ChartEdge.trade</span>?</h2>
   <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px;">
     <div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:22px;">
       <div style="font-size:1.4rem;margin-bottom:10px;">🔓</div>
@@ -6378,7 +6378,7 @@ HOME_HTML = """<!DOCTYPE html>
     <div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:22px;">
       <div style="font-size:1.4rem;margin-bottom:10px;">💸</div>
       <h3 style="font-size:.9rem;font-weight:700;margin-bottom:6px;">Fraction of the cost</h3>
-      <p style="color:var(--muted);font-size:.8rem;line-height:1.55;">Comparable platforms charge $50–$200/mo. ChartEdge Pro is $15.99/mo with a free trial — no commitment required.</p>
+      <p style="color:var(--muted);font-size:.8rem;line-height:1.55;">Comparable platforms charge $50–$200/mo. ChartEdge.trade Pro is $15.99/mo with a free trial — no commitment required.</p>
     </div>
     <div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:22px;">
       <div style="font-size:1.4rem;margin-bottom:10px;">⚡</div>
@@ -6404,7 +6404,7 @@ HOME_HTML = """<!DOCTYPE html>
         Do the indicators work on a free TradingView account?
         <span class="faq-chevron">▼</span>
       </div>
-      <div class="faq-a">Yes — all Pine Script indicators on ChartEdge are built with TradingView's free tier in mind. They use Pine Script v6 and do not require any TradingView paid plan to run.</div>
+      <div class="faq-a">Yes — all Pine Script indicators on ChartEdge.trade are built with TradingView's free tier in mind. They use Pine Script v6 and do not require any TradingView paid plan to run.</div>
     </div>
     <div class="faq-item">
       <div class="faq-q" onclick="toggleFaq(this)">
@@ -6446,26 +6446,26 @@ HOME_HTML = """<!DOCTYPE html>
         What is Pine Script?
         <span class="faq-chevron">▼</span>
       </div>
-      <div class="faq-a">Pine Script is TradingView's built-in scripting language for creating custom indicators and strategies directly on your charts. ChartEdge generates ready-to-use Pine Script v6 code — you just copy it and paste it into TradingView's Pine Script editor, and it appears on your chart instantly. No coding knowledge required.</div>
+      <div class="faq-a">Pine Script is TradingView's built-in scripting language for creating custom indicators and strategies directly on your charts. ChartEdge.trade generates ready-to-use Pine Script v6 code — you just copy it and paste it into TradingView's Pine Script editor, and it appears on your chart instantly. No coding knowledge required.</div>
     </div>
     <div class="faq-item">
       <div class="faq-q" onclick="toggleFaq(this)">
-        What is ChartEdge?
+        What is ChartEdge.trade?
         <span class="faq-chevron">▼</span>
       </div>
-      <div class="faq-a">ChartEdge is a market intelligence dashboard built for retail traders. It combines 20+ free Pine Script indicators with professional-grade tools including live options flow, insider trading disclosures, gamma exposure charts, LSTM volatility forecasts, a pre-market scanner, and more — all in one place. Most tools are available free or with a 7-day trial on paid plans.</div>
+      <div class="faq-a">ChartEdge.trade is a market intelligence dashboard built for retail traders. It combines 20+ free Pine Script indicators with professional-grade tools including live options flow, insider trading disclosures, gamma exposure charts, LSTM volatility forecasts, a pre-market scanner, and more — all in one place. Most tools are available free or with a 7-day trial on paid plans.</div>
     </div>
     <div class="faq-item">
       <div class="faq-q" onclick="toggleFaq(this)">
         Can I use a different trading platform?
         <span class="faq-chevron">▼</span>
       </div>
-      <div class="faq-a">The Pine Script indicators are exclusive to TradingView — they won't work on ThinkOrSwim, MetaTrader, or other platforms. However, all of ChartEdge's other tools (options flow, insider trading, gamma exposure, market heatmap, earnings calendar, etc.) run entirely in your browser and work alongside any broker or trading platform you use.</div>
+      <div class="faq-a">The Pine Script indicators are exclusive to TradingView — they won't work on ThinkOrSwim, MetaTrader, or other platforms. However, all of ChartEdge.trade's other tools (options flow, insider trading, gamma exposure, market heatmap, earnings calendar, etc.) run entirely in your browser and work alongside any broker or trading platform you use.</div>
     </div>
   </div>
 </div>
 
-<footer>© 2026 ChartEdge · Free Pine Script indicators · Not financial advice · <a href="/privacy" style="color:inherit">Privacy</a> · <a href="/terms" style="color:inherit">Terms</a></footer>
+<footer>© 2026 ChartEdge.trade · Free Pine Script indicators · Not financial advice · <a href="/privacy" style="color:inherit">Privacy</a> · <a href="/terms" style="color:inherit">Terms</a></footer>
 
 <script>
 """ + _THEME_JS + """
@@ -6611,7 +6611,7 @@ GENERATOR_HTML = """<!DOCTYPE html>
 <body>
 
 <nav>
-  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span></a>
+  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span><span style="color:var(--muted);font-weight:500;">.trade</span></a>
   <div class="nav-links">
 """ + _NAV_LINKS + """
   </div>
@@ -6685,7 +6685,7 @@ GENERATOR_HTML = """<!DOCTYPE html>
 </div>
 
 <footer>
-  © 2026 ChartEdge · LSTM volatility prediction · Not financial advice
+  © 2026 ChartEdge.trade · LSTM volatility prediction · Not financial advice
 </footer>
 
 <script>
@@ -6718,7 +6718,7 @@ BACKTEST_HTML = """<!DOCTYPE html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">""" + _META + """
-  <title>Backtester · ChartEdge</title>
+  <title>Backtester · ChartEdge.trade</title>
   <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
   <style>
     :root[data-theme="dark"]  { --bg:#0d1117; --bg2:#161b22; --bg3:#21262d; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --green:#3fb950; --red:#f85149; }
@@ -6769,7 +6769,7 @@ BACKTEST_HTML = """<!DOCTYPE html>
 </head>
 <body>
 <nav>
-  <a class="logo" href="/">📈 ChartEdge</a>
+  <a class="logo" href="/">📈 ChartEdge.trade</a>
   <div class="nav-links">""" + _NAV_LINKS + """
   </div>
 </nav>
@@ -7107,7 +7107,7 @@ ECONOMIC_HTML = """<!DOCTYPE html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">""" + _META + """
-  <title>Economic Calendar — ChartEdge</title>
+  <title>Economic Calendar — ChartEdge.trade</title>
   <style>
     :root[data-theme="dark"]  { --bg:#0d1117; --bg2:#161b22; --bg3:#21262d; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --green:#3fb950; --red:#f85149; --yellow:#d29922; }
     :root[data-theme="light"] { --bg:#ffffff; --bg2:#f6f8fa; --bg3:#eaeef2; --border:#d0d7de; --text:#1f2328; --muted:#636c76; --accent:#0969da; --green:#1a7f37; --red:#cf222e; --yellow:#9a6700; }
@@ -7148,7 +7148,7 @@ ECONOMIC_HTML = """<!DOCTYPE html>
 </head>
 <body>
 <nav>
-  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span></a>
+  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span><span style="color:var(--muted);font-weight:500;">.trade</span></a>
   <button class="hamburger" onclick="toggleMobileNav(event)">☰</button>
   <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
 </nav>
@@ -7167,7 +7167,7 @@ ECONOMIC_HTML = """<!DOCTYPE html>
     <div class="loading"><div class="spin"></div>Loading economic events…</div>
   </div>
 </div>
-<footer>© 2026 ChartEdge · Data via Finnhub · Not financial advice · <a href="/privacy" style="color:inherit">Privacy</a> · <a href="/terms" style="color:inherit">Terms</a></footer>
+<footer>© 2026 ChartEdge.trade · Data via Finnhub · Not financial advice · <a href="/privacy" style="color:inherit">Privacy</a> · <a href="/terms" style="color:inherit">Terms</a></footer>
 <script>
 let _allEvents = [];
 let _activeFilter = 'week';
@@ -7309,7 +7309,7 @@ EARNINGS_HTML = """<!DOCTYPE html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">""" + _META + """
-  <title>Earnings Calendar — ChartEdge</title>
+  <title>Earnings Calendar — ChartEdge.trade</title>
   <style>
     :root[data-theme="dark"]  { --bg:#0d1117; --bg2:#161b22; --bg3:#21262d; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --green:#3fb950; --red:#f85149; }
     :root[data-theme="light"] { --bg:#ffffff; --bg2:#f6f8fa; --bg3:#eaeef2; --border:#d0d7de; --text:#1f2328; --muted:#636c76; --accent:#0969da; --green:#1a7f37; --red:#cf222e; }
@@ -7338,7 +7338,7 @@ EARNINGS_HTML = """<!DOCTYPE html>
 </head>
 <body>
 <nav>
-  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span></a>
+  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span><span style="color:var(--muted);font-weight:500;">.trade</span></a>
   <button class="hamburger" onclick="toggleMobileNav(event)">☰</button>
   <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
 </nav>
@@ -7353,7 +7353,7 @@ EARNINGS_HTML = """<!DOCTYPE html>
   </div>
   <div id="earnings-content" style="display:none"></div>
 </div>
-<footer>© 2026 ChartEdge · Not financial advice · <a href="/privacy" style="color:inherit">Privacy</a> · <a href="/terms" style="color:inherit">Terms</a></footer>
+<footer>© 2026 ChartEdge.trade · Not financial advice · <a href="/privacy" style="color:inherit">Privacy</a> · <a href="/terms" style="color:inherit">Terms</a></footer>
 <script>
 async function loadEarnings() {
   try {
@@ -7388,7 +7388,7 @@ DIVIDENDS_HTML = """<!DOCTYPE html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">""" + _META + """
-  <title>Dividends Calendar · ChartEdge</title>
+  <title>Dividends Calendar · ChartEdge.trade</title>
   <style>
     :root[data-theme="dark"]  { --bg:#0d1117; --bg2:#161b22; --bg3:#21262d; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --green:#3fb950; --red:#f85149; }
     :root[data-theme="light"] { --bg:#ffffff; --bg2:#f6f8fa; --bg3:#eaeef2; --border:#d0d7de; --text:#1f2328; --muted:#636c76; --accent:#0969da; --green:#1a7f37; --red:#cf222e; }
@@ -7420,7 +7420,7 @@ DIVIDENDS_HTML = """<!DOCTYPE html>
 </head>
 <body>
 <nav>
-  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span></a>
+  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span><span style="color:var(--muted);font-weight:500;">.trade</span></a>
   <button class="hamburger" onclick="toggleMobileNav(event)">☰</button>
   <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
 </nav>
@@ -7433,7 +7433,7 @@ DIVIDENDS_HTML = """<!DOCTYPE html>
     <div class="loading"><div class="spin"></div><p style="margin-top:14px">Loading dividend data…</p></div>
   </div>
 </div>
-<footer>© 2026 ChartEdge · Dividend data from Yahoo Finance · Not financial advice · <a href="/privacy" style="color:inherit">Privacy</a></footer>
+<footer>© 2026 ChartEdge.trade · Dividend data from Yahoo Finance · Not financial advice · <a href="/privacy" style="color:inherit">Privacy</a></footer>
 <script>
 function loadDividends() {
   fetch('/api/dividends')
@@ -7528,7 +7528,7 @@ CRYPTO_FEARGREED_HTML = """<!DOCTYPE html>
 <html data-theme="dark">
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">""" + _META + """
-  <title>Crypto Fear &amp; Greed · ChartEdge</title>
+  <title>Crypto Fear &amp; Greed · ChartEdge.trade</title>
   <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
   <style>""" + _CRYPTO_PAGE_CSS + _NAV_CSS + """
     .gauge-wrap { display:flex; flex-direction:column; align-items:center; padding:28px 0 16px; }
@@ -7541,7 +7541,7 @@ CRYPTO_FEARGREED_HTML = """<!DOCTYPE html>
 </head>
 <body>
 <nav>
-  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span></a>
+  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span><span style="color:var(--muted);font-weight:500;">.trade</span></a>
   <button class="hamburger" onclick="toggleMobileNav(event)">☰</button>
   <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
 </nav>
@@ -7561,7 +7561,7 @@ CRYPTO_FEARGREED_HTML = """<!DOCTYPE html>
     <div id="hist-chart"><div class="loading">Loading…</div></div>
   </div>
 </div>
-<footer>© 2026 ChartEdge · Not financial advice</footer>
+<footer>© 2026 ChartEdge.trade · Not financial advice</footer>
 <script>""" + _THEME_JS + """
 fetch('/api/crypto/feargreed').then(function(r){return r.json();}).then(function(d){
   if(d.error){document.querySelector('.page').innerHTML='<div class="err">Error: '+d.error+'</div>';return;}
@@ -7618,7 +7618,7 @@ CRYPTO_DOMINANCE_HTML = """<!DOCTYPE html>
 <html data-theme="dark">
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">""" + _META + """
-  <title>BTC Dominance · ChartEdge</title>
+  <title>BTC Dominance · ChartEdge.trade</title>
   <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
   <style>""" + _CRYPTO_PAGE_CSS + _NAV_CSS + """
     #dom-chart { min-height:340px; }
@@ -7626,7 +7626,7 @@ CRYPTO_DOMINANCE_HTML = """<!DOCTYPE html>
 </head>
 <body>
 <nav>
-  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span></a>
+  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span><span style="color:var(--muted);font-weight:500;">.trade</span></a>
   <button class="hamburger" onclick="toggleMobileNav(event)">☰</button>
   <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
 </nav>
@@ -7638,7 +7638,7 @@ CRYPTO_DOMINANCE_HTML = """<!DOCTYPE html>
     <div id="dom-chart"><div class="loading">Loading…</div></div>
   </div>
 </div>
-<footer>© 2026 ChartEdge · Not financial advice</footer>
+<footer>© 2026 ChartEdge.trade · Not financial advice</footer>
 <script>""" + _THEME_JS + """
 function fmt(n){if(!n)return'—';if(n>=1e12)return'$'+(n/1e12).toFixed(2)+'T';if(n>=1e9)return'$'+(n/1e9).toFixed(2)+'B';return'$'+n.toLocaleString();}
 fetch('/api/crypto/dominance').then(function(r){return r.json();}).then(function(d){
@@ -7671,7 +7671,7 @@ CRYPTO_HEATMAP_HTML = """<!DOCTYPE html>
 <html data-theme="dark">
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">""" + _META + """
-  <title>Crypto Heatmap · ChartEdge</title>
+  <title>Crypto Heatmap · ChartEdge.trade</title>
   <script src="https://d3js.org/d3.v7.min.js"></script>
   <style>""" + _CRYPTO_PAGE_CSS + _NAV_CSS + """
     #hm-wrap { width:100%; min-height:520px; background:var(--bg2); border:1px solid var(--border); border-radius:8px; overflow:hidden; position:relative; }
@@ -7685,7 +7685,7 @@ CRYPTO_HEATMAP_HTML = """<!DOCTYPE html>
 </head>
 <body>
 <nav>
-  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span></a>
+  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span><span style="color:var(--muted);font-weight:500;">.trade</span></a>
   <button class="hamburger" onclick="toggleMobileNav(event)">☰</button>
   <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
 </nav>
@@ -7701,7 +7701,7 @@ CRYPTO_HEATMAP_HTML = """<!DOCTYPE html>
     <div class="lsq" style="background:#22c55e"></div>≥+5%
   </div>
 </div>
-<footer>© 2026 ChartEdge · Not financial advice</footer>
+<footer>© 2026 ChartEdge.trade · Not financial advice</footer>
 <script>""" + _THEME_JS + """
 function chgColor(v){
   if(v<=-5)return'#b91c1c';if(v<=-2)return'#f85149';if(v<0)return'#6b2020';
@@ -7740,7 +7740,7 @@ CRYPTO_FUNDING_HTML = """<!DOCTYPE html>
 <html data-theme="dark">
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">""" + _META + """
-  <title>Funding Rates · ChartEdge</title>
+  <title>Funding Rates · ChartEdge.trade</title>
   <style>""" + _CRYPTO_PAGE_CSS + _NAV_CSS + """
     .rate-pos { color:var(--green); font-weight:700; }
     .rate-neg { color:var(--red);   font-weight:700; }
@@ -7750,7 +7750,7 @@ CRYPTO_FUNDING_HTML = """<!DOCTYPE html>
 </head>
 <body>
 <nav>
-  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span></a>
+  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span><span style="color:var(--muted);font-weight:500;">.trade</span></a>
   <button class="hamburger" onclick="toggleMobileNav(event)">☰</button>
   <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
 </nav>
@@ -7764,7 +7764,7 @@ CRYPTO_FUNDING_HTML = """<!DOCTYPE html>
     <div id="tbl-wrap"><div class="loading">Loading…</div></div>
   </div>
 </div>
-<footer>© 2026 ChartEdge · Not financial advice</footer>
+<footer>© 2026 ChartEdge.trade · Not financial advice</footer>
 <script>""" + _THEME_JS + """
 var _rows=[];
 function filterTable(){
@@ -7802,7 +7802,7 @@ CRYPTO_ONCHAIN_HTML = """<!DOCTYPE html>
 <html data-theme="dark">
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">""" + _META + """
-  <title>On-Chain Metrics · ChartEdge</title>
+  <title>On-Chain Metrics · ChartEdge.trade</title>
   <style>""" + _CRYPTO_PAGE_CSS + _NAV_CSS + """
     .section-title { font-size:.75rem; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); margin:24px 0 10px; }
     .coin-header { display:flex; align-items:center; gap:10px; margin-bottom:12px; }
@@ -7814,7 +7814,7 @@ CRYPTO_ONCHAIN_HTML = """<!DOCTYPE html>
 </head>
 <body>
 <nav>
-  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span></a>
+  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span><span style="color:var(--muted);font-weight:500;">.trade</span></a>
   <button class="hamburger" onclick="toggleMobileNav(event)">☰</button>
   <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
 </nav>
@@ -7823,7 +7823,7 @@ CRYPTO_ONCHAIN_HTML = """<!DOCTYPE html>
   <p class="sub">Bitcoin network stats + BTC &amp; ETH market data · updates every 30 min</p>
   <div id="content"><div class="loading">Loading…</div></div>
 </div>
-<footer>© 2026 ChartEdge · Not financial advice</footer>
+<footer>© 2026 ChartEdge.trade · Not financial advice</footer>
 <script>""" + _THEME_JS + """
 function fmt(n){if(!n)return'—';if(n>=1e12)return'$'+(n/1e12).toFixed(2)+'T';if(n>=1e9)return'$'+(n/1e9).toFixed(2)+'B';if(n>=1e6)return'$'+(n/1e6).toFixed(2)+'M';return'$'+n.toLocaleString();}
 function fmtN(n){if(!n)return'—';if(n>=1e9)return(n/1e9).toFixed(2)+'B';if(n>=1e6)return(n/1e6).toFixed(2)+'M';if(n>=1e3)return(n/1e3).toFixed(1)+'K';return n.toLocaleString();}
@@ -7880,7 +7880,7 @@ CRYPTO_LIQUIDATIONS_HTML = """<!DOCTYPE html>
 <html data-theme="dark">
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">""" + _META + """
-  <title>Liquidation Map · ChartEdge</title>
+  <title>Liquidation Map · ChartEdge.trade</title>
   <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
   <style>""" + _CRYPTO_PAGE_CSS + _NAV_CSS + """
     #liq-chart { min-height:360px; }
@@ -7888,7 +7888,7 @@ CRYPTO_LIQUIDATIONS_HTML = """<!DOCTYPE html>
 </head>
 <body>
 <nav>
-  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span></a>
+  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span><span style="color:var(--muted);font-weight:500;">.trade</span></a>
   <button class="hamburger" onclick="toggleMobileNav(event)">☰</button>
   <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
 </nav>
@@ -7903,7 +7903,7 @@ CRYPTO_LIQUIDATIONS_HTML = """<!DOCTYPE html>
   <div class="stats-row" id="stats-row"></div>
   <div class="card"><div id="liq-chart"><div class="loading">Loading…</div></div></div>
 </div>
-<footer>© 2026 ChartEdge · Not financial advice</footer>
+<footer>© 2026 ChartEdge.trade · Not financial advice</footer>
 <script>""" + _THEME_JS + """
 function load(){
   var sym=document.getElementById('sym-sel').value;
@@ -7952,7 +7952,7 @@ CRYPTO_UPCOMING_HTML = """<!DOCTYPE html>
 <html data-theme="dark">
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">""" + _META + """
-  <title>Trending Crypto · ChartEdge</title>
+  <title>Trending Crypto · ChartEdge.trade</title>
   <style>""" + _CRYPTO_PAGE_CSS + _NAV_CSS + """
     input#search { width:220px; }
     .trend-rank { font-size:1.1rem; }
@@ -7960,7 +7960,7 @@ CRYPTO_UPCOMING_HTML = """<!DOCTYPE html>
 </head>
 <body>
 <nav>
-  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span></a>
+  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span><span style="color:var(--muted);font-weight:500;">.trade</span></a>
   <button class="hamburger" onclick="toggleMobileNav(event)">☰</button>
   <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
 </nav>
@@ -7971,7 +7971,7 @@ CRYPTO_UPCOMING_HTML = """<!DOCTYPE html>
     <div id="tbl-wrap"><div class="loading">Loading…</div></div>
   </div>
 </div>
-<footer>© 2026 ChartEdge · Not financial advice</footer>
+<footer>© 2026 ChartEdge.trade · Not financial advice</footer>
 <script>""" + _THEME_JS + """
 fetch('/api/crypto/upcoming').then(function(r){return r.json();}).then(function(d){
   if(d.error){document.getElementById('tbl-wrap').innerHTML='<div class="err">Error: '+d.error+'</div>';return;}
@@ -8001,7 +8001,7 @@ IPO_HTML = """<!DOCTYPE html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">""" + _META + """
-  <title>Upcoming IPOs — ChartEdge</title>
+  <title>Upcoming IPOs — ChartEdge.trade</title>
   <style>
     :root[data-theme="dark"]  { --bg:#0d1117; --bg2:#161b22; --bg3:#21262d; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --green:#3fb950; --red:#f85149; --orange:#e3b341; }
     :root[data-theme="light"] { --bg:#ffffff; --bg2:#f6f8fa; --bg3:#eaeef2; --border:#d0d7de; --text:#1f2328; --muted:#636c76; --accent:#0969da; --green:#1a7f37; --red:#cf222e; --orange:#bc4c00; }
@@ -8051,7 +8051,7 @@ IPO_HTML = """<!DOCTYPE html>
 </head>
 <body>
 <nav>
-  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span></a>
+  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span><span style="color:var(--muted);font-weight:500;">.trade</span></a>
   <button class="hamburger" onclick="toggleMobileNav(event)">☰</button>
   <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
 </nav>
@@ -8073,7 +8073,7 @@ IPO_HTML = """<!DOCTYPE html>
   </div>
 </div>
 
-<footer>© 2026 ChartEdge · Not financial advice · <a href="/privacy" style="color:inherit">Privacy</a> · <a href="/terms" style="color:inherit">Terms</a></footer>
+<footer>© 2026 ChartEdge.trade · Not financial advice · <a href="/privacy" style="color:inherit">Privacy</a> · <a href="/terms" style="color:inherit">Terms</a></footer>
 
 <script>
 let _ipos = [];
@@ -8148,7 +8148,7 @@ FAQ_HTML = """<!DOCTYPE html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">""" + _META + """
-  <title>FAQ — ChartEdge</title>
+  <title>FAQ — ChartEdge.trade</title>
   <style>
     :root[data-theme="dark"]  { --bg:#0d1117; --bg2:#161b22; --bg3:#21262d; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --green:#3fb950; --red:#f85149; }
     :root[data-theme="light"] { --bg:#ffffff; --bg2:#f6f8fa; --bg3:#eaeef2; --border:#d0d7de; --text:#1f2328; --muted:#636c76; --accent:#0969da; --green:#1a7f37; --red:#cf222e; }
@@ -8180,25 +8180,25 @@ FAQ_HTML = """<!DOCTYPE html>
 </head>
 <body>
 <nav>
-  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span></a>
+  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span><span style="color:var(--muted);font-weight:500;">.trade</span></a>
   <button class="hamburger" onclick="toggleMobileNav(event)">☰</button>
   <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
 </nav>
 <div class="hero">
   <h1>Frequently Asked <span>Questions</span></h1>
-  <p>Everything you need to know about ChartEdge and our indicators</p>
+  <p>Everything you need to know about ChartEdge.trade and our indicators</p>
 </div>
 <div class="container">
 
   <div class="section-title">Getting Started</div>
 
   <div class="faq-item">
-    <button class="faq-q" onclick="toggleFaq(this)">What is ChartEdge? <span class="arrow">▶</span></button>
-    <div class="faq-a">ChartEdge is a market intelligence dashboard built for retail traders. It combines 20+ free Pine Script indicators with professional-grade tools including live options flow, insider trading disclosures, gamma exposure charts, LSTM volatility forecasts, a pre-market scanner, and more — all in one place. Most tools are available free or with a 7-day trial on paid plans.</div>
+    <button class="faq-q" onclick="toggleFaq(this)">What is ChartEdge.trade? <span class="arrow">▶</span></button>
+    <div class="faq-a">ChartEdge.trade is a market intelligence dashboard built for retail traders. It combines 20+ free Pine Script indicators with professional-grade tools including live options flow, insider trading disclosures, gamma exposure charts, LSTM volatility forecasts, a pre-market scanner, and more — all in one place. Most tools are available free or with a 7-day trial on paid plans.</div>
   </div>
   <div class="faq-item">
     <button class="faq-q" onclick="toggleFaq(this)">What is Pine Script? <span class="arrow">▶</span></button>
-    <div class="faq-a">Pine Script is TradingView's built-in scripting language for creating custom indicators and strategies directly on your charts. ChartEdge generates ready-to-use Pine Script v6 code — you just copy it and paste it into TradingView's Pine Script editor, and it appears on your chart instantly. No coding knowledge required.</div>
+    <div class="faq-a">Pine Script is TradingView's built-in scripting language for creating custom indicators and strategies directly on your charts. ChartEdge.trade generates ready-to-use Pine Script v6 code — you just copy it and paste it into TradingView's Pine Script editor, and it appears on your chart instantly. No coding knowledge required.</div>
   </div>
   <div class="faq-item">
     <button class="faq-q" onclick="toggleFaq(this)">How do I add an indicator to TradingView? <span class="arrow">▶</span></button>
@@ -8206,17 +8206,17 @@ FAQ_HTML = """<!DOCTYPE html>
   </div>
   <div class="faq-item">
     <button class="faq-q" onclick="toggleFaq(this)">Can I use a different trading platform? <span class="arrow">▶</span></button>
-    <div class="faq-a">The Pine Script indicators are exclusive to TradingView — they won't work on ThinkOrSwim, MetaTrader, or other platforms. However, all of ChartEdge's other tools (options flow, insider trading, gamma exposure, market heatmap, earnings calendar, etc.) run entirely in your browser and work alongside any broker or trading platform you use.</div>
+    <div class="faq-a">The Pine Script indicators are exclusive to TradingView — they won't work on ThinkOrSwim, MetaTrader, or other platforms. However, all of ChartEdge.trade's other tools (options flow, insider trading, gamma exposure, market heatmap, earnings calendar, etc.) run entirely in your browser and work alongside any broker or trading platform you use.</div>
   </div>
   <div class="faq-item">
     <button class="faq-q" onclick="toggleFaq(this)">Do I need a paid TradingView account? <span class="arrow">▶</span></button>
-    <div class="faq-a">No. All indicators on ChartEdge are written in Pine Script v6 and work on free TradingView accounts.</div>
+    <div class="faq-a">No. All indicators on ChartEdge.trade are written in Pine Script v6 and work on free TradingView accounts.</div>
   </div>
 
   <div class="section-title">Account & Pricing</div>
 
   <div class="faq-item">
-    <button class="faq-q" onclick="toggleFaq(this)">Is ChartEdge free? <span class="arrow">▶</span></button>
+    <button class="faq-q" onclick="toggleFaq(this)">Is ChartEdge.trade free? <span class="arrow">▶</span></button>
     <div class="faq-a">The core features are free — all Pine Script indicators, the market heatmap, earnings calendar, dividends calendar, unusual volume scanner, and news feed are available without paying. Basic ($9.99/mo) and Pro ($15.99/mo) plans unlock advanced tools like options flow, insider trading, gamma exposure, and the LSTM forecast. Your first paid subscription includes a 7-day free trial.</div>
   </div>
   <div class="faq-item">
@@ -8240,11 +8240,11 @@ FAQ_HTML = """<!DOCTYPE html>
 
   <div class="faq-item">
     <button class="faq-q" onclick="toggleFaq(this)">Is this financial advice? <span class="arrow">▶</span></button>
-    <div class="faq-a">No. ChartEdge provides tools for analysis only. Nothing on this site should be considered financial advice. Always do your own research before making trading decisions.</div>
+    <div class="faq-a">No. ChartEdge.trade provides tools for analysis only. Nothing on this site should be considered financial advice. Always do your own research before making trading decisions.</div>
   </div>
 
 </div>
-<footer>© 2026 ChartEdge · Not financial advice · <a href="/privacy" style="color:inherit">Privacy</a> · <a href="/terms" style="color:inherit">Terms</a></footer>
+<footer>© 2026 ChartEdge.trade · Not financial advice · <a href="/privacy" style="color:inherit">Privacy</a> · <a href="/terms" style="color:inherit">Terms</a></footer>
 <script>
 function toggleFaq(btn) {
   const answer = btn.nextElementSibling;
@@ -8275,7 +8275,7 @@ PRIVACY_HTML = """<!DOCTYPE html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">""" + _META + """
-  <title>Privacy Policy — ChartEdge</title>
+  <title>Privacy Policy — ChartEdge.trade</title>
   <style>
     :root[data-theme="dark"]  { --bg:#0d1117; --bg2:#161b22; --bg3:#21262d; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; }
     :root[data-theme="light"] { --bg:#ffffff; --bg2:#f6f8fa; --bg3:#eaeef2; --border:#d0d7de; --text:#1f2328; --muted:#636c76; --accent:#0969da; }
@@ -8292,7 +8292,7 @@ PRIVACY_HTML = """<!DOCTYPE html>
 </head>
 <body>
 <nav>
-  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span></a>
+  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span><span style="color:var(--muted);font-weight:500;">.trade</span></a>
   <button class="hamburger" onclick="toggleMobileNav(event)">☰</button>
   <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
 </nav>
@@ -8330,7 +8330,7 @@ PRIVACY_HTML = """<!DOCTYPE html>
   <h2>6. Contact</h2>
   <p>Questions? Email: <a href="mailto:verdictessentials@gmail.com">verdictessentials@gmail.com</a></p>
 </div>
-<footer>© 2026 ChartEdge · Not financial advice · <a href="/privacy" style="color:inherit">Privacy</a> · <a href="/terms" style="color:inherit">Terms</a></footer>
+<footer>© 2026 ChartEdge.trade · Not financial advice · <a href="/privacy" style="color:inherit">Privacy</a> · <a href="/terms" style="color:inherit">Terms</a></footer>
 <script>""" + _THEME_JS + """</script>
 </body>
 </html>"""
@@ -8341,7 +8341,7 @@ TERMS_HTML = """<!DOCTYPE html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">""" + _META + """
-  <title>Terms of Service — ChartEdge</title>
+  <title>Terms of Service — ChartEdge.trade</title>
   <style>
     :root[data-theme="dark"]  { --bg:#0d1117; --bg2:#161b22; --bg3:#21262d; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; }
     :root[data-theme="light"] { --bg:#ffffff; --bg2:#f6f8fa; --bg3:#eaeef2; --border:#d0d7de; --text:#1f2328; --muted:#636c76; --accent:#0969da; }
@@ -8358,7 +8358,7 @@ TERMS_HTML = """<!DOCTYPE html>
 </head>
 <body>
 <nav>
-  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span></a>
+  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span><span style="color:var(--muted);font-weight:500;">.trade</span></a>
   <button class="hamburger" onclick="toggleMobileNav(event)">☰</button>
   <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
 </nav>
@@ -8369,26 +8369,26 @@ TERMS_HTML = """<!DOCTYPE html>
   <p class="updated">Last updated: April 3, 2026</p>
 
   <h2>1. Acceptance</h2>
-  <p>By using ChartEdge you agree to these terms. If you do not agree, please do not use the site.</p>
+  <p>By using ChartEdge.trade you agree to these terms. If you do not agree, please do not use the site.</p>
 
   <h2>2. Use of the service</h2>
   <ul>
-    <li>ChartEdge is provided free of charge for personal, non-commercial use</li>
+    <li>ChartEdge.trade is provided free of charge for personal, non-commercial use</li>
     <li>You may copy and use any Pine Script code from this site on TradingView</li>
     <li>You may not scrape, reproduce, or redistribute the site's content or code for commercial purposes without permission</li>
   </ul>
 
   <h2>3. Not financial advice</h2>
-  <p>Nothing on ChartEdge constitutes financial, investment, or trading advice. All indicators are tools for analysis only. You are solely responsible for your own trading decisions. Past performance of any indicator does not guarantee future results.</p>
+  <p>Nothing on ChartEdge.trade constitutes financial, investment, or trading advice. All indicators are tools for analysis only. You are solely responsible for your own trading decisions. Past performance of any indicator does not guarantee future results.</p>
 
   <h2>4. Accounts</h2>
   <p>You are responsible for keeping your account credentials secure. We reserve the right to suspend accounts that abuse the service.</p>
 
   <h2>5. Disclaimer of warranties</h2>
-  <p>ChartEdge is provided "as is" without warranty of any kind. We do not guarantee uptime, accuracy of data, or fitness for any particular purpose.</p>
+  <p>ChartEdge.trade is provided "as is" without warranty of any kind. We do not guarantee uptime, accuracy of data, or fitness for any particular purpose.</p>
 
   <h2>6. Limitation of liability</h2>
-  <p>ChartEdge and its operators are not liable for any trading losses or damages arising from use of this site.</p>
+  <p>ChartEdge.trade and its operators are not liable for any trading losses or damages arising from use of this site.</p>
 
   <h2>7. Changes</h2>
   <p>We may update these terms at any time. Continued use of the site after changes constitutes acceptance.</p>
@@ -8396,7 +8396,7 @@ TERMS_HTML = """<!DOCTYPE html>
   <h2>8. Contact</h2>
   <p>Questions? Email: <a href="mailto:verdictessentials@gmail.com">verdictessentials@gmail.com</a></p>
 </div>
-<footer>© 2026 ChartEdge · Not financial advice · <a href="/privacy" style="color:inherit">Privacy</a> · <a href="/terms" style="color:inherit">Terms</a></footer>
+<footer>© 2026 ChartEdge.trade · Not financial advice · <a href="/privacy" style="color:inherit">Privacy</a> · <a href="/terms" style="color:inherit">Terms</a></footer>
 <script>""" + _THEME_JS + """</script>
 </body>
 </html>"""
@@ -8439,7 +8439,7 @@ def api_insider():
     if now - _insider_cache["ts"] < 600 and _insider_cache["data"]:
         return jsonify(_insider_cache["data"])
 
-    headers = {"User-Agent": "ChartEdge ayden.j.folkerts@gmail.com"}
+    headers = {"User-Agent": "ChartEdge.trade ayden.j.folkerts@gmail.com"}
     results = []
 
     # ── Part 1: SEC Form 4s — look up company CIKs first, then pull their filings ──
@@ -8602,7 +8602,7 @@ def api_insider_debug():
     plan = _get_user_plan(session.get("user_id"))
     if plan != "pro":
         return jsonify({"error": "Pro required"}), 403
-    headers = {"User-Agent": "ChartEdge ayden.j.folkerts@gmail.com"}
+    headers = {"User-Agent": "ChartEdge.trade ayden.j.folkerts@gmail.com"}
     out = {}
     # Test 1: company_tickers.json
     try:
@@ -8665,7 +8665,7 @@ def api_insider_ticker():
         return jsonify([])
     try:
         import requests as _req, feedparser
-        headers = {"User-Agent": "ChartEdge ayden.j.folkerts@gmail.com", "Accept-Encoding": "gzip, deflate"}
+        headers = {"User-Agent": "ChartEdge.trade ayden.j.folkerts@gmail.com", "Accept-Encoding": "gzip, deflate"}
         resp = _req.get(
             f"https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&company={ticker}&CIK=&type=4&dateb=&owner=include&count=20&search_text=&output=atom",
             headers=headers, timeout=15
@@ -8689,7 +8689,7 @@ INSIDER_HTML = """<!DOCTYPE html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">""" + _META + """
-  <title>Insider Trading · ChartEdge</title>
+  <title>Insider Trading · ChartEdge.trade</title>
   <style>
     :root[data-theme="dark"]  { --bg:#0d1117; --bg2:#161b22; --bg3:#21262d; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --green:#3fb950; --red:#f85149; }
     :root[data-theme="light"] { --bg:#ffffff; --bg2:#f6f8fa; --bg3:#eaeef2; --border:#d0d7de; --text:#1f2328; --muted:#636c76; --accent:#0969da; --green:#1a7f37; --red:#cf222e; }
@@ -8731,7 +8731,7 @@ INSIDER_HTML = """<!DOCTYPE html>
 </head>
 <body>
 <nav>
-  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span></a>
+  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span><span style="color:var(--muted);font-weight:500;">.trade</span></a>
   <button class="hamburger" onclick="toggleMobileNav(event)">☰</button>
   <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
 </nav>
@@ -8758,7 +8758,7 @@ INSIDER_HTML = """<!DOCTYPE html>
   <div id="content" class="loading">Loading filings…</div>
 </div>
 
-<footer>© 2026 ChartEdge · Data via SEC EDGAR · Not financial advice</footer>
+<footer>© 2026 ChartEdge.trade · Data via SEC EDGAR · Not financial advice</footer>
 <script>""" + _THEME_JS + """
 var allFilings = [];
 var currentPage = 1;
@@ -8956,7 +8956,7 @@ PREMARKET_HTML = """<!DOCTYPE html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">""" + _META + """
-  <title>Pre/After Market · ChartEdge</title>
+  <title>Pre/After Market · ChartEdge.trade</title>
   <style>
     :root[data-theme="dark"]  { --bg:#0d1117; --bg2:#161b22; --bg3:#21262d; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --green:#3fb950; --red:#f85149; }
     :root[data-theme="light"] { --bg:#ffffff; --bg2:#f6f8fa; --bg3:#eaeef2; --border:#d0d7de; --text:#1f2328; --muted:#636c76; --accent:#0969da; --green:#1a7f37; --red:#cf222e; }
@@ -8989,7 +8989,7 @@ PREMARKET_HTML = """<!DOCTYPE html>
 </head>
 <body>
 <nav>
-  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span></a>
+  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span><span style="color:var(--muted);font-weight:500;">.trade</span></a>
   <button class="hamburger" onclick="toggleMobileNav(event)">☰</button>
   <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
 </nav>
@@ -9009,7 +9009,7 @@ PREMARKET_HTML = """<!DOCTYPE html>
   <div id="content" class="loading">Loading scanner…</div>
 </div>
 
-<footer>© 2026 ChartEdge · Data via yfinance · Not financial advice</footer>
+<footer>© 2026 ChartEdge.trade · Data via yfinance · Not financial advice</footer>
 <script>""" + _THEME_JS + """
 var allData = [];
 var currentFilter = 'all';
@@ -9117,7 +9117,7 @@ def api_darkpool():
     if now - _darkpool_cache["ts"] < 1800 and _darkpool_cache["data"]:
         return jsonify(_darkpool_cache["data"])
 
-    headers = {"User-Agent": "ChartEdge ayden.j.folkerts@gmail.com"}
+    headers = {"User-Agent": "ChartEdge.trade ayden.j.folkerts@gmail.com"}
 
     # FINRA OTC / ATS transparency data — weekly aggregated dark pool prints
     # Published biweekly at: https://ats.finra.org/
@@ -9284,7 +9284,7 @@ def api_darkpool_ticker():
     if not ticker:
         return jsonify({"error": "ticker required"}), 400
 
-    headers = {"User-Agent": "ChartEdge ayden.j.folkerts@gmail.com"}
+    headers = {"User-Agent": "ChartEdge.trade ayden.j.folkerts@gmail.com"}
     weeks = []
     shares_list = []
     notional_list = []
@@ -9329,7 +9329,7 @@ DARKPOOL_HTML = """<!DOCTYPE html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">""" + _META + """
-  <title>Dark Pool · ChartEdge</title>
+  <title>Dark Pool · ChartEdge.trade</title>
   <style>
     :root[data-theme="dark"]  { --bg:#0d1117; --bg2:#161b22; --bg3:#21262d; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --green:#3fb950; --red:#f85149; --purple:#bc8cff; }
     :root[data-theme="light"] { --bg:#ffffff; --bg2:#f6f8fa; --bg3:#eaeef2; --border:#d0d7de; --text:#1f2328; --muted:#636c76; --accent:#0969da; --green:#1a7f37; --red:#cf222e; --purple:#8250df; }
@@ -9379,7 +9379,7 @@ DARKPOOL_HTML = """<!DOCTYPE html>
 </head>
 <body>
 <nav>
-  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span></a>
+  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span><span style="color:var(--muted);font-weight:500;">.trade</span></a>
   <button class="hamburger" onclick="toggleMobileNav(event)">☰</button>
   <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
 </nav>
@@ -9420,7 +9420,7 @@ DARKPOOL_HTML = """<!DOCTYPE html>
   <div id="content" class="loading">Loading dark pool data…</div>
 </div>
 
-<footer>© 2026 ChartEdge · Data: FINRA ATS Transparency · Biweekly aggregate · Not financial advice</footer>
+<footer>© 2026 ChartEdge.trade · Data: FINRA ATS Transparency · Biweekly aggregate · Not financial advice</footer>
 <script>""" + _THEME_JS + """
 var allData = [];
 var sortCol = 'shares';
@@ -9588,7 +9588,7 @@ loadData(false);
 PRIORITY_HTML = """<!DOCTYPE html>
 <html lang="en">
 <head>""" + _META + """
-  <title>Priority Service · ChartEdge</title>
+  <title>Priority Service · ChartEdge.trade</title>
   <style>""" + _NAV_CSS + """
   body { background: var(--bg); color: var(--fg); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; margin: 0; }
   .priority-wrap { max-width: 760px; margin: 0 auto; padding: 48px 24px 80px; }
@@ -9902,7 +9902,7 @@ NEWS_HTML = """<!DOCTYPE html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">""" + _META + """
-  <title>Market News — ChartEdge</title>
+  <title>Market News — ChartEdge.trade</title>
   <style>
     :root[data-theme="dark"]  { --bg:#0d1117; --bg2:#161b22; --bg3:#21262d; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --green:#3fb950; --red:#f85149; }
     :root[data-theme="light"] { --bg:#ffffff; --bg2:#f6f8fa; --bg3:#eaeef2; --border:#d0d7de; --text:#1f2328; --muted:#636c76; --accent:#0969da; --green:#1a7f37; --red:#cf222e; }
@@ -9984,7 +9984,7 @@ NEWS_HTML = """<!DOCTYPE html>
 </head>
 <body>
 <nav>
-  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span></a>
+  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span><span style="color:var(--muted);font-weight:500;">.trade</span></a>
   <div class="nav-links">
 """ + _NAV_LINKS + """
   </div>
@@ -10029,7 +10029,7 @@ NEWS_HTML = """<!DOCTYPE html>
   <div id="status"></div>
 </div>
 
-<footer>© 2026 ChartEdge · News sourced from public RSS feeds · Not financial advice · <a href="/privacy" style="color:inherit">Privacy</a> · <a href="/terms" style="color:inherit">Terms</a></footer>
+<footer>© 2026 ChartEdge.trade · News sourced from public RSS feeds · Not financial advice · <a href="/privacy" style="color:inherit">Privacy</a> · <a href="/terms" style="color:inherit">Terms</a></footer>
 
 <script>
 function closeTickerNews() {
@@ -10195,7 +10195,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">""" + _META + """
-  <title>Live Chart — ChartEdge</title>
+  <title>Live Chart — ChartEdge.trade</title>
   <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
   <style>
     :root[data-theme="dark"]  { --bg:#0d1117; --bg2:#161b22; --bg3:#21262d; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --green:#3fb950; --red:#f85149; }
@@ -10229,7 +10229,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 <body>
 
 <nav>
-  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span></a>
+  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span><span style="color:var(--muted);font-weight:500;">.trade</span></a>
   <div class="nav-links">
 """ + _NAV_LINKS + """
   </div>
@@ -10395,7 +10395,7 @@ GAMMA_HTML = """<!DOCTYPE html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">""" + _META + """
-  <title>Gamma Exposure · ChartEdge</title>
+  <title>Gamma Exposure · ChartEdge.trade</title>
   <style>
     :root[data-theme="dark"]  { --bg:#0d1117; --bg2:#161b22; --bg3:#21262d; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --green:#3fb950; --red:#f85149; }
     :root[data-theme="light"] { --bg:#ffffff; --bg2:#f6f8fa; --bg3:#eaeef2; --border:#d0d7de; --text:#1f2328; --muted:#636c76; --accent:#0969da; --green:#1a7f37; --red:#cf222e; }
@@ -10436,7 +10436,7 @@ GAMMA_HTML = """<!DOCTYPE html>
 </head>
 <body>
 <nav>
-  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span></a>
+  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span><span style="color:var(--muted);font-weight:500;">.trade</span></a>
   <button class="hamburger" onclick="toggleMobileNav(event)">☰</button>
   <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
 </nav>
@@ -10453,7 +10453,7 @@ GAMMA_HTML = """<!DOCTYPE html>
   </div>
   <div id="gamma-content" class="loading">Enter a ticker above to load gamma exposure.</div>
 </div>
-<footer>© 2026 ChartEdge · GEX computed via Black-Scholes · Not financial advice</footer>
+<footer>© 2026 ChartEdge.trade · GEX computed via Black-Scholes · Not financial advice</footer>
 <script>
 function loadGamma(exp) {
   var input  = document.getElementById('ticker-input');
@@ -10568,7 +10568,7 @@ GREEKS_HTML = """<!DOCTYPE html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">""" + _META + """
-  <title>Greeks Dashboard · ChartEdge</title>
+  <title>Greeks Dashboard · ChartEdge.trade</title>
   <style>
     :root[data-theme="dark"]  { --bg:#0d1117; --bg2:#161b22; --bg3:#21262d; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --green:#3fb950; --red:#f85149; }
     :root[data-theme="light"] { --bg:#ffffff; --bg2:#f6f8fa; --bg3:#eaeef2; --border:#d0d7de; --text:#1f2328; --muted:#636c76; --accent:#0969da; --green:#1a7f37; --red:#cf222e; }
@@ -10620,7 +10620,7 @@ GREEKS_HTML = """<!DOCTYPE html>
 </head>
 <body>
 <nav>
-  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span></a>
+  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span><span style="color:var(--muted);font-weight:500;">.trade</span></a>
   <button class="hamburger" onclick="toggleMobileNav(event)">☰</button>
   <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
 </nav>
@@ -10637,7 +10637,7 @@ GREEKS_HTML = """<!DOCTYPE html>
   </div>
   <div id="greeks-content" class="loading">Enter a ticker above to load options Greeks.</div>
 </div>
-<footer>© 2026 ChartEdge · Greeks via Black-Scholes · Not financial advice</footer>
+<footer>© 2026 ChartEdge.trade · Greeks via Black-Scholes · Not financial advice</footer>
 <script>
 var _greeksData = null;
 var _activeTab  = 'calls';
@@ -10770,7 +10770,7 @@ HEATMAP_HTML = """<!DOCTYPE html>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">""" + _META + """
   <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
-  <title>Market Heatmap · ChartEdge</title>
+  <title>Market Heatmap · ChartEdge.trade</title>
   <style>
     :root[data-theme="dark"]  { --bg:#0d1117; --bg2:#161b22; --bg3:#21262d; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --green:#3fb950; --red:#f85149; }
     :root[data-theme="light"] { --bg:#ffffff; --bg2:#f6f8fa; --bg3:#eaeef2; --border:#d0d7de; --text:#1f2328; --muted:#636c76; --accent:#0969da; --green:#1a7f37; --red:#cf222e; }
@@ -10816,7 +10816,7 @@ HEATMAP_HTML = """<!DOCTYPE html>
 </head>
 <body>
 <nav>
-  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span></a>
+  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span><span style="color:var(--muted);font-weight:500;">.trade</span></a>
   <button class="hamburger" onclick="toggleMobileNav(event)">☰</button>
   <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
 </nav>
@@ -10851,7 +10851,7 @@ HEATMAP_HTML = """<!DOCTYPE html>
   <div id="treemap-wrap"><div class="loading" id="hm-loading">Fetching market data…</div></div>
   <p class="disclaimer">Data from Yahoo Finance · Size = market cap · Cached 5 min · Not financial advice</p>
 </div>
-<footer>© 2026 ChartEdge · Not financial advice</footer>
+<footer>© 2026 ChartEdge.trade · Not financial advice</footer>
 <script>
 var _lookup = {};
 var _hmData = null;
@@ -11016,7 +11016,7 @@ TRUMP_HTML = """<!DOCTYPE html>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">""" + _META + """
   <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
-  <title>Trump Tracker · ChartEdge</title>
+  <title>Trump Tracker · ChartEdge.trade</title>
   <style>
     :root[data-theme="dark"]  { --bg:#0d1117; --bg2:#161b22; --bg3:#21262d; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --green:#3fb950; --red:#f85149; }
     :root[data-theme="light"] { --bg:#ffffff; --bg2:#f6f8fa; --bg3:#eaeef2; --border:#d0d7de; --text:#1f2328; --muted:#636c76; --accent:#0969da; --green:#1a7f37; --red:#cf222e; }
@@ -11065,7 +11065,7 @@ TRUMP_HTML = """<!DOCTYPE html>
 </head>
 <body>
 <nav>
-  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span></a>
+  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span><span style="color:var(--muted);font-weight:500;">.trade</span></a>
   <button class="hamburger" onclick="toggleMobileNav(event)">☰</button>
   <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
 </nav>
@@ -11120,7 +11120,7 @@ TRUMP_HTML = """<!DOCTYPE html>
     </div>
   </div>
 </div>
-<footer>© 2026 ChartEdge · Not financial advice</footer>
+<footer>© 2026 ChartEdge.trade · Not financial advice</footer>
 <script>
 var _curPeriod = '1D';
 
@@ -11251,7 +11251,7 @@ FLOW_HTML = """<!DOCTYPE html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">""" + _META + """
-  <title>Options Flow · ChartEdge</title>
+  <title>Options Flow · ChartEdge.trade</title>
   <style>
     :root[data-theme="dark"]  { --bg:#0d1117; --bg2:#161b22; --bg3:#21262d; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --green:#3fb950; --red:#f85149; }
     :root[data-theme="light"] { --bg:#ffffff; --bg2:#f6f8fa; --bg3:#eaeef2; --border:#d0d7de; --text:#1f2328; --muted:#636c76; --accent:#0969da; --green:#1a7f37; --red:#cf222e; }
@@ -11306,7 +11306,7 @@ FLOW_HTML = """<!DOCTYPE html>
 </head>
 <body>
 <nav>
-  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span></a>
+  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span><span style="color:var(--muted);font-weight:500;">.trade</span></a>
   <button class="hamburger" onclick="toggleMobileNav(event)">☰</button>
   <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
 </nav>
@@ -11322,7 +11322,7 @@ FLOW_HTML = """<!DOCTYPE html>
   </div>
   <div id="flow-content" style="min-height:60px;text-align:center;padding:32px;color:var(--muted);">JavaScript did not run — check browser console</div>
 </div>
-<footer>© 2026 ChartEdge · Options data via yfinance · Not financial advice</footer>
+<footer>© 2026 ChartEdge.trade · Options data via yfinance · Not financial advice</footer>
 <script>
 function setContent(html) { document.getElementById('flow-content').innerHTML = html; }
 function setError(msg)    { setContent('<div style="background:#2d1f1f;border:1px solid #f85149;border-radius:8px;padding:16px 20px;color:#f85149;margin-top:8px;">&#9888; ' + msg + '</div>'); }
@@ -11441,7 +11441,7 @@ REFER_HTML = """<!DOCTYPE html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">""" + _META + """
-  <title>Refer a Friend · ChartEdge</title>
+  <title>Refer a Friend · ChartEdge.trade</title>
   <style>
     :root[data-theme="dark"]  { --bg:#0d1117; --bg2:#161b22; --bg3:#21262d; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --green:#3fb950; --red:#f85149; }
     :root[data-theme="light"] { --bg:#ffffff; --bg2:#f6f8fa; --bg3:#eaeef2; --border:#d0d7de; --text:#1f2328; --muted:#636c76; --accent:#0969da; --green:#1a7f37; --red:#cf222e; }
@@ -11482,7 +11482,7 @@ REFER_HTML = """<!DOCTYPE html>
 </head>
 <body>
 <nav>
-  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span></a>
+  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span><span style="color:var(--muted);font-weight:500;">.trade</span></a>
   <button class="hamburger" onclick="toggleMobileNav(event)">☰</button>
   <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
 </nav>
@@ -11560,7 +11560,7 @@ REFER_HTML = """<!DOCTYPE html>
   </div>
 
 </div>
-<footer>© 2026 ChartEdge · Not financial advice</footer>
+<footer>© 2026 ChartEdge.trade · Not financial advice</footer>
 <script>
 function copyLink() {
   const inp = document.getElementById('ref-link');
@@ -11690,7 +11690,7 @@ VOLFORECAST_HTML = """<!DOCTYPE html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">""" + _META + """
-  <title>Volatility Forecast · ChartEdge</title>
+  <title>Volatility Forecast · ChartEdge.trade</title>
   <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
   <style>
     :root[data-theme="dark"]  { --bg:#0d1117; --bg2:#161b22; --bg3:#21262d; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --green:#3fb950; --red:#f85149; }
@@ -11724,7 +11724,7 @@ VOLFORECAST_HTML = """<!DOCTYPE html>
 </head>
 <body>
 <nav>
-  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span></a>
+  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span><span style="color:var(--muted);font-weight:500;">.trade</span></a>
   <button class="hamburger" onclick="toggleMobileNav(event)">☰</button>
   <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
 </nav>
@@ -11758,7 +11758,7 @@ VOLFORECAST_HTML = """<!DOCTYPE html>
 
   <div id="vol-chart" style="min-height:360px"><div class="loading">Enter a ticker and click Load</div></div>
 </div>
-<footer>© 2026 ChartEdge · Not financial advice</footer>
+<footer>© 2026 ChartEdge.trade · Not financial advice</footer>
 <script>""" + _THEME_JS + """
 function load() {
   var ticker  = document.getElementById('ticker-in').value.trim().toUpperCase();
@@ -11863,7 +11863,7 @@ SETTINGS_HTML = """<!DOCTYPE html>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Settings · ChartEdge</title>
+  <title>Settings · ChartEdge.trade</title>
   <style>
     :root[data-theme="dark"]  { --bg:#0d1117; --bg2:#161b22; --bg3:#21262d; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --green:#3fb950; --red:#f85149; }
     :root[data-theme="light"] { --bg:#ffffff; --bg2:#f6f8fa; --bg3:#eaeef2; --border:#d0d7de; --text:#1f2328; --muted:#636c76; --accent:#0969da; --green:#1a7f37; --red:#cf222e; }
@@ -11915,7 +11915,7 @@ SETTINGS_HTML = """<!DOCTYPE html>
 </head>
 <body>
 <nav>
-  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span></a>
+  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span><span style="color:var(--muted);font-weight:500;">.trade</span></a>
   <button class="hamburger" onclick="toggleMobileNav(event)">☰</button>
   <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
 </nav>
@@ -12282,7 +12282,7 @@ MY_DASHBOARD_HTML = """<!DOCTYPE html>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>My Dashboard · ChartEdge</title>
+  <title>My Dashboard · ChartEdge.trade</title>
   <style>
     :root[data-theme="dark"]  { --bg:#0d1117; --bg2:#161b22; --bg3:#21262d; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --green:#3fb950; --red:#f85149; }
     :root[data-theme="light"] { --bg:#ffffff; --bg2:#f6f8fa; --bg3:#eaeef2; --border:#d0d7de; --text:#1f2328; --muted:#636c76; --accent:#0969da; --green:#1a7f37; --red:#cf222e; }
@@ -12356,7 +12356,7 @@ MY_DASHBOARD_HTML = """<!DOCTYPE html>
 </head>
 <body>
 <nav>
-  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span></a>
+  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span><span style="color:var(--muted);font-weight:500;">.trade</span></a>
   <button class="hamburger" onclick="toggleMobileNav(event)">☰</button>
   <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
 </nav>
