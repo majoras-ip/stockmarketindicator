@@ -5870,10 +5870,99 @@ HOME_HTML = """<!DOCTYPE html>
     .tick .down { color: #f85149; }
     @media(max-width:640px){.ticker-tape{display:none;}}
 
+    /* Edge hero card — spotlight + animated candlestick */
+    .edge-hero { max-width: 1180px; margin: 36px auto 8px; padding: 0 16px; }
+    .edge-card {
+      position: relative; overflow: hidden; border-radius: 16px;
+      background:
+        radial-gradient(ellipse 60% 50% at 50% 0%, rgba(88,166,255,0.10), transparent 70%),
+        #050810;
+      border: 1px solid #1a1f26;
+      min-height: 460px;
+      display: flex; flex-wrap: wrap;
+      box-shadow: 0 20px 60px rgba(0,0,0,.45), 0 0 0 1px rgba(255,255,255,.02) inset;
+    }
+    .edge-card::before {
+      content: ''; position: absolute; inset: -30%;
+      background: radial-gradient(circle 340px at var(--mx,30%) var(--my,25%),
+                  rgba(88,166,255,.18), rgba(88,166,255,.05) 35%, transparent 60%);
+      pointer-events: none;
+      opacity: var(--spot-op, 1);
+      transition: opacity .4s ease;
+    }
+    .edge-card::after {
+      content: ''; position: absolute; inset: 0; pointer-events: none;
+      background-image:
+        linear-gradient(rgba(255,255,255,.025) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,.025) 1px, transparent 1px);
+      background-size: 44px 44px;
+      -webkit-mask-image: linear-gradient(180deg, transparent, #000 30%, #000 70%, transparent);
+              mask-image: linear-gradient(180deg, transparent, #000 30%, #000 70%, transparent);
+    }
+    .edge-left {
+      flex: 1 1 360px; padding: 52px 44px; text-align: left;
+      position: relative; z-index: 3;
+      display: flex; flex-direction: column; justify-content: center;
+    }
+    .edge-eyebrow {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 5px 14px; margin-bottom: 22px; width: fit-content;
+      background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.08);
+      border-radius: 20px; font-size: .72rem; color: #8b949e;
+    }
+    .edge-eyebrow .dot { width: 6px; height: 6px; border-radius: 50%; background: #3fb950; animation: pulse 2s infinite; }
+    .edge-title {
+      font-size: clamp(2rem, 4.4vw, 3.1rem); line-height: 1.05;
+      letter-spacing: -.025em; font-weight: 800; margin-bottom: 18px;
+      background: linear-gradient(180deg, #fafafa 0%, #8a8f97 100%);
+      -webkit-background-clip: text; background-clip: text; color: transparent;
+    }
+    .edge-title .accent {
+      background: linear-gradient(135deg, #58a6ff 0%, #79c0ff 100%);
+      -webkit-background-clip: text; background-clip: text; color: transparent;
+    }
+    .edge-sub { color: #b6bcc6; font-size: 1rem; line-height: 1.7; max-width: 460px; margin-bottom: 30px; }
+    .edge-btns { display: flex; gap: 12px; flex-wrap: wrap; }
+    .edge-btn-primary {
+      background: linear-gradient(135deg, #58a6ff 0%, #4493f8 100%); color: #fff;
+      padding: 13px 26px; border-radius: 9px; font-weight: 700; font-size: .92rem;
+      text-decoration: none; box-shadow: 0 8px 24px rgba(88,166,255,.28);
+      transition: transform .2s, box-shadow .2s;
+    }
+    .edge-btn-primary:hover { transform: translateY(-2px); box-shadow: 0 12px 32px rgba(88,166,255,.4); }
+    .edge-btn-ghost {
+      color: #e6edf3; padding: 13px 26px; border-radius: 9px; font-size: .92rem;
+      border: 1px solid rgba(255,255,255,.12); background: rgba(255,255,255,.02);
+      text-decoration: none; transition: background .2s, border-color .2s;
+    }
+    .edge-btn-ghost:hover { background: rgba(255,255,255,.06); border-color: rgba(255,255,255,.22); }
+
+    .edge-right {
+      flex: 1 1 380px; position: relative; z-index: 2;
+      min-height: 320px; padding: 28px 32px 28px 0;
+      display: flex; align-items: stretch;
+    }
+    .edge-chart { width: 100%; height: 100%; min-height: 320px; position: relative; }
+    .edge-chart svg { width: 100%; height: 100%; display: block; overflow: visible; }
+    .edge-ticker {
+      position: absolute; top: 12px; left: 8px; right: 12px;
+      display: flex; align-items: center; justify-content: space-between;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .82rem; z-index: 2;
+    }
+    .edge-ticker .sym { color: #e6edf3; font-weight: 700; margin-right: 6px; }
+    .edge-ticker .px  { color: #58a6ff; }
+    .edge-ticker .chg { font-size: .72rem; padding: 2px 8px; border-radius: 6px; font-weight: 700; }
+    @media (max-width: 760px) {
+      .edge-card { min-height: auto; }
+      .edge-left { padding: 36px 28px 8px; }
+      .edge-right { padding: 0 16px 28px; min-height: 240px; }
+      .edge-chart { min-height: 220px; }
+    }
+
     /* Hero */
     .hero {
-      text-align: center; padding: 72px 24px 56px;
-      background: radial-gradient(ellipse 80% 60% at 50% 0%, rgba(88,166,255,0.07) 0%, transparent 70%), var(--bg);
+      text-align: center; padding: 40px 24px 56px;
+      background: radial-gradient(ellipse 80% 60% at 50% 0%, rgba(88,166,255,0.04) 0%, transparent 70%), var(--bg);
       border-bottom: 1px solid var(--border);
     }
     .hero-eyebrow {
@@ -6044,18 +6133,139 @@ HOME_HTML = """<!DOCTYPE html>
 })();
 </script>
 
-<!-- Hero -->
+<!-- Edge hero card with spotlight + animated candlestick -->
+<section class="edge-hero">
+  <div class="edge-card" id="edge-card">
+    <div class="edge-left">
+      <div class="edge-eyebrow"><span class="dot"></span> Live · Options · Insider · AI forecasts</div>
+      <h1 class="edge-title">Your Edge<br>in the <span class="accent">Market.</span></h1>
+      <p class="edge-sub">20+ free Pine Script indicators, real-time options flow, gamma exposure, insider trades, and LSTM volatility forecasts — all in one terminal.</p>
+      <div class="edge-btns">
+        {% if not current_user %}<a class="edge-btn-primary" href="/register">Get Started Free</a>{% endif %}
+        <a class="edge-btn-ghost" href="/indicators">Browse Indicators →</a>
+      </div>
+    </div>
+    <div class="edge-right">
+      <div class="edge-ticker">
+        <div><span class="sym">SPY</span><span class="px" id="edge-price">472.18</span></div>
+        <span class="chg" id="edge-change" style="color:#3fb950;background:rgba(63,185,80,.12);">+1.24%</span>
+      </div>
+      <div class="edge-chart">
+        <svg viewBox="0 0 480 320" preserveAspectRatio="none" aria-hidden="true">
+          <g stroke="rgba(255,255,255,0.04)" stroke-width="1">
+            <line x1="0" y1="80"  x2="480" y2="80"/>
+            <line x1="0" y1="160" x2="480" y2="160"/>
+            <line x1="0" y1="240" x2="480" y2="240"/>
+          </g>
+          <defs>
+            <linearGradient id="edge-fill" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%"   stop-color="#58a6ff" stop-opacity="0.32"/>
+              <stop offset="100%" stop-color="#58a6ff" stop-opacity="0"/>
+            </linearGradient>
+            <filter id="edge-glow" x="-20%" y="-20%" width="140%" height="140%">
+              <feGaussianBlur stdDeviation="3" result="b"/>
+              <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+            </filter>
+          </defs>
+          <path id="edge-line-area" fill="url(#edge-fill)" stroke="none"/>
+          <path id="edge-line" stroke="#58a6ff" stroke-width="2" fill="none" filter="url(#edge-glow)"/>
+          <g id="edge-candles"></g>
+        </svg>
+      </div>
+    </div>
+  </div>
+</section>
+<script>
+(function(){
+  var card = document.getElementById('edge-card');
+  if (!card) return;
+  card.addEventListener('mousemove', function(e){
+    var r = card.getBoundingClientRect();
+    card.style.setProperty('--mx', ((e.clientX - r.left) / r.width * 100) + '%');
+    card.style.setProperty('--my', ((e.clientY - r.top)  / r.height * 100) + '%');
+  });
+  card.addEventListener('mouseleave', function(){
+    card.style.setProperty('--mx','30%');
+    card.style.setProperty('--my','25%');
+  });
+
+  var N = 36, candles = [], lastClose = 472;
+  for (var i = 0; i < N; i++) {
+    var o = lastClose;
+    var c = o + (Math.random() - 0.48) * 4.5;
+    var h = Math.max(o, c) + Math.random() * 1.6;
+    var l = Math.min(o, c) - Math.random() * 1.6;
+    candles.push({o: o, c: c, h: h, l: l});
+    lastClose = c;
+  }
+
+  var W = 480, H = 320, pad = 10;
+  var cwidth = (W - pad * 2) / N;
+  function render(){
+    var minP = Infinity, maxP = -Infinity;
+    for (var i = 0; i < candles.length; i++) {
+      if (candles[i].l < minP) minP = candles[i].l;
+      if (candles[i].h > maxP) maxP = candles[i].h;
+    }
+    var range = maxP - minP || 1;
+    function yScale(p){ return pad + (1 - (p - minP) / range) * (H - pad * 2); }
+
+    var cg = '';
+    for (var j = 0; j < candles.length; j++) {
+      var cd = candles[j];
+      var cx = pad + j * cwidth + cwidth / 2;
+      var up = cd.c >= cd.o;
+      var col = up ? '#3fb950' : '#f85149';
+      var yh = yScale(cd.h), yl = yScale(cd.l);
+      var yo = yScale(cd.o), yc = yScale(cd.c);
+      var top = Math.min(yo, yc), bot = Math.max(yo, yc);
+      var bw = Math.max(2, cwidth * 0.55);
+      cg += '<line x1="'+cx+'" y1="'+yh+'" x2="'+cx+'" y2="'+yl+'" stroke="'+col+'" stroke-width="1" opacity=".85"/>';
+      cg += '<rect x="'+(cx - bw/2)+'" y="'+top+'" width="'+bw+'" height="'+Math.max(1, bot - top)+'" fill="'+col+'" opacity=".88"/>';
+    }
+    document.getElementById('edge-candles').innerHTML = cg;
+
+    var lp = '';
+    for (var k = 0; k < candles.length; k++) {
+      var x = pad + k * cwidth + cwidth / 2;
+      var y = yScale(candles[k].c);
+      lp += (k === 0 ? 'M ' : 'L ') + x + ' ' + y + ' ';
+    }
+    document.getElementById('edge-line').setAttribute('d', lp);
+    var firstX = pad + cwidth / 2;
+    var lastX  = pad + (N - 1) * cwidth + cwidth / 2;
+    document.getElementById('edge-line-area').setAttribute('d', lp + 'L ' + lastX + ' ' + (H - pad) + ' L ' + firstX + ' ' + (H - pad) + ' Z');
+
+    var price = candles[candles.length - 1].c;
+    var first = candles[0].c;
+    var chg = (price - first) / first * 100;
+    var pEl = document.getElementById('edge-price');
+    var cEl = document.getElementById('edge-change');
+    if (pEl) pEl.textContent = price.toFixed(2);
+    if (cEl) {
+      var s = chg >= 0 ? '+' : '';
+      cEl.textContent = s + chg.toFixed(2) + '%';
+      cEl.style.color = chg >= 0 ? '#3fb950' : '#f85149';
+      cEl.style.background = chg >= 0 ? 'rgba(63,185,80,.12)' : 'rgba(248,81,73,.12)';
+    }
+  }
+  function tick(){
+    candles.shift();
+    var prev = candles[candles.length - 1].c;
+    var o = prev;
+    var c = o + (Math.random() - 0.48) * 4.5;
+    var h = Math.max(o, c) + Math.random() * 1.6;
+    var l = Math.min(o, c) - Math.random() * 1.6;
+    candles.push({o: o, c: c, h: h, l: l});
+    render();
+  }
+  render();
+  setInterval(tick, 1700);
+})();
+</script>
+
+<!-- Tools -->
 <div class="hero">
-  <div class="hero-eyebrow">
-    <span class="dot"></span>
-    Live market data · Options · Insider trades · AI forecasts
-  </div>
-  <h1>Stop trading <span>blind.</span></h1>
-  <p>ChartEdge.trade gives retail traders the same intelligence layer used by professionals — options flow, insider activity, gamma exposure, LSTM forecasts, and 20+ Pine Script indicators in one dashboard.</p>
-  <div class="hero-btns">
-    {% if not current_user %}<a class="btn-primary" href="/register">Get Started Free</a>{% endif %}
-    <a class="btn-secondary" href="/indicators">Browse Indicators</a>
-  </div>
   <div class="hero-tools">
     <a class="hero-tool blue" href="/flow">
       <div class="hero-tool-icon">🌊</div>
