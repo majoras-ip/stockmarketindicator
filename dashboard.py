@@ -6531,7 +6531,7 @@ HOME_HTML = """<!DOCTYPE html>
       <span class="bear">Trade the Bear.</span>
       <span class="bull">Ride the Bull.</span>
     </h1>
-    <p class="shader-sub">Real-time options flow, gamma exposure, insider trades, and so much more.</p>
+    <p class="shader-sub">20+ Pine Script indicators, real-time options flow, gamma exposure, insider trades, AI volatility forecasts — and so much more.</p>
     <div class="shader-btns">
       {% if not current_user %}<a class="shader-btn-primary" href="/register">Get Started Free</a>{% endif %}
       <a class="shader-btn-ghost" href="/indicators">Browse Indicators →</a>
