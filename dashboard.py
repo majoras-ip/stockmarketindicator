@@ -80,6 +80,28 @@ def send_welcome_email(to_email: str, username: str, referral_code: str) -> None
     except Exception as e:
         log.warning("Failed to send welcome email: %s", e)
 
+
+def send_password_reset_email(to_email: str, username: str, reset_url: str) -> None:
+    if not resend.api_key or not to_email:
+        return
+    try:
+        resend.Emails.send({
+            "from": "ChartEdge.trade <onboarding@resend.dev>",
+            "to": to_email,
+            "subject": "Reset your ChartEdge.trade password",
+            "html": f"""
+            <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:520px;margin:0 auto;padding:32px;background:#0d1117;color:#e6edf3;border-radius:10px;">
+              <h1 style="color:#58a6ff;margin-bottom:8px;">Reset your password</h1>
+              <p style="color:#8b949e;margin-bottom:24px;">Hi {username}, click the button below to set a new password. This link expires in 1 hour and can only be used once.</p>
+              <a href="{reset_url}" style="display:inline-block;background:#58a6ff;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:600;margin-bottom:24px;">Reset password →</a>
+              <p style="color:#8b949e;font-size:.82rem;margin-top:24px;">If you didn't request this, you can safely ignore this email — your password won't change.</p>
+              <p style="color:#636c76;font-size:.78rem;margin-top:24px;">© 2026 ChartEdge.trade · Not financial advice</p>
+            </div>
+            """,
+        })
+    except Exception as e:
+        log.warning("Failed to send password reset email: %s", e)
+
 # ── Database ──────────────────────────────────────────────────────────────────
 
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
@@ -241,6 +263,15 @@ def init_db():
                 user_id   INTEGER NOT NULL,
                 indicator TEXT NOT NULL,
                 ts        TIMESTAMP DEFAULT NOW()
+            )
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS password_reset_tokens (
+                token      TEXT PRIMARY KEY,
+                user_id    INTEGER NOT NULL,
+                expires_at TIMESTAMP NOT NULL,
+                used       INTEGER DEFAULT 0,
+                created    TIMESTAMP DEFAULT NOW()
             )
         """)
         conn.commit()
@@ -1972,6 +2003,54 @@ def login():
 def logout():
     session.clear()
     return redirect("/")
+
+
+@app.route("/forgot-password", methods=["GET", "POST"])
+def forgot_password():
+    success = None
+    error = None
+    if request.method == "POST":
+        email = request.form.get("email", "").strip()
+        if not email:
+            error = "Please enter your email address."
+        else:
+            row = _one("SELECT id, username FROM users WHERE email=%s", (email,))
+            if row:
+                from datetime import datetime, timezone, timedelta
+                token = secrets.token_urlsafe(32)
+                expires_at = datetime.now(timezone.utc) + timedelta(hours=1)
+                _run(
+                    "INSERT INTO password_reset_tokens (token, user_id, expires_at) VALUES (%s, %s, %s)",
+                    (token, row["id"], expires_at),
+                )
+                reset_url = f"{APP_URL}/reset-password?token={token}"
+                send_password_reset_email(email, row["username"], reset_url)
+            success = "If that email is on file, a reset link is on its way. Check your inbox (and spam folder)."
+    return render_template_string(AUTH_HTML, mode="forgot", error=error, success=success)
+
+
+@app.route("/reset-password", methods=["GET", "POST"])
+def reset_password():
+    from datetime import datetime, timezone
+    token = request.args.get("token", "") or request.form.get("token", "")
+    error = None
+    if not token:
+        return render_template_string(AUTH_HTML, mode="reset", error="Missing reset token. Request a new link below.", success=None, token="")
+
+    row = _one("SELECT * FROM password_reset_tokens WHERE token=%s", (token,))
+    if not row or row["used"] or row["expires_at"].replace(tzinfo=timezone.utc) < datetime.now(timezone.utc):
+        return render_template_string(AUTH_HTML, mode="reset", error="This reset link is invalid or has expired. Request a new one below.", success=None, token="")
+
+    if request.method == "POST":
+        password = request.form.get("password", "")
+        if len(password) < 6:
+            error = "Password must be at least 6 characters."
+        else:
+            _run("UPDATE users SET pw_hash=%s WHERE id=%s", (generate_password_hash(password), row["user_id"]))
+            _run("UPDATE password_reset_tokens SET used=1 WHERE token=%s", (token,))
+            return render_template_string(AUTH_HTML, mode="reset", error=None, success="Password updated. You can sign in with your new password now.", token="")
+
+    return render_template_string(AUTH_HTML, mode="reset", error=error, success=None, token=token)
 
 
 
@@ -4670,6 +4749,7 @@ _NAV_LINKS = """
       <div class="drop-menu">
         <a href="/login">Login</a>
         <a href="/register">Register</a>
+        <a href="/forgot-password">Forgot password?</a>
       </div>
       {% endif %}
     </div>
@@ -5404,7 +5484,7 @@ AUTH_HTML = """<!DOCTYPE html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">""" + _META + """
-  <title>{{ 'Register' if mode == 'register' else 'Login' }} — ChartEdge.trade</title>
+  <title>{% if mode == 'register' %}Register{% elif mode == 'forgot' %}Forgot password{% elif mode == 'reset' %}Reset password{% else %}Login{% endif %} — ChartEdge.trade</title>
   {% if mode == 'register' %}<script src="https://js.hcaptcha.com/1/api.js" async defer></script>{% endif %}
   <style>
     :root[data-theme="dark"]  { --bg:#0d1117; --bg2:#161b22; --bg3:#21262d; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --red:#f85149; --green:#3fb950; }
@@ -5481,6 +5561,10 @@ AUTH_HTML = """<!DOCTYPE html>
       background: rgba(63,185,80,.12); border: 1px solid var(--green); border-radius: 8px;
       padding: 9px 12px; color: var(--green); font-size: .8rem; font-weight: 600;
     }
+    .auth-success { background: rgba(63,185,80,.12); border: 1px solid var(--green); border-radius: 8px; padding: 10px 14px; color: var(--green); font-size: .85rem; margin-bottom: 16px; }
+    .auth-label-row { display: flex; justify-content: space-between; align-items: baseline; }
+    .auth-label-row a { color: var(--accent); font-size: .76rem; text-decoration: none; font-weight: 500; }
+    .auth-label-row a:hover { text-decoration: underline; }
     .auth-submit {
       width: 100%; background: var(--accent); color: #fff; border: none;
       padding: 12px; border-radius: 9px;
@@ -5511,10 +5595,19 @@ AUTH_HTML = """<!DOCTYPE html>
 <div class="auth-shell">
   <div class="auth-card">
     <div class="auth-head">
-      <h1 class="auth-title">{{ 'Create your account' if mode == 'register' else 'Welcome back' }}</h1>
+      <h1 class="auth-title">
+        {% if mode == 'register' %}Create your account
+        {% elif mode == 'forgot' %}Forgot password?
+        {% elif mode == 'reset' %}Set a new password
+        {% else %}Welcome back{% endif %}
+      </h1>
       <p class="auth-desc">
         {% if mode == 'register' %}
           Start with the free tier — 20+ Pine Script indicators, live charts, and market data. Upgrade anytime.
+        {% elif mode == 'forgot' %}
+          Enter the email tied to your account. We'll send you a one-time link to set a new password.
+        {% elif mode == 'reset' %}
+          Choose a new password to finish resetting your account.
         {% else %}
           Sign in to access your indicators, watchlists, and Pro tools.
         {% endif %}
@@ -5522,7 +5615,9 @@ AUTH_HTML = """<!DOCTYPE html>
     </div>
 
     {% if error %}<div class="auth-error">{{ error }}</div>{% endif %}
+    {% if success %}<div class="auth-success">{{ success }}</div>{% endif %}
 
+    {% if mode in ('register', 'login') %}
     <a class="auth-social" href="/login/google">
       <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
         <path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.874 2.684-6.615z"/>
@@ -5534,8 +5629,11 @@ AUTH_HTML = """<!DOCTYPE html>
     </a>
 
     <div class="auth-divider"><span>OR</span></div>
+    {% endif %}
 
+    {% if not (mode == 'reset' and success) %}
     <form method="POST" class="auth-form">
+      {% if mode in ('register', 'login') %}
       <div class="auth-field">
         <label for="auth-username">Username</label>
         <div class="auth-input">
@@ -5546,6 +5644,7 @@ AUTH_HTML = """<!DOCTYPE html>
           <input id="auth-username" type="text" name="username" required autofocus placeholder="your_username">
         </div>
       </div>
+      {% endif %}
 
       {% if mode == 'register' %}
       <div class="auth-field">
@@ -5560,14 +5659,34 @@ AUTH_HTML = """<!DOCTYPE html>
       </div>
       {% endif %}
 
+      {% if mode == 'forgot' %}
       <div class="auth-field">
-        <label for="auth-pw">Password{% if mode == 'register' %}<span class="auth-opt">min 6 chars</span>{% endif %}</label>
+        <label for="auth-email">Email</label>
+        <div class="auth-input">
+          <svg class="auth-input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="2" y="4" width="20" height="16" rx="2"/>
+            <path d="m22 7-10 5L2 7"/>
+          </svg>
+          <input id="auth-email" type="email" name="email" required autofocus placeholder="you@example.com">
+        </div>
+      </div>
+      {% endif %}
+
+      {% if mode in ('register', 'login', 'reset') %}
+      {% if mode == 'reset' %}<input type="hidden" name="token" value="{{ token }}">{% endif %}
+      <div class="auth-field">
+        <div class="auth-label-row">
+          <label for="auth-pw">
+            {% if mode == 'reset' %}New password{% else %}Password{% endif %}{% if mode == 'register' or mode == 'reset' %}<span class="auth-opt">min 6 chars</span>{% endif %}
+          </label>
+          {% if mode == 'login' %}<a href="/forgot-password">Forgot password?</a>{% endif %}
+        </div>
         <div class="auth-input">
           <svg class="auth-input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <rect x="3" y="11" width="18" height="11" rx="2"/>
             <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
           </svg>
-          <input id="auth-pw" type="password" name="password" required placeholder="••••••••" class="has-toggle">
+          <input id="auth-pw" type="password" name="password" required placeholder="••••••••" class="has-toggle"{% if mode == 'reset' %} autofocus{% endif %}>
           <button type="button" class="auth-pw-toggle" onclick="togglePw()" aria-label="Show or hide password">
             <svg id="auth-pw-eye" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/>
@@ -5576,6 +5695,7 @@ AUTH_HTML = """<!DOCTYPE html>
           </button>
         </div>
       </div>
+      {% endif %}
 
       {% if mode == 'register' and ref %}
       <input type="hidden" name="ref" value="{{ ref }}">
@@ -5586,21 +5706,31 @@ AUTH_HTML = """<!DOCTYPE html>
       <div class="h-captcha" data-sitekey="b06c575c-981a-4884-bbc0-5aa8c1d8aaa0"></div>
       {% endif %}
 
-      <button class="auth-submit" type="submit">{{ 'Create account' if mode == 'register' else 'Sign in' }}</button>
+      <button class="auth-submit" type="submit">
+        {% if mode == 'register' %}Create account
+        {% elif mode == 'forgot' %}Send reset link
+        {% elif mode == 'reset' %}Update password
+        {% else %}Sign in{% endif %}
+      </button>
     </form>
+    {% endif %}
 
     <p class="auth-switch">
       {% if mode == 'register' %}
         Already have an account? <a href="/login">Sign in</a>
+      {% elif mode in ('forgot', 'reset') %}
+        <a href="/login">← Back to sign in</a>
       {% else %}
         New to ChartEdge.trade? <a href="/register">Create one</a>
       {% endif %}
     </p>
 
+    {% if mode in ('register', 'login') %}
     <p class="auth-tos">
       By {{ 'creating an account' if mode == 'register' else 'signing in' }}, you agree to our
       <a href="/terms">Terms</a> &amp; <a href="/privacy">Privacy Policy</a>.
     </p>
+    {% endif %}
   </div>
 </div>
 <script>
