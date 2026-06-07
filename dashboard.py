@@ -3171,10 +3171,31 @@ def flow_api():
         calls = chain.calls
         puts  = chain.puts
 
-        def top_contracts(df, kind, n=10):
+        # Filter params
+        sort_by      = (request.args.get("sort", "volume") or "volume").lower()
+        type_filter  = (request.args.get("type", "all") or "all").lower()
+        strike_filter = (request.args.get("strike", "all") or "all").lower()
+        if sort_by not in ("volume", "oi", "premium", "iv"):
+            sort_by = "volume"
+        if type_filter not in ("all", "calls", "puts"):
+            type_filter = "all"
+        if strike_filter not in ("all", "itm", "otm"):
+            strike_filter = "all"
+
+        def top_contracts(df, kind, n=20):
             df = df.copy()
             df = df[df["volume"].notna() & (df["volume"] > 0)]
-            df = df.sort_values("volume", ascending=False).head(n)
+            if strike_filter == "itm":
+                df = df[df.get("inTheMoney", False) == True]
+            elif strike_filter == "otm":
+                df = df[df.get("inTheMoney", False) == False]
+            if df.empty:
+                return []
+            df["_premium"] = df["volume"].fillna(0) * df.get("lastPrice", 0).fillna(0)
+            sort_col = {"volume": "volume", "oi": "openInterest", "premium": "_premium", "iv": "impliedVolatility"}[sort_by]
+            if sort_col not in df.columns:
+                sort_col = "volume"
+            df = df.sort_values(sort_col, ascending=False).head(n)
             return [
                 {
                     "type":           kind,
@@ -3184,6 +3205,7 @@ def flow_api():
                     "openInterest":   int(r.get("openInterest", 0) or 0),
                     "iv":             round(float(r.get("impliedVolatility", 0) or 0) * 100, 1),
                     "lastPrice":      round(float(r.get("lastPrice", 0) or 0), 2),
+                    "premium":        round(float(r["volume"]) * float(r.get("lastPrice", 0) or 0) * 100, 0),
                     "inTheMoney":     bool(r.get("inTheMoney", False)),
                 }
                 for _, r in df.iterrows()
@@ -3195,10 +3217,10 @@ def flow_api():
         put_oi   = int(puts["openInterest"].fillna(0).sum())
         total_vol = call_vol + put_vol or 1
 
-        top = sorted(
-            top_contracts(calls, "call") + top_contracts(puts, "put"),
-            key=lambda x: x["volume"], reverse=True
-        )[:15]
+        top_calls = top_contracts(calls, "call") if type_filter != "puts" else []
+        top_puts  = top_contracts(puts,  "put")  if type_filter != "calls" else []
+        sort_key = {"volume": "volume", "oi": "openInterest", "premium": "premium", "iv": "iv"}[sort_by]
+        top = sorted(top_calls + top_puts, key=lambda x: x.get(sort_key, 0), reverse=True)[:20]
 
         return jsonify({
             "ticker":      ticker,
@@ -3212,6 +3234,9 @@ def flow_api():
             "call_pct":    round(call_vol / total_vol * 100, 1),
             "put_pct":     round(put_vol  / total_vol * 100, 1),
             "top_contracts": top,
+            "sort_by":     sort_by,
+            "type_filter": type_filter,
+            "strike_filter": strike_filter,
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -7913,6 +7938,9 @@ async function runBacktest() {
     ].join('');
     document.getElementById('stats-row').innerHTML = statsHTML;
 
+    // Reveal results BEFORE plotting so the container has real dimensions
+    results.style.display = 'block';
+
     // Equity chart
     var dates = d.equity_curve.map(function(e) { return e.date; });
     var vals   = d.equity_curve.map(function(e) { return e.value; });
@@ -7965,7 +7993,6 @@ async function runBacktest() {
       }).join('');
     }
 
-    results.style.display = 'block';
   } catch(err) {
     showError('Network error: ' + err.message);
   } finally {
@@ -9218,7 +9245,7 @@ PRIVACY_HTML = """<!DOCTYPE html>
   <p>Your account data is stored for as long as your account exists. You can request deletion by emailing us or using the delete account option if available.</p>
 
   <h2>6. Contact</h2>
-  <p>Questions? Email: <a href="mailto:verdictessentials@gmail.com">verdictessentials@gmail.com</a></p>
+  <p>Questions? Email: <a href="mailto:shopverdict@gmail.com">shopverdict@gmail.com</a></p>
 </div>
 <footer>© 2026 ChartEdge.trade · Not financial advice · <a href="/privacy" style="color:inherit">Privacy</a> · <a href="/terms" style="color:inherit">Terms</a></footer>
 <script>""" + _THEME_JS + """</script>
@@ -9284,7 +9311,7 @@ TERMS_HTML = """<!DOCTYPE html>
   <p>We may update these terms at any time. Continued use of the site after changes constitutes acceptance.</p>
 
   <h2>8. Contact</h2>
-  <p>Questions? Email: <a href="mailto:verdictessentials@gmail.com">verdictessentials@gmail.com</a></p>
+  <p>Questions? Email: <a href="mailto:shopverdict@gmail.com">shopverdict@gmail.com</a></p>
 </div>
 <footer>© 2026 ChartEdge.trade · Not financial advice · <a href="/privacy" style="color:inherit">Privacy</a> · <a href="/terms" style="color:inherit">Terms</a></footer>
 <script>""" + _THEME_JS + """</script>
@@ -12155,11 +12182,15 @@ FLOW_HTML = """<!DOCTYPE html>
     .hero h1 span { color: var(--accent); }
     .hero p { color: var(--muted); font-size: .9rem; }
     .container { max-width: 900px; margin: 0 auto; padding: 28px 24px; }
-    .search-row { display: flex; gap: 10px; margin-bottom: 28px; }
+    .search-row { display: flex; gap: 10px; margin-bottom: 14px; }
     .search-row input { flex: 1; background: var(--bg2); border: 1px solid var(--border); border-radius: 6px; padding: 10px 14px; color: var(--text); font-size: .95rem; font-family: monospace; text-transform: uppercase; outline: none; }
     .search-row input:focus { border-color: var(--accent); }
     .search-row button { background: var(--accent); color: #fff; border: none; border-radius: 6px; padding: 10px 22px; cursor: pointer; font-weight: 600; font-size: .9rem; }
     .search-row button:hover { opacity: .88; }
+    .filter-row { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 24px; }
+    .filter-row label { display: flex; flex-direction: column; gap: 4px; font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; font-weight: 600; }
+    .filter-row select { background: var(--bg2); border: 1px solid var(--border); color: var(--text); border-radius: 6px; padding: 7px 10px; font-size: .85rem; cursor: pointer; outline: none; }
+    .filter-row select:focus { border-color: var(--accent); }
     .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 24px; }
     .summary-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 16px; text-align: center; }
     .summary-card .val { font-size: 1.4rem; font-weight: 700; }
@@ -12210,6 +12241,30 @@ FLOW_HTML = """<!DOCTYPE html>
            onkeydown="if(event.key==='Enter'){event.preventDefault();loadFlow();}">
     <button type="button" onclick="loadFlow()">Search</button>
   </div>
+  <div class="filter-row">
+    <label>Sort by
+      <select id="flow-sort" onchange="loadFlow()">
+        <option value="volume">Volume</option>
+        <option value="oi">Open Interest</option>
+        <option value="premium">Premium ($)</option>
+        <option value="iv">Implied Vol</option>
+      </select>
+    </label>
+    <label>Type
+      <select id="flow-type" onchange="loadFlow()">
+        <option value="all">All</option>
+        <option value="calls">Calls only</option>
+        <option value="puts">Puts only</option>
+      </select>
+    </label>
+    <label>Moneyness
+      <select id="flow-strike" onchange="loadFlow()">
+        <option value="all">All strikes</option>
+        <option value="itm">ITM only</option>
+        <option value="otm">OTM only</option>
+      </select>
+    </label>
+  </div>
   <div id="flow-content" style="min-height:60px;text-align:center;padding:32px;color:var(--muted);">JavaScript did not run — check browser console</div>
 </div>
 <footer>© 2026 ChartEdge.trade · Options data via yfinance · Not financial advice</footer>
@@ -12221,7 +12276,12 @@ function loadFlow(exp) {
   var ticker = (document.getElementById('ticker-input').value || '').trim().toUpperCase();
   if (!ticker) { setError('Enter a ticker first (e.g. SPY).'); return; }
   document.getElementById('ticker-input').value = ticker;
-  var url = '/api/flow?ticker=' + encodeURIComponent(ticker) + (exp ? '&exp=' + encodeURIComponent(exp) : '');
+  var sort = (document.getElementById('flow-sort')||{}).value || 'volume';
+  var type = (document.getElementById('flow-type')||{}).value || 'all';
+  var strike = (document.getElementById('flow-strike')||{}).value || 'all';
+  var url = '/api/flow?ticker=' + encodeURIComponent(ticker)
+    + (exp ? '&exp=' + encodeURIComponent(exp) : '')
+    + '&sort=' + sort + '&type=' + type + '&strike=' + strike;
   setContent('<div style="text-align:center;padding:48px;color:var(--muted);">Loading ' + ticker + '...</div>');
 
   var killTimer = setTimeout(function() {
@@ -12297,12 +12357,16 @@ function renderFlow(d) {
       + '<td>' + fmt(c.openInterest) + '</td>'
       + '<td>' + c.iv + '%</td>'
       + '<td>$' + c.lastPrice + '</td>'
+      + '<td>$' + fmt(c.premium || 0) + '</td>'
       + '<td><span class="' + itmClass + '">' + itmText + '</span></td>'
       + '</tr>';
   }
+  var sortLabel = {volume:'Volume', oi:'Open Interest', premium:'Premium', iv:'Implied Vol'}[d.sort_by || 'volume'];
+  var typeLabel = d.type_filter === 'calls' ? ' \u00b7 calls' : d.type_filter === 'puts' ? ' \u00b7 puts' : '';
+  var strikeLabel = d.strike_filter === 'itm' ? ' \u00b7 ITM' : d.strike_filter === 'otm' ? ' \u00b7 OTM' : '';
   var table = '<div class="table-section">'
-    + '<h3>Top Contracts by Volume \u2014 ' + d.ticker + ' \u00b7 ' + d.expiry + '</h3>'
-    + '<table><thead><tr><th>Type</th><th>Strike</th><th>Expiry</th><th>Volume</th><th>OI</th><th>IV</th><th>Last</th><th></th></tr></thead>'
+    + '<h3>Top Contracts by ' + sortLabel + typeLabel + strikeLabel + ' \u2014 ' + d.ticker + ' \u00b7 ' + d.expiry + '</h3>'
+    + '<table><thead><tr><th>Type</th><th>Strike</th><th>Expiry</th><th>Volume</th><th>OI</th><th>IV</th><th>Last</th><th>Premium</th><th></th></tr></thead>'
     + '<tbody>' + rows + '</tbody></table></div>';
 
   document.getElementById('flow-content').innerHTML =
@@ -12511,24 +12575,24 @@ def volforecast_api():
 
         # EWMA volatility forecast (lambda=0.94, RiskMetrics standard)
         lam = 0.94
-        ewma_var = float(np.var(rets[-30:]))
+        ewma_var = float(np.var(rets[-30:], ddof=1))
         ewma_series = []
         for r_t in rets[-(len(rv)):]:
             ewma_var = lam * ewma_var + (1 - lam) * r_t ** 2
             ewma_series.append(float(np.sqrt(ewma_var) * np.sqrt(252) * 100))
 
         # Forecast next N days (EWMA mean-reverts toward long-run vol)
-        long_run_vol = float(np.std(rets) * np.sqrt(252) * 100)
-        reversion_speed = 0.05
+        long_run_vol = float(np.std(rets, ddof=1) * np.sqrt(252) * 100)
+        reversion_speed = 0.10
         forecast = []
         v = ewma_series[-1]
         for _ in range(horizon):
             v = v + reversion_speed * (long_run_vol - v)
             forecast.append(round(v, 2))
 
-        # Volatility percentile rank (where current IV sits vs past year)
+        # Volatility percentile rank — strict-less-than for true rank
         current_rv = rv[-1]
-        pct_rank = round(float(np.mean(np.array(rv) <= current_rv)) * 100, 1)
+        pct_rank = round(float(np.mean(np.array(rv) < current_rv)) * 100, 1)
 
         # Regime
         p25, p75 = np.percentile(rv, 25), np.percentile(rv, 75)
@@ -12541,7 +12605,7 @@ def volforecast_api():
         if current_rv > np.percentile(rv, 90):
             regime, regime_color = "Extreme", "#ff4444"
 
-        # IV from options (ATM, nearest expiry)
+        # IV from options (ATM, nearest expiry) — average of nearest call+put for stability
         iv_current = None
         try:
             t = yf.Ticker(ticker)
@@ -12549,11 +12613,20 @@ def volforecast_api():
             if exps:
                 chain = t.option_chain(exps[0])
                 spot  = float(t.fast_info.last_price)
-                atm   = chain.calls.iloc[(chain.calls["strike"] - spot).abs().argsort()[:1]]
-                if not atm.empty:
-                    iv_val = float(atm.iloc[0].get("impliedVolatility") or 0)
-                    if iv_val > 0 and iv_val == iv_val:
-                        iv_current = round(iv_val * 100, 1)
+                ivs = []
+                for side in (chain.calls, chain.puts):
+                    if side is None or side.empty:
+                        continue
+                    nearest = side.iloc[(side["strike"] - spot).abs().argsort()[:1]]
+                    iv_val = float(nearest.iloc[0].get("impliedVolatility") or 0)
+                    if not (0 < iv_val < 5):   # 5.0 = 500% — anything above is bad data
+                        continue
+                    ivs.append(iv_val)
+                if ivs:
+                    iv_pct = (sum(ivs) / len(ivs)) * 100
+                    # Sanity bound: realised vol is up to ~100% for normal tickers
+                    if 1 <= iv_pct <= 300:
+                        iv_current = round(iv_pct, 1)
         except Exception:
             pass
 
@@ -13259,6 +13332,8 @@ MY_DASHBOARD_HTML = """<!DOCTYPE html>
       <div class="profile-name">
         {{ username }}
         <span class="plan-pill" style="background:{{ {'free':'#21262d','basic':'#0d1a2d','pro':'#2a2000'}[plan] }};color:{{ {'free':'#8b949e','basic':'#58a6ff','pro':'#e3b341'}[plan] }};">{{ plan.upper() }}</span>
+        <span class="plan-pill" style="background:#21262d;color:#e6edf3;">#{{ signup_rank }}</span>
+        {% if signup_tier %}<span class="plan-pill" style="background:{{ signup_tier.bg }};color:{{ signup_tier.color }};">{{ signup_tier.icon }} {{ signup_tier.title }}</span>{% endif %}
         <button class="pencil-btn" onclick="document.getElementById('edit-section').style.display=document.getElementById('edit-section').style.display==='none'?'block':'none'" title="Edit profile">✏️</button>
       </div>
       <div class="profile-meta">Member since {{ member_since }}{% if plan_expires %} &nbsp;·&nbsp; Renews {{ plan_expires }}{% endif %}</div>
@@ -13577,9 +13652,23 @@ def me():
     else:
         days = 0; member_since = "Unknown"; duration_label = "Member"; duration_color = "#8b949e"
 
+    # Signup rank — actual ordinal among all users (handles deletions)
+    signup_rank = _scalar("SELECT COUNT(*) FROM users WHERE id <= %s", (user_id,)) or user_id
+    if signup_rank <= 10:
+        signup_tier = {"title": "Founding Member", "color": "#e3b341", "bg": "#2a2000", "icon": "👑"}
+    elif signup_rank <= 100:
+        signup_tier = {"title": "Pioneer",        "color": "#bc8cff", "bg": "#1a0d2d", "icon": "🚀"}
+    elif signup_rank <= 1000:
+        signup_tier = {"title": "Early Adopter",  "color": "#58a6ff", "bg": "#0d1a2d", "icon": "⭐"}
+    else:
+        signup_tier = None
+
     # Badges
     badges = []
-    badges.append({"icon":"👤","label":f"User #{user_id}","color":"#e6edf3","bg":"#21262d"})
+    badges.append({"icon":"👤","label":f"User #{signup_rank}","color":"#e6edf3","bg":"#21262d"})
+    if signup_tier:
+        badges.append({"icon": signup_tier["icon"], "label": signup_tier["title"],
+                       "color": signup_tier["color"], "bg": signup_tier["bg"]})
     plan_colors = {"free":("#8b949e","#21262d"),"basic":("#58a6ff","#0d1a2d"),"pro":("#e3b341","#2a2000")}
     pc, pbg = plan_colors.get(plan, plan_colors["free"])
     badges.append({"icon":"💎" if plan=="pro" else ("⭐" if plan=="basic" else "🆓"),
@@ -13614,6 +13703,8 @@ def me():
         stats=stats,
         profile_pic=profile_pic,
         profile_error=profile_error,
+        signup_rank=signup_rank,
+        signup_tier=signup_tier,
     )
 
 
