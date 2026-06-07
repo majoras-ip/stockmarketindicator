@@ -92,10 +92,8 @@ def send_password_reset_email(to_email: str, username: str, reset_url: str) -> N
             "html": f"""
             <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:520px;margin:0 auto;padding:32px;background:#0d1117;color:#e6edf3;border-radius:10px;">
               <h1 style="color:#58a6ff;margin-bottom:8px;">Reset your password</h1>
-              <p style="color:#8b949e;margin-bottom:24px;">Hi {username}, click the button below to set a new password. This link expires in 1 hour and can only be used once.</p>
-              <a href="{reset_url}" class="notrack" data-no-track="true" style="display:inline-block;background:#58a6ff;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:600;margin-bottom:24px;">Reset password →</a>
-              <p style="color:#8b949e;font-size:.82rem;margin-top:24px;margin-bottom:6px;">If the button above doesn't work, copy and paste this link into your browser:</p>
-              <p style="color:#58a6ff;font-size:.78rem;word-break:break-all;background:#161b22;padding:10px 12px;border-radius:6px;border:1px solid #30363d;">{reset_url}</p>
+              <p style="color:#8b949e;margin-bottom:18px;">Hi {username}, copy and paste the link below into your browser to set a new password. This link expires in 1 hour and can only be used once.</p>
+              <p style="color:#58a6ff;font-size:.85rem;word-break:break-all;background:#161b22;padding:14px 16px;border-radius:8px;border:1px solid #30363d;margin-bottom:24px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;">{reset_url}</p>
               <p style="color:#8b949e;font-size:.82rem;margin-top:24px;">If you didn't request this, you can safely ignore this email — your password won't change.</p>
               <p style="color:#636c76;font-size:.78rem;margin-top:24px;">© 2026 ChartEdge.trade · Not financial advice</p>
             </div>
