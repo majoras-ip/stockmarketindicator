@@ -5762,8 +5762,6 @@ AUTH_HTML = """<!DOCTYPE html>
         <a href="/login">← Back to sign in</a>
       {% else %}
         New to ChartEdge.trade? <a href="/register">Create one</a>
-        &nbsp;·&nbsp;
-        <a href="/forgot-password">Forgot password?</a>
       {% endif %}
     </p>
 
