@@ -1920,8 +1920,10 @@ def register():
         hcaptcha_token = request.form.get("h-captcha-response", "")
         if not hcaptcha_token:
             error = "Please complete the CAPTCHA."
-        elif not username or not password:
-            error = "Username and password are required."
+        elif not username or not password or not email:
+            error = "Username, email, and password are required."
+        elif "@" not in email or "." not in email:
+            error = "Please enter a valid email address."
         elif len(password) < 6:
             error = "Password must be at least 6 characters."
         else:
@@ -5648,13 +5650,13 @@ AUTH_HTML = """<!DOCTYPE html>
 
       {% if mode == 'register' %}
       <div class="auth-field">
-        <label for="auth-email">Email<span class="auth-opt">optional — for welcome mail</span></label>
+        <label for="auth-email">Email<span class="auth-opt">needed for password recovery</span></label>
         <div class="auth-input">
           <svg class="auth-input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <rect x="2" y="4" width="20" height="16" rx="2"/>
             <path d="m22 7-10 5L2 7"/>
           </svg>
-          <input id="auth-email" type="email" name="email" placeholder="you@example.com">
+          <input id="auth-email" type="email" name="email" required placeholder="you@example.com">
         </div>
       </div>
       {% endif %}
