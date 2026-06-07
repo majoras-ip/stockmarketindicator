@@ -7018,61 +7018,6 @@ void main(void){
 
 <hr class="divider">
 
-<!-- Indicators list -->
-<div class="section">
-  <h2>Free <span>Pine Script</span> Indicators</h2>
-  <p style="text-align:center;color:var(--muted);font-size:0.9rem;margin-bottom:0;line-height:1.7;">All indicators use Pine Script v6 and work on TradingView's free tier. Copy and paste onto any chart in seconds.</p>
-  <div class="ind-list">
-    <a class="ind-pill" href="/indicators?kind=volume">
-      <div class="cat">Volume</div><div class="iname">24h Volume</div>
-    </a>
-    <a class="ind-pill" href="/indicators?kind=vwap">
-      <div class="cat">Volume</div><div class="iname">VWAP + Bands</div>
-    </a>
-    <a class="ind-pill" href="/indicators?kind=vwap_only">
-      <div class="cat">Volume</div><div class="iname">VWAP Only</div>
-    </a>
-    <a class="ind-pill" href="/indicators?kind=atr">
-      <div class="cat">Volatility</div><div class="iname">ATR</div>
-    </a>
-    <a class="ind-pill" href="/indicators?kind=relvol">
-      <div class="cat">Volume</div><div class="iname">Relative Volume</div>
-    </a>
-    <a class="ind-pill" href="/indicators?kind=macross">
-      <div class="cat">Trend</div><div class="iname">MA Cross</div>
-    </a>
-    <a class="ind-pill" href="/indicators?kind=feargreed">
-      <div class="cat">Momentum</div><div class="iname">Fear & Greed</div>
-    </a>
-    <a class="ind-pill" href="/indicators?kind=smallcap_pb">
-      <div class="cat">Small Cap</div><div class="iname">Micro Pullback</div>
-    </a>
-    <a class="ind-pill" href="/indicators?kind=rsi">
-      <div class="cat">Momentum</div><div class="iname">RSI</div>
-    </a>
-    <a class="ind-pill" href="/indicators?kind=macd">
-      <div class="cat">Trend</div><div class="iname">MACD</div>
-    </a>
-    <a class="ind-pill" href="/indicators?kind=supertrend">
-      <div class="cat">Trend</div><div class="iname">Supertrend</div>
-    </a>
-    <a class="ind-pill" href="/indicators?kind=bbands">
-      <div class="cat">Volatility</div><div class="iname">Bollinger Bands</div>
-    </a>
-    <a class="ind-pill" href="/indicators?kind=ema">
-      <div class="cat">Trend</div><div class="iname">EMA Ribbon</div>
-    </a>
-    <a class="ind-pill" href="/indicators?kind=obv">
-      <div class="cat">Volume</div><div class="iname">OBV</div>
-    </a>
-  </div>
-  <div style="text-align:center;margin-top:24px;">
-    <a class="btn-primary" href="/indicators">Browse all indicators →</a>
-  </div>
-</div>
-
-<hr class="divider">
-
 <!-- AI section -->
 <div style="background:linear-gradient(135deg,#0d1f33 0%,#0d1117 60%,#0d2210 100%);border-top:1px solid var(--border);border-bottom:1px solid var(--border);padding:64px 24px;">
   <div style="max-width:860px;margin:0 auto;">
