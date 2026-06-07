@@ -6313,15 +6313,17 @@ HOME_HTML = """<!DOCTYPE html>
       font-weight: 800; letter-spacing: -.025em; line-height: 1.02;
       font-size: clamp(2.6rem, 6vw, 5rem); margin-bottom: 22px;
     }
-    .shader-headline .bear, .shader-headline .bull { display: block; }
+    .shader-headline .bear, .shader-headline .bull { display: block; color: transparent; }
     .shader-headline .bear {
-      background: linear-gradient(180deg, #ffb1ad 0%, #f85149 55%, #b8302a 100%);
-      -webkit-background-clip: text; background-clip: text; color: transparent;
+      -webkit-text-stroke: 1.8px #f85149;
+              text-stroke: 1.8px #f85149;
+      text-shadow: 0 0 24px rgba(248,81,73,.35);
       opacity: 0; animation: shader-fade-up .9s .25s ease-out forwards;
     }
     .shader-headline .bull {
-      background: linear-gradient(180deg, #98ecaa 0%, #3fb950 55%, #237a36 100%);
-      -webkit-background-clip: text; background-clip: text; color: transparent;
+      -webkit-text-stroke: 1.8px #3fb950;
+              text-stroke: 1.8px #3fb950;
+      text-shadow: 0 0 24px rgba(63,185,80,.35);
       opacity: 0; animation: shader-fade-up .9s .45s ease-out forwards;
     }
     .shader-sub {
@@ -6510,44 +6512,10 @@ HOME_HTML = """<!DOCTYPE html>
   <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
 </nav>
 
-<!-- Ticker tape -->
-<div class="ticker-tape">
-  <div class="ticker-inner" id="ticker-inner">
-    <span class="tick" style="color:var(--muted)">Loading prices…</span>
-  </div>
-</div>
-<script>
-(function(){
-  function fmtPx(p){
-    if(p>=1000)return p.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
-    if(p>=10)return p.toFixed(2);
-    return p.toFixed(4);
-  }
-  fetch('/api/tickertape').then(function(r){return r.json();}).then(function(d){
-    if(!d.tickers||!d.tickers.length)return;
-    var items=d.tickers;
-    var html='';
-    // duplicate for seamless loop
-    [items,items].forEach(function(arr){
-      arr.forEach(function(t){
-        var cls=t.chg>=0?'up':'down';
-        var sign=t.chg>=0?'+':'';
-        html+='<span class="tick"><span class="sym">'+t.sym+'</span><span class="'+cls+'">'+fmtPx(t.price)+' '+sign+t.chg+'%</span></span>';
-      });
-    });
-    document.getElementById('ticker-inner').innerHTML=html;
-  }).catch(function(){});
-})();
-</script>
-
 <!-- Bull/bear shader hero -->
 <section class="shader-hero">
   <canvas id="shader-canvas"></canvas>
   <div class="shader-overlay">
-    <div class="shader-badge">
-      <span class="icon">📈</span>
-      <span>Live · 20+ free indicators · Pro tools</span>
-    </div>
     <h1 class="shader-headline">
       <span class="bear">Trade the Bear.</span>
       <span class="bull">Ride the Bull.</span>
@@ -6600,7 +6568,13 @@ float clouds(vec2 p){
   }
   return t;
 }
-float hash11(float n){ return fract(sin(n*43758.5453)*7654.321); }
+float hash11(float n){
+  // Hoskins-style hash — stable for large inputs (no sin precision loss)
+  n = fract(n * 0.1031);
+  n *= n + 33.33;
+  n *= n + n;
+  return fract(n);
+}
 float sdBox(vec2 p, vec2 b){
   vec2 d = abs(p) - b;
   return length(max(d, 0.0)) + min(max(d.x, d.y), 0.0);
