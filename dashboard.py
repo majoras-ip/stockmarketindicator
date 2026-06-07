@@ -6841,60 +6841,6 @@ void main(void){
 })();
 </script>
 
-<!-- Tools -->
-<div class="hero">
-  <div class="hero-tools">
-    <a class="hero-tool blue" href="/flow">
-      <div class="hero-tool-icon">🌊</div>
-      <div class="hero-tool-name">Options Flow</div>
-      <div class="hero-tool-desc">Real-time call vs put activity. See where smart money is positioning.</div>
-      <span class="hero-tool-tag tag-pro">Pro</span>
-    </a>
-    <a class="hero-tool orange" href="/insider">
-      <div class="hero-tool-icon">🏛</div>
-      <div class="hero-tool-name">Insider Trading</div>
-      <div class="hero-tool-desc">SEC Form 4 filings + Congress STOCK Act trades. Updated daily.</div>
-      <span class="hero-tool-tag tag-pro">Pro</span>
-    </a>
-    <a class="hero-tool green" href="/gamma">
-      <div class="hero-tool-icon">📊</div>
-      <div class="hero-tool-name">Gamma Exposure</div>
-      <div class="hero-tool-desc">Dealer hedging levels from live options chains. Key S/R zones.</div>
-      <span class="hero-tool-tag tag-basic">Basic</span>
-    </a>
-    <a class="hero-tool purple" href="/generate">
-      <div class="hero-tool-icon">🧠</div>
-      <div class="hero-tool-name">LSTM Forecast</div>
-      <div class="hero-tool-desc">Deep learning volatility forecast trained on years of market data.</div>
-      <span class="hero-tool-tag tag-pro">Pro</span>
-    </a>
-    <a class="hero-tool blue" href="/premarket">
-      <div class="hero-tool-icon">🌅</div>
-      <div class="hero-tool-name">Pre-Market Scanner</div>
-      <div class="hero-tool-desc">Gap ups, gap downs, and unusual movers before the open.</div>
-      <span class="hero-tool-tag tag-pro">Pro</span>
-    </a>
-    <a class="hero-tool green" href="/indicators">
-      <div class="hero-tool-icon">📈</div>
-      <div class="hero-tool-name">Pine Script Indicators</div>
-      <div class="hero-tool-desc">20+ indicators — VWAP, ATR, MA Cross, Fear & Greed, and more.</div>
-      <span class="hero-tool-tag tag-free">Free</span>
-    </a>
-    <a class="hero-tool purple" href="/darkpool">
-      <div class="hero-tool-icon">🌑</div>
-      <div class="hero-tool-name">Dark Pool Flow</div>
-      <div class="hero-tool-desc">FINRA ATS institutional block trades. See where big money is hiding.</div>
-      <span class="hero-tool-tag tag-pro">Pro</span>
-    </a>
-    <a class="hero-tool orange" href="/backtest">
-      <div class="hero-tool-icon">⚡</div>
-      <div class="hero-tool-name">Backtester</div>
-      <div class="hero-tool-desc">Test strategies on any ticker. Sharpe ratio, drawdown, equity curve.</div>
-      <span class="hero-tool-tag tag-pro">Pro</span>
-    </a>
-  </div>
-</div>
-
 <!-- Trust bar -->
 <div style="background:var(--bg2);border-bottom:1px solid var(--border);padding:10px 24px;display:flex;justify-content:center;gap:32px;flex-wrap:wrap;">
   <span style="font-size:.8rem;color:var(--muted);display:flex;align-items:center;gap:6px;"><span style="color:#3fb950;">✓</span> No credit card to start</span>
@@ -7168,37 +7114,6 @@ void main(void){
       </div>
     </div>
     <p style="text-align:center;color:var(--muted);font-size:.78rem;margin-top:32px;">Not financial advice. Past model performance does not guarantee future results.</p>
-  </div>
-</div>
-
-<hr class="divider">
-
-<!-- How it works -->
-<div class="section">
-  <h2>How it <span>works</span></h2>
-  <div class="steps-card">
-    <div class="steps">
-      <div class="step">
-        <div class="step-num">1</div>
-        <h4>Create a free account</h4>
-        <p>Sign up in seconds — no credit card required. Free accounts get 3 copies per day forever.</p>
-      </div>
-      <div class="step">
-        <div class="step-num">2</div>
-        <h4>Pick an indicator</h4>
-        <p>Browse by category or search by name on the Indicators page.</p>
-      </div>
-      <div class="step">
-        <div class="step-num">3</div>
-        <h4>Copy the code</h4>
-        <p>Hit the Copy button — the Pine Script code goes straight to your clipboard.</p>
-      </div>
-      <div class="step">
-        <div class="step-num">4</div>
-        <h4>Paste into TradingView</h4>
-        <p>Open any chart → Pine Script Editor → paste → Add to chart. Done in seconds.</p>
-      </div>
-    </div>
   </div>
 </div>
 
