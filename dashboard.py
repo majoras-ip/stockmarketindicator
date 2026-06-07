@@ -6284,7 +6284,9 @@ HOME_HTML = """<!DOCTYPE html>
 
     /* Shader hero — bull/bear cosmic WebGL2 background */
     .shader-hero {
-      position: relative; width: 100%; min-height: 78vh;
+      position: relative; width: 100%;
+      min-height: calc(100vh - 56px);
+      display: flex; align-items: center; justify-content: center;
       overflow: hidden; background: #000; border-bottom: 1px solid var(--border);
     }
     .shader-hero canvas {
@@ -6293,12 +6295,23 @@ HOME_HTML = """<!DOCTYPE html>
     .shader-hero::after {
       content: ''; position: absolute; inset: 0; pointer-events: none;
       background:
-        radial-gradient(ellipse 90% 70% at 50% 50%, transparent 30%, rgba(0,0,0,0.55) 100%),
+        radial-gradient(ellipse 70% 55% at 50% 50%, transparent 30%, rgba(0,0,0,0.55) 100%),
         linear-gradient(180deg, transparent 60%, rgba(13,17,23,0.85) 100%);
     }
     .shader-overlay {
-      position: relative; z-index: 2; max-width: 980px; margin: 0 auto;
-      padding: clamp(56px, 12vh, 120px) 24px; text-align: center; color: #fff;
+      position: relative; z-index: 2;
+      max-width: 760px;
+      padding: 48px 40px 44px;
+      text-align: center; color: #fff;
+      background: linear-gradient(180deg, rgba(255,255,255,.10) 0%, rgba(255,255,255,.04) 100%);
+      -webkit-backdrop-filter: blur(14px) saturate(140%);
+              backdrop-filter: blur(14px) saturate(140%);
+      border: 1px solid rgba(255,255,255,.14);
+      border-radius: 22px;
+      box-shadow:
+        0 24px 60px rgba(0,0,0,.45),
+        inset 0 1px 0 rgba(255,255,255,.10);
+      margin: 0 24px;
     }
     .shader-badge {
       display: inline-flex; align-items: center; gap: 10px;
@@ -6359,8 +6372,8 @@ HOME_HTML = """<!DOCTYPE html>
       to   { opacity: 1; transform: translateY(0); }
     }
     @media (max-width: 640px) {
-      .shader-hero { min-height: 70vh; }
-      .shader-overlay { padding: 56px 20px; }
+      .shader-hero { min-height: calc(100vh - 52px); }
+      .shader-overlay { padding: 32px 22px 30px; margin: 0 16px; border-radius: 18px; }
     }
     @media (prefers-reduced-motion: reduce) {
       .shader-badge, .shader-headline .bear, .shader-headline .bull, .shader-sub, .shader-btns { animation: none; opacity: 1; }
