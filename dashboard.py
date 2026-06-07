@@ -5970,6 +5970,10 @@ INDICATORS_HTML = """<!DOCTYPE html>
 <div class="hero">
   <h1>Free <span>TradingView</span> Indicators</h1>
   <p>Pick an indicator and copy the Pine Script — works on any TradingView chart, no paid plan needed.</p>
+  <div style="margin:18px auto 0;max-width:560px;display:flex;align-items:center;gap:10px;padding:10px 14px;background:rgba(88,166,255,0.08);border:1px solid rgba(88,166,255,0.28);border-radius:8px;font-size:0.82rem;color:var(--text);text-align:left;">
+    <span style="font-size:1rem;">⏱</span>
+    <span><strong>Indicators refresh daily.</strong> Each copied script expires at midnight — come back the next day to grab an updated version.</span>
+  </div>
 </div>
 
 <div class="container">
