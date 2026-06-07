@@ -94,6 +94,8 @@ def send_password_reset_email(to_email: str, username: str, reset_url: str) -> N
               <h1 style="color:#58a6ff;margin-bottom:8px;">Reset your password</h1>
               <p style="color:#8b949e;margin-bottom:24px;">Hi {username}, click the link below to set a new password. This link expires in 1 hour and can only be used once.</p>
               <a href="{reset_url}" class="notrack" data-no-track="true" style="display:inline-block;background:#58a6ff;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:600;font-size:.95rem;margin-bottom:24px;">Reset Password</a>
+              <p style="color:#8b949e;font-size:.82rem;margin-top:24px;margin-bottom:6px;">If the button above doesn't work, copy and paste this link into your browser:</p>
+              <p style="color:#58a6ff;font-size:.78rem;word-break:break-all;background:#161b22;padding:10px 12px;border-radius:6px;border:1px solid #30363d;">{reset_url}</p>
               <p style="color:#8b949e;font-size:.82rem;margin-top:16px;">If you didn't request this, you can safely ignore this email — your password won't change.</p>
               <p style="color:#636c76;font-size:.78rem;margin-top:24px;">© 2026 ChartEdge.trade · Not financial advice</p>
             </div>
