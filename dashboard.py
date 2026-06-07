@@ -6461,32 +6461,108 @@ HOME_HTML = """<!DOCTYPE html>
     .btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
 
     /* Tool cards hero grid */
-    .hero-tools { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; max-width: 900px; margin: 0 auto; }
+    .hero-tools { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; max-width: 940px; margin: 0 auto; }
     .hero-tool {
-      background: var(--bg2); border: 1px solid var(--border); border-radius: 10px;
-      padding: 18px 20px; text-align: left; text-decoration: none;
-      transition: border-color 0.15s, transform 0.15s; position: relative; overflow: hidden;
+      --ht-c1: #58a6ff; --ht-c2: #79c0ff; --ht-glow: rgba(88,166,255,.20);
+      background: var(--bg2); border: 1px solid var(--border); border-radius: 12px;
+      padding: 20px 22px; text-align: left; text-decoration: none;
+      position: relative; overflow: hidden;
+      transition: transform .3s cubic-bezier(.2,.7,.3,1), border-color .25s, box-shadow .25s;
     }
-    .hero-tool:hover { border-color: var(--accent); transform: translateY(-2px); }
-    .hero-tool::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; }
-    .hero-tool.blue::before  { background: linear-gradient(90deg, #58a6ff, #79c0ff); }
-    .hero-tool.green::before { background: linear-gradient(90deg, #3fb950, #56d364); }
-    .hero-tool.orange::before{ background: linear-gradient(90deg, #e3b341, #ffa657); }
-    .hero-tool.purple::before{ background: linear-gradient(90deg, #bc8cff, #d2a8ff); }
-    .hero-tool-icon { font-size: 1.4rem; margin-bottom: 8px; }
-    .hero-tool-name { font-size: 0.88rem; font-weight: 700; color: var(--text); margin-bottom: 3px; }
-    .hero-tool-desc { font-size: 0.75rem; color: var(--muted); line-height: 1.4; }
-    .hero-tool-tag { display: inline-block; font-size: 0.63rem; font-weight: 700; padding: 1px 7px; border-radius: 8px; margin-top: 8px; }
+    .hero-tool::before {
+      content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+      background: linear-gradient(90deg, var(--ht-c1), var(--ht-c2));
+      opacity: .95;
+    }
+    .hero-tool::after {
+      content: ''; position: absolute; inset: -1px;
+      border-radius: 12px; pointer-events: none;
+      opacity: 0; transition: opacity .3s;
+      background: radial-gradient(75% 65% at 50% 0%, var(--ht-glow), transparent 65%);
+    }
+    .hero-tool:hover {
+      transform: translateY(-4px);
+      border-color: var(--ht-c1);
+      box-shadow: 0 14px 36px rgba(0,0,0,.28), 0 0 0 1px var(--ht-c1);
+    }
+    .hero-tool:hover::after { opacity: 1; }
+    .hero-tool-icon {
+      font-size: 1.55rem; margin-bottom: 10px;
+      display: inline-block; transform-origin: center;
+      transition: transform .35s cubic-bezier(.3,1.4,.5,1);
+    }
+    .hero-tool:hover .hero-tool-icon { transform: scale(1.18) rotate(-6deg); }
+    .hero-tool-name { font-size: 0.9rem; font-weight: 700; color: var(--text); margin-bottom: 4px; }
+    .hero-tool-desc { font-size: 0.76rem; color: var(--muted); line-height: 1.5; }
+    .hero-tool-tag { display: inline-block; font-size: 0.63rem; font-weight: 700; padding: 1px 7px; border-radius: 8px; margin-top: 10px; }
+    .hero-tool.blue   { --ht-c1: #58a6ff; --ht-c2: #79c0ff; --ht-glow: rgba(88,166,255,.22); }
+    .hero-tool.green  { --ht-c1: #3fb950; --ht-c2: #56d364; --ht-glow: rgba(63,185,80,.22); }
+    .hero-tool.orange { --ht-c1: #e3b341; --ht-c2: #ffa657; --ht-glow: rgba(255,166,87,.22); }
+    .hero-tool.purple { --ht-c1: #bc8cff; --ht-c2: #d2a8ff; --ht-glow: rgba(188,140,255,.22); }
     .tag-free   { background: #1f2d1f; color: #3fb950; }
     .tag-basic  { background: #1a2d3d; color: #58a6ff; }
     .tag-pro    { background: #2d1f10; color: #e3b341; }
 
     /* Stats strip */
-    .stats-strip { display: flex; justify-content: center; gap: 0; flex-wrap: wrap; background: var(--bg2); border-bottom: 1px solid var(--border); }
-    .stat-item { padding: 18px 36px; text-align: center; border-right: 1px solid var(--border); }
+    .stats-strip {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      background: linear-gradient(180deg, var(--bg2) 0%, var(--bg) 100%);
+      border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
+      padding: 36px 24px; gap: 0;
+    }
+    .stat-item { text-align: center; padding: 8px 24px; border-right: 1px solid var(--border); position: relative; }
     .stat-item:last-child { border-right: none; }
-    .stat-num { font-size: 1.5rem; font-weight: 800; color: var(--accent); }
-    .stat-label { font-size: 0.74rem; color: var(--muted); margin-top: 2px; }
+    .stat-num {
+      font-size: clamp(1.8rem, 3.2vw, 2.6rem); font-weight: 800;
+      background: linear-gradient(180deg, #79c0ff 0%, #58a6ff 60%, #1f6feb 100%);
+      -webkit-background-clip: text; background-clip: text; color: transparent;
+      letter-spacing: -.025em; font-variant-numeric: tabular-nums; display: inline-block;
+    }
+    .stat-label { font-size: .8rem; color: var(--muted); margin-top: 6px; text-transform: uppercase; letter-spacing: .05em; font-weight: 500; }
+    @media (max-width: 640px) {
+      .stat-item { border-right: none; border-bottom: 1px solid var(--border); padding: 16px; }
+      .stat-item:last-child { border-bottom: none; }
+    }
+
+    /* Scroll reveal */
+    .reveal { opacity: 0; transform: translateY(36px); transition: opacity .7s cubic-bezier(.2,.7,.3,1), transform .7s cubic-bezier(.2,.7,.3,1); transition-delay: var(--rd, 0s); }
+    .reveal.in { opacity: 1; transform: translateY(0); }
+    @media (prefers-reduced-motion: reduce) { .reveal { opacity: 1; transform: none; transition: none; } }
+
+    /* How it works */
+    .hiw {
+      background: linear-gradient(180deg, var(--bg) 0%, var(--bg2) 100%);
+      border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
+    }
+    .hiw-inner { max-width: 1040px; margin: 0 auto; padding: 64px 24px; }
+    .hiw-inner h2 { font-size: 1.6rem; text-align: center; margin-bottom: 44px; }
+    .hiw-inner h2 span { color: var(--accent); }
+    .hiw-grid { display: grid; grid-template-columns: 1fr auto 1fr auto 1fr; gap: 18px; align-items: stretch; }
+    .hiw-step {
+      background: var(--bg2); border: 1px solid var(--border); border-radius: 14px;
+      padding: 32px 24px 24px; position: relative; text-align: left;
+      transition: border-color .25s, transform .25s, box-shadow .25s;
+    }
+    .hiw-step:hover { border-color: var(--accent); transform: translateY(-3px); box-shadow: 0 14px 32px rgba(0,0,0,.28); }
+    .hiw-num {
+      position: absolute; top: -18px; left: 22px;
+      width: 40px; height: 40px; border-radius: 50%;
+      background: linear-gradient(135deg, #58a6ff 0%, #1f6feb 100%);
+      color: #fff; font-weight: 800; font-size: 1rem;
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 6px 18px rgba(88,166,255,.45);
+    }
+    .hiw-icon { font-size: 1.7rem; margin: 10px 0 12px; }
+    .hiw-step h3 { font-size: 1.02rem; font-weight: 700; margin-bottom: 6px; color: var(--text); }
+    .hiw-step p { color: var(--muted); font-size: .86rem; line-height: 1.6; }
+    .hiw-arrow {
+      display: flex; align-items: center; justify-content: center;
+      color: var(--muted); font-size: 1.6rem; opacity: .5;
+    }
+    @media (max-width: 760px) {
+      .hiw-grid { grid-template-columns: 1fr; gap: 22px; }
+      .hiw-arrow { transform: rotate(90deg); }
+    }
 
     /* Section */
     .section { max-width: 900px; margin: 0 auto; padding: 60px 24px; }
@@ -6804,21 +6880,50 @@ void main(void){
 
 <!-- Stats strip -->
 <div class="stats-strip">
-  <div class="stat-item">
-    <div class="stat-num">25+</div>
+  <div class="stat-item reveal">
+    <div class="stat-num" data-count="25" data-suffix="+">0+</div>
     <div class="stat-label">Market intelligence tools</div>
   </div>
-  <div class="stat-item">
-    <div class="stat-num">20+</div>
+  <div class="stat-item reveal" style="--rd:.08s">
+    <div class="stat-num" data-count="20" data-suffix="+">0+</div>
     <div class="stat-label">Pine Script indicators</div>
   </div>
-  <div class="stat-item">
-    <div class="stat-num">Live</div>
-    <div class="stat-label">Options & market data</div>
+  <div class="stat-item reveal" style="--rd:.16s">
+    <div class="stat-num" data-count="15.99" data-decimals="2" data-prefix="$">$0.00</div>
+    <div class="stat-label">Pro plan / month</div>
   </div>
-  <div class="stat-item">
-    <div class="stat-num">7-day</div>
-    <div class="stat-label">Free trial on paid plans</div>
+  <div class="stat-item reveal" style="--rd:.24s">
+    <div class="stat-num" data-count="7">0</div>
+    <div class="stat-label">Day free trial</div>
+  </div>
+</div>
+
+<!-- How it works -->
+<div class="hiw">
+  <div class="hiw-inner">
+    <h2 class="reveal">Get started in <span>3 steps</span></h2>
+    <div class="hiw-grid">
+      <div class="hiw-step reveal" style="--rd:0s">
+        <div class="hiw-num">1</div>
+        <div class="hiw-icon">🎯</div>
+        <h3>Pick an indicator</h3>
+        <p>Browse 20+ free Pine Script indicators — VWAP, MACD, Bollinger Bands, and more.</p>
+      </div>
+      <div class="hiw-arrow reveal" style="--rd:.1s">→</div>
+      <div class="hiw-step reveal" style="--rd:.15s">
+        <div class="hiw-num">2</div>
+        <div class="hiw-icon">📋</div>
+        <h3>Copy the script</h3>
+        <p>Click any indicator card to instantly copy the Pine Script v6 code to your clipboard.</p>
+      </div>
+      <div class="hiw-arrow reveal" style="--rd:.25s">→</div>
+      <div class="hiw-step reveal" style="--rd:.3s">
+        <div class="hiw-num">3</div>
+        <div class="hiw-icon">⚡</div>
+        <h3>Paste in TradingView</h3>
+        <p>Open your chart, paste in the Pine Script editor, and click Add to chart — done.</p>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -7207,6 +7312,56 @@ void main(void){
 function toggleFaq(el) {
   el.closest('.faq-item').classList.toggle('open');
 }
+
+// Auto-tag existing cards as reveal targets + observe
+(function(){
+  ['.hero-tool', '.intel-card', '.faq-item'].forEach(function(sel){
+    document.querySelectorAll(sel).forEach(function(el, i){
+      el.classList.add('reveal');
+      el.style.setProperty('--rd', (i * 0.05) + 's');
+    });
+  });
+  if (!('IntersectionObserver' in window)) {
+    document.querySelectorAll('.reveal').forEach(function(el){ el.classList.add('in'); });
+    return;
+  }
+  var io = new IntersectionObserver(function(entries){
+    entries.forEach(function(e){
+      if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); }
+    });
+  }, { threshold: 0.12, rootMargin: '0px 0px -40px 0px' });
+  document.querySelectorAll('.reveal').forEach(function(el){ io.observe(el); });
+})();
+
+// Animated stat counters
+(function(){
+  var stats = document.querySelectorAll('.stat-num[data-count]');
+  if (!stats.length) return;
+  function animate(el){
+    var target = parseFloat(el.dataset.count);
+    var decimals = parseInt(el.dataset.decimals || '0', 10);
+    var suffix = el.dataset.suffix || '';
+    var prefix = el.dataset.prefix || '';
+    var dur = 1400;
+    var start = performance.now();
+    function step(now){
+      var t = Math.min(1, (now - start) / dur);
+      var k = 1 - Math.pow(1 - t, 3);
+      var v = target * k;
+      el.textContent = prefix + v.toFixed(decimals) + suffix;
+      if (t < 1) requestAnimationFrame(step);
+      else el.textContent = prefix + target.toFixed(decimals) + suffix;
+    }
+    requestAnimationFrame(step);
+  }
+  if (!('IntersectionObserver' in window)) { stats.forEach(animate); return; }
+  var io = new IntersectionObserver(function(entries){
+    entries.forEach(function(e){
+      if (e.isIntersecting) { animate(e.target); io.unobserve(e.target); }
+    });
+  }, { threshold: 0.35 });
+  stats.forEach(function(el){ io.observe(el); });
+})();
 </script>
 </body>
 </html>"""
