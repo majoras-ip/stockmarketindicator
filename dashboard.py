@@ -324,13 +324,20 @@ def current_user():
 @app.context_processor
 def inject_nav_plan():
     uid = session.get("user_id")
-    return {"nav_plan": _get_user_plan(uid) if uid else "free"}
+    plan = _get_user_plan(uid) if uid else "free"
+    email_missing = False
+    if uid:
+        row = _one("SELECT email FROM users WHERE id=%s", (uid,))
+        if row and not (row["email"] or "").strip():
+            email_missing = True
+    return {"nav_plan": plan, "show_email_banner": email_missing}
 
 
 # Routes that don't require login
 _PUBLIC_ROUTES = {
     "index", "login", "register", "google_login", "google_callback",
     "pricing", "privacy", "terms", "stripe_webhook", "admin_codes",
+    "forgot_password", "reset_password",
 }
 
 @app.before_request
@@ -2511,6 +2518,13 @@ def profile_update():
             _run("UPDATE users SET username=%s WHERE id=%s", (new_username, user_id))
             session["username"] = new_username
 
+    new_email = request.form.get("email", "").strip()
+    if new_email:
+        if "@" not in new_email or "." not in new_email or len(new_email) > 120:
+            error = error or "Please enter a valid email address."
+        else:
+            _run("UPDATE users SET email=%s WHERE id=%s", (new_email, user_id))
+
     pic_file = request.files.get("profile_pic")
     if pic_file and pic_file.filename:
         data = pic_file.read(2 * 1024 * 1024)  # max 2MB
@@ -4525,7 +4539,8 @@ _META = """
   <meta property="og:url" content="https://chartedge.trade">
   <meta name="twitter:card" content="summary">
   <meta name="twitter:title" content="ChartEdge.trade — Free TradingView Indicators">
-  <meta name="twitter:description" content="Free Pine Script indicators for TradingView. No paid plan required.">""" + _GA_SCRIPT + """
+  <meta name="twitter:description" content="Free Pine Script indicators for TradingView. No paid plan required.">{% if show_email_banner %}
+  <meta name="email-missing" content="1">{% endif %}""" + _GA_SCRIPT + """
   <script>
     (function() {
       var t = localStorage.getItem('theme') || 'dark';
@@ -4816,6 +4831,29 @@ function toggleTheme() {
   window.addEventListener('scroll', function() {
     if (!ticking) { requestAnimationFrame(update); ticking = true; }
   }, { passive: true });
+})();
+(function initEmailBanner() {
+  if (!document.querySelector('meta[name="email-missing"]')) return;
+  if (sessionStorage.getItem('ce_email_banner_dismissed') === '1') return;
+  function mount() {
+    if (document.getElementById('ce-email-banner')) return;
+    var b = document.createElement('div');
+    b.id = 'ce-email-banner';
+    b.style.cssText = 'position:fixed;top:56px;left:0;right:0;z-index:999;background:linear-gradient(90deg,#1f6feb 0%,#388bfd 100%);color:#fff;padding:10px 16px;display:flex;align-items:center;justify-content:center;gap:14px;font-size:.85rem;box-shadow:0 4px 14px rgba(0,0,0,.25);flex-wrap:wrap;';
+    b.innerHTML = '<span>📧 Add a recovery email so you can reset your password if you forget it.</span><a href="/me#edit-section" style="background:rgba(255,255,255,.18);color:#fff;padding:5px 14px;border-radius:6px;text-decoration:none;font-weight:600;">Add email →</a><button aria-label="Dismiss" id="ce-email-banner-x" style="background:none;border:none;color:#fff;font-size:1.1rem;cursor:pointer;padding:0 6px;line-height:1;">×</button>';
+    document.body.insertBefore(b, document.body.firstChild);
+    document.body.style.paddingTop = '108px';
+    document.getElementById('ce-email-banner-x').addEventListener('click', function() {
+      sessionStorage.setItem('ce_email_banner_dismissed', '1');
+      b.remove();
+      document.body.style.paddingTop = '';
+    });
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', mount);
+  } else {
+    mount();
+  }
 })();
 """
 
@@ -5724,6 +5762,8 @@ AUTH_HTML = """<!DOCTYPE html>
         <a href="/login">← Back to sign in</a>
       {% else %}
         New to ChartEdge.trade? <a href="/register">Create one</a>
+        &nbsp;·&nbsp;
+        <a href="/forgot-password">Forgot password?</a>
       {% endif %}
     </p>
 
@@ -13347,6 +13387,10 @@ MY_DASHBOARD_HTML = """<!DOCTYPE html>
           <input type="text" name="username" value="{{ username }}" maxlength="30" placeholder="New username">
         </div>
         <div class="edit-row">
+          <label>Email {% if not email %}<span style="color:#f0883e;text-transform:none;font-weight:500;letter-spacing:0;">— needed for password recovery</span>{% endif %}</label>
+          <input type="email" name="email" value="{{ email or '' }}" maxlength="120" placeholder="you@example.com">
+        </div>
+        <div class="edit-row">
           <label>Profile Picture</label>
           <input type="file" name="profile_pic" accept="image/*">
         </div>
@@ -13612,7 +13656,7 @@ def me():
     user_id  = session["user_id"]
     username = session.get("username", "")
     plan     = _get_user_plan(user_id)
-    row      = _one("SELECT created, plan_expires, referral_code, profile_pic FROM users WHERE id=%s", (user_id,))
+    row      = _one("SELECT created, plan_expires, referral_code, profile_pic, email FROM users WHERE id=%s", (user_id,))
 
     # Plan expiry
     expires = None
@@ -13685,6 +13729,7 @@ def me():
     if 0 <= days <= 30: badges.append({"icon":"🎉","label":"Early Adopter","color":"#bc8cff","bg":"#1a0d2d"})
 
     profile_pic   = row["profile_pic"] if row else None
+    email         = (row["email"] if row else "") or ""
     profile_error = session.pop("profile_error", None)
     stats = {"copies": copies, "favorites": fav_count, "referrals": referrals}
 
@@ -13701,6 +13746,7 @@ def me():
         profile_error=profile_error,
         signup_rank=signup_rank,
         signup_tier=signup_tier,
+        email=email,
     )
 
 
