@@ -1,202 +1,71 @@
-# ChartEdge · Claude Progress Log
+# CLAUDE.md
 
-## Status: LIVE ON RAILWAY — chartedge.trade
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
----
+## What this repo actually contains
 
-## Stack
+Two distinct codebases live side by side:
 
-- **Backend:** Flask + gunicorn on Railway, auto-deploys from GitHub (`majoras-ip/stockmarketindicator`)
-- **DB:** PostgreSQL (Railway)
-- **Payments:** Stripe (Basic $9.99/mo, Pro $15.99/mo · yearly saves up to 25%)
-- **Python:** 3.13 · Key deps: yfinance, lightgbm, tensorflow, scipy, feedparser
+1. **`dashboard.py`** — the production Flask web app behind https://chartedge.trade. ~13k lines, single file. This is where 95% of work happens.
+2. **`main.py` + `training/` + `models/` + `prediction/`** — a menu-driven CLI that trains and runs the LightGBM-GRU hybrid volatility model from Liao, Chen & Cai (2024). This is the original research code described in `README.md`. The web app consumes the trained model artifacts in `saved_models/`.
 
----
+The README in this repo describes only the ML code. It does *not* describe `dashboard.py` — which is the bigger, more important codebase.
 
-## Plan tiers & access gates
+## Running
 
-| Feature | Free | Basic | Pro |
-|---------|------|-------|-----|
-| Copies/day | 3 | 8 | Unlimited |
-| All indicators | ✓ | ✓ | ✓ |
-| Live chart & forecast | ✓ | ✓ | ✓ |
-| Unusual volume | ✓ | ✓ | ✓ |
-| Market news | ✓ | ✓ | ✓ |
-| Earnings calendar | ✓ | ✓ | ✓ |
-| Market heatmap | ✓ | ✓ | ✓ |
-| Dividends calendar | ✓ | ✓ | ✓ |
-| IPO calendar | ✓ | ✓ | ✓ |
-| Crypto fear & greed | ✓ | ✓ | ✓ |
-| Crypto heatmap | ✓ | ✓ | ✓ |
-| Trending coins | ✓ | ✓ | ✓ |
-| Trump tracker | ✗ | ✓ | ✓ |
-| Ticker news | ✗ | ✓ | ✓ |
-| Gamma exposure | ✗ | ✓ | ✓ |
-| Greeks dashboard | ✗ | ✓ | ✓ |
-| Volatility forecast | ✗ | ✓ | ✓ |
-| BTC dominance | ✗ | ✓ | ✓ |
-| Funding rates | ✗ | ✓ | ✓ |
-| On-chain metrics | ✗ | ✓ | ✓ |
-| LSTM forecast | ✗ | ✗ | ✓ |
-| Options flow | ✗ | ✗ | ✓ |
-| Insider trading | ✗ | ✗ | ✓ |
-| Pre-market scanner | ✗ | ✗ | ✓ |
-| Liquidation map | ✗ | ✗ | ✓ |
-| Dark pool flow | ✗ | ✗ | ✓ |
+| Goal | Command |
+|---|---|
+| Run the web app locally | `python3 dashboard.py` (binds `0.0.0.0:$PORT`, default 5000) |
+| Run the ML training CLI | `python3 main.py` |
+| Install deps | `pip install -r requirements.txt` (Apple Silicon needs `tensorflow-macos` + `tensorflow-metal` first) |
 
----
+`Procfile`, `Dockerfile`, and `nixpacks.toml` all just run `python3 dashboard.py` — there is no gunicorn/uvicorn wrapper, no separate worker. Flask's built-in dev server serves production.
 
-## File inventory
+There are no tests, no lint config, and no build step. Validation is `python3 -c "import ast; ast.parse(open('dashboard.py').read())"` to catch syntax errors after large edits.
 
-| File | Notes |
-|------|-------|
-| `dashboard.py` | Single-file Flask app, ~10500+ lines |
-| `Dockerfile` | python:3.13-slim + libgomp1, exposes 5000 |
-| `requirements.txt` | Pinned deps |
+## dashboard.py architecture (read this before editing)
 
----
+**All pages are Python string templates** rendered via `render_template_string`. There are ~90 `*_HTML = """..."""` constants in `dashboard.py`. There is no `templates/` directory, no static templates, no Jinja files on disk. CSS and JS are inlined inside each HTML string. Edits to a page mean editing a Python triple-quoted string.
 
-## Key features & routes
+**Shared chrome is interpolated**. The following constants are spliced into most page templates via `""" + _NAV_CSS + """`-style concatenation:
 
-| Route | Description | Plan |
-|-------|-------------|------|
-| `/indicators` | Pine Script generator — all indicators + Tutorial tab, accordion cards | Free+ |
-| `/generate` | LSTM forecast | Pro |
-| `/dashboard` | Live chart | Free+ |
-| `/heatmap` | D3 squarified treemap, S&P 500 sectors | Free+ |
-| `/earnings` | Earnings calendar w/ EPS/revenue estimates | Free+ |
-| `/dividends` | Upcoming ex-dividend dates (~140 tickers) | Free+ |
-| `/ipo` | IPO calendar — upcoming & priced | Free+ |
-| `/trump` | Trump Tracker — BTC default, 1D default, event markers, VOO + SPY | Basic+ |
-| `/volforecast` | Volatility forecast (RV, EWMA, regime) | Basic+ |
-| `/gamma` | Gamma exposure chart (Plotly bar chart) | Basic+ |
-| `/greeks` | Greeks dashboard (Delta/Gamma/Theta/Vega/Rho) | Basic+ |
-| `/flow` | Options flow | Pro |
-| `/insider` | Insider trading — SEC + Congress, name/source filter | Pro |
-| `/premarket` | Pre-market scanner | Pro |
-| `/volume` | Unusual volume scanner | Free+ |
-| `/news` | Market news feed | Free+ |
-| `/crypto/feargreed` | Crypto Fear & Greed Index | Free+ |
-| `/crypto/heatmap` | Crypto market heatmap | Free+ |
-| `/crypto/upcoming` | Trending coins (CoinGecko) | Free+ |
-| `/crypto/dominance` | BTC dominance chart | Basic+ |
-| `/crypto/funding` | Funding rates (Hyperliquid) | Basic+ |
-| `/crypto/onchain` | On-chain metrics | Basic+ |
-| `/crypto/liquidations` | Liquidation map (Hyperliquid) | Pro |
-| `/darkpool` | Dark pool flow — FINRA ATS weekly block trade volume | Pro |
-| `/me` | My Dashboard — profile + watchlist + favorites + copy history | Logged in |
-| `/settings` | Account settings | Logged in |
+- `_META` — `<head>` meta tags, GA, theme bootstrap
+- `_NAV_CSS` — fixed scroll-aware nav styling, pill container, tubelight dropdown effect
+- `_NAV_LINKS` — the nav menu HTML (Tools/Crypto/Community/Pricing/Account dropdowns); uses `{% if nav_plan == 'free' %}` to gate items
+- `_THEME_JS` — theme toggle, dropdown logic, mobile nav, scroll-aware nav handler
 
----
+**`nav_plan` is auto-injected** by the `inject_nav_plan` context processor (line ~294). Every template gets it for free; don't pass it manually.
 
-## Important implementation details
+**Plan gating pattern**: routes use `_get_user_plan(session.get("user_id"))` returning `"free" | "basic" | "pro"` and redirect to `/pricing?upgrade=<feature>` when access is denied. The same check repeats inside API endpoints — never trust client-side gating.
 
-### Pine Script expiry injection
-Every generated Pine Script goes through `_inject_expiry(script, username)` before being returned. This embeds **4 expiry checks** at different positions (after indicator(), ~33%, ~66%, end) using 3 different syntactic forms so they're hard to find and remove all at once. Scripts break the day after generation with `runtime.error("Expired · Regenerate at chartedge.trade")`. Username watermarked in comments.
+**A few pages have self-contained nav CSS** (login/register/pricing legacy paths) that don't pull in `_NAV_CSS`. Updates to shared nav styling won't reach these — search for `nav { background` to find inline nav declarations.
 
-### Nav dropdown plan-gating
-`_NAV_LINKS` uses `{{ nav_plan }}` (injected via `@app.context_processor`) to grey out locked tools at 40% opacity with 🔒 icon. Free users see Trump/Gamma/Greeks/VolForecast/Flow/Insider/Premarket + most crypto locked. Basic users see Flow/Insider/Premarket + Liquidation Map locked. Nav order: Tools | Crypto | Community | Pricing | Username ▾
+## Pine Script expiry injection (security-critical)
 
-### Background pre-fetch pattern
-Heatmap and dividends use daemon threads pre-fetched at startup. Returns `{"loading": true}` if cache empty, triggers background refresh if stale (>1h).
+`_inject_expiry()` (line ~593) weaves three obfuscated expiry checks into every generated Pine Script via `/api/pine`. Scripts break at midnight after generation, forcing users to come back to the site rather than re-share a one-time copy. The watermark at the top of every generated script (`// ChartEdge.trade · <user> · <date> · chartedge.trade`) is intentional — do not remove it, and do not refactor `_inject_expiry` casually.
 
-### Dividends calendar
-~140 tickers across dividend aristocrats, banks, insurance, energy MLPs, industrials, REITs, BDCs, income ETFs. Shows ex-dates within next 60 days only.
+## Data + state
 
-### Trump Tracker
-- Default ticker: BTC-USD, default period: 1D
-- Event markers (📰) on chart at news article timestamps
-- Gold uses GC=F (futures ~$3000), not GLD ETF
-- Prices >$999 formatted with commas
-- S&P 500 shows both SPY and VOO options
-- Uses custom ↺ Reset button (calls `loadChart()`) instead of Plotly modebar reset — avoids blank chart bug caused by `Plotly.react` + tight y-axis range conflicting with Plotly's built-in autorange reset
+- **Postgres only.** `app.db` exists as a leftover SQLite file but is unused. `DATABASE_URL` is required to boot. `init_db()` + `_migrate_pg()` run at import time.
+- **DB helpers**: `_q` (rows), `_one` (one row), `_scalar` (one value), `_run` (write), `_tx()` (transaction context). All return `RealDictCursor` rows.
+- **Sessions** are Flask's signed cookies (`SECRET_KEY` env). User id lives in `session["user_id"]`.
+- **No ORM**, no migrations framework. Schema changes go into `_migrate_pg()`.
 
-### Insider Trading
-- SEC Form 4 filings (major SP500 companies) + House STOCK Act via QuiverQuant
-- Filters: All/Congress/SEC tabs + name search + ticker search (all client-side)
-- Transaction date = date they actually bought/sold (from SEC filing)
+## Required environment variables
 
-### Volatility Forecast
-- Banner at top: "TradingView Plus subscription required"
-- Shows: realized vol (20d), EWMA vol, IV vs RV chart, forecast N days ahead
-- Regime detection: Low/Medium/High/Extreme
+`DATABASE_URL`, `SECRET_KEY`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `RESEND_API_KEY`, `FINNHUB_API_KEY`, `HCAPTCHA_SECRET`, `ADMIN_PASSWORD`, `GA_ID`, `PORT`. None of these are checked at startup — missing keys fail at first use.
 
-### Gamma Exposure
-- Plotly bar chart (green for positive GEX, red for negative)
-- Spot price shown as dashed blue vertical line via Plotly shape
-- Replaced original custom CSS bar implementation
+## Brand naming
 
-### Plotly charts — reset axes
-- All Plotly charts use `displayModeBar: true` with `modeBarButtonsToRemove` to show only the reset axes button
-- Exception: Trump Tracker uses `displayModeBar: false` + custom ↺ Reset button
+The brand is **ChartEdge.trade** (camelcase, `.trade` suffix visible). The site logo is split into colored spans: `<span>Chart</span><span style="color:#58a6ff">Edge</span><span class="muted">.trade</span>`. The `.trade` suffix is part of the displayed brand — keep it in titles, footers, emails, OG meta, and the Studio header.
 
-### Indicator cards — accordion
-- Cards live in `#grid` (CSS grid, `repeat(auto-fill, minmax(210px, 1fr))`)
-- `#output-wrap` is also inside `#grid` with `grid-column: 1 / -1` so it spans full width
-- Clicking a card moves `#output-wrap` in DOM to just after the clicked card (`clickedCard.after(wrap)`), then expands it
-- Clicking the same card again collapses it (`wrap.classList.remove('visible')`, `_currentKind = ''`)
-- On direct URL load (`/indicators?kind=rsi`), the active card is found and `output-wrap` inserted after it before calling `loadOutput`
+## ML side (`main.py`, `models/`, `prediction/`, `training/`)
 
-### Crypto tools
-- All exchange data via **Hyperliquid** (decentralized, no geo blocks from Railway)
-- CoinGecko free tier for heatmap, dominance, trending
-- alternative.me for Fear & Greed Index
-- Liquidation map shows funding rate history as bar chart (values in basis points ×10000)
-- All crypto API endpoints use manual session check (NOT @login_required) to return JSON 401 instead of HTML redirect
+`README.md` covers this fully — pipeline is yfinance → 40+ features → LightGBM → GRU corrector → final vol prediction. The Flask app reads the trained artifact via `prediction/forecast_exporter.py` to power `/api/forecast` and `/volforecast`. Only relevant when changing forecast output that the web app consumes. `LIMITATIONS.md` is a candid list of what the model can't do — keep it accurate if you ship changes that affect the forecast contract.
 
-### My Dashboard (/me)
-- Combined profile + dashboard page. `/profile` redirects here.
-- Shows: profile header (avatar, username, plan pill, edit button), stats, badges, copy usage bar, recent copies, favorites, watchlist with live prices, plan card, account links
-- DB tables: `watchlist (user_id, symbol, added)`, `copy_history (id, user_id, indicator, ts)`
-- API: `GET/POST/DELETE /api/watchlist`, `GET /api/me/stats`, `GET /api/me/history`, `GET /api/favorites`, `DELETE /api/favorite/<key>`
+## Editing patterns to follow
 
-### Settings (/settings)
-- Theme (dark/light, saved to DB), default ticker (pre-fills chart pages), copy toast on/off, change email, change password, delete account
-- DB columns added via `_migrate_pg()`: `theme TEXT DEFAULT 'dark'`, `default_ticker TEXT DEFAULT 'AAPL'`, `copy_toast INTEGER DEFAULT 1`
-- Delete account cancels Stripe subscription and wipes all user data
-
-### hCaptcha
-- On register form only. Site key: `b06c575c-981a-4884-bbc0-5aa8c1d8aaa0`
-- Secret stored as Railway env var `HCAPTCHA_SECRET`
-
-### Ticker tape
-- Live prices via yfinance for: SPY, AAPL, NVDA, TSLA, MSFT, META, AMZN, QQQ, AMD, GOOGL, BTC-USD, GC=F
-- 5-minute cache via `_tape_cache`. Endpoint: `GET /api/tickertape`
-
-### Copy tracking
-- `/api/copy` accepts `indicator` field and logs to `copy_history` for all logged-in users (including Pro)
-- Pro users: `_increment_copy()` is called before returning (was previously skipped — fixed)
-- Copy toast: floating notification shown after successful copy. Enabled/disabled per user in Settings. `COPY_TOAST_ENABLED` JS var injected from DB pref. `showToast()` called in `copyPine()`.
-
-### Indicators Tutorial tab
-- Two tabs on `/indicators`: Indicators (default) | Tutorial
-- Tutorial has YouTube embed (unlisted, anonymous account): `https://www.youtube.com/embed/q8hcp4K4rNM?rel=0&modestbranding=1&iv_load_policy=3&fs=1&controls=1`
-- Step-by-step written guide below video
-
-### Homepage
-- "Get Started Free" button hidden for logged-in users, shows only for visitors
-
----
-
-## Known patterns & gotchas
-
-- **JS string escaping in triple-quoted Python:** Use `&quot;` for string args in onclick, or data attributes + event delegation. `\'x\'` → `'x'` breaks JS string literals.
-- **Plotly fill:'tozeroy'** makes financial charts flat when price >> 0. Always use tight y-axis range `[min*0.998, max*1.002]`.
-- **yfinance NaN in jsonify:** Python's JSON encoder rejects NaN. Always sanitize with `_safe_f()` / `_safe_i()` before returning.
-- **pandas itertuples()** returns named tuples — use attribute access (`r.strike`) not string indexing (`r["strike"]`). Or use `.astype()` directly on the column.
-- **MultiIndex columns** from `yf.download()` multi-ticker: flatten with `raw.columns = raw.columns.get_level_values(0)`.
-- **@login_required on JSON endpoints** returns HTML redirect — `fetch().then(r=>r.json())` throws silently. Always use manual session check on API routes.
-- **Plotly.newPlot vs react** — always clear div and use `newPlot` for initial renders; `react` can fail silently on divs with existing innerHTML.
-- **Plotly modebar reset + tight y-axis range** — Plotly's built-in "Reset axes" reverts to autorange, overriding tight `[min*0.998, max*1.002]` and blanking the chart. Fix: disable modebar and add a custom reset button that re-calls the load function.
-- **Nav dropdowns** — last two dropdowns use `right: 0` alignment to prevent overflow off right edge of screen.
-- **Indicator accordion DOM move** — `output-wrap` is repositioned with `clickedCard.after(wrap)` each click. Since it's inside the CSS grid with `grid-column: 1/-1`, it naturally spans full width wherever inserted.
-
----
-
-## Environment
-
-- Python 3.13
-- LightGBM 4.6.0 — libomp rpath fixed via install_name_tool (macOS dev)
-- TensorFlow 2.21.0 — CPU only
-- Deployed: Railway · Domain: chartedge.trade
-- GitHub: majoras-ip/stockmarketindicator
+- **Replacing large HTML blocks**: use `Edit` with the exact old `_HTML` string as `old_string`. The strings are big but Edit handles them fine; reading them in chunks first is usually unnecessary if you already know what to swap.
+- **Validating after edits**: `python3 -c "import ast; ast.parse(open('dashboard.py').read())"` catches Python-level syntax errors (an unterminated triple-quoted string, a bad f-string, etc.). Browser-level rendering issues won't show up — the dev server has to be running for that.
+- **Avoid renaming `nav-links` and `mobile-nav` IDs** — `_THEME_JS` and the per-page hamburger button reference them by exact name.
+- **Don't add unwired social buttons** to auth pages. Only Google OAuth is implemented (`/login/google`). Microsoft/Apple/SSO buttons would lead nowhere.
