@@ -4457,17 +4457,68 @@ _NAV_CSS = """
     nav { transition: background-color .2s ease, box-shadow .2s ease; }
     nav.nav-hidden { transform: none; }
   }
-  .nav-links { display: flex; align-items: center; gap: 4px; }
-  .nav-links a { color: var(--muted); text-decoration: none; font-size: 0.9rem; padding: 6px 12px; border-radius: 6px; }
-  .nav-links a:hover { color: var(--text); background: var(--bg3); }
+  .nav-links { display: flex; align-items: center; gap: 2px; }
+  @media (min-width: 641px) {
+    .nav-links {
+      background: rgba(13,17,23,.45);
+      border: 1px solid rgba(255,255,255,.06);
+      border-radius: 999px;
+      padding: 4px;
+      -webkit-backdrop-filter: blur(12px) saturate(140%);
+              backdrop-filter: blur(12px) saturate(140%);
+      box-shadow: 0 4px 14px rgba(0,0,0,.25);
+    }
+    :root[data-theme="light"] .nav-links {
+      background: rgba(255,255,255,.55);
+      border-color: rgba(208,215,222,.7);
+      box-shadow: 0 4px 14px rgba(140,150,160,.15);
+    }
+  }
+  .nav-links a {
+    color: var(--muted); text-decoration: none;
+    font-size: 0.88rem; padding: 8px 16px; border-radius: 999px;
+    position: relative; transition: color .2s ease;
+  }
+  .nav-links a:hover { color: var(--text); }
   .dropdown { position: relative; }
   .dropdown > .drop-btn {
-    background: none; border: 1px solid transparent; color: var(--muted);
-    padding: 6px 12px; border-radius: 6px; font-family: monospace;
-    font-size: 0.9rem; cursor: pointer; display: flex; align-items: center; gap: 4px;
+    position: relative;
+    background: none; border: none; color: var(--muted);
+    padding: 8px 16px; border-radius: 999px;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 0.88rem; font-weight: 600;
+    cursor: pointer; display: flex; align-items: center; gap: 4px;
+    transition: color .2s ease, background-color .2s ease;
   }
-  .dropdown > .drop-btn:hover { background: var(--bg3); border-color: var(--border); color: var(--text); }
-  .dropdown > .drop-btn.open { background: var(--bg3); border-color: var(--border); color: var(--text); }
+  /* Tubelight glow bar — emerges from top of active button */
+  .dropdown > .drop-btn::before,
+  .nav-links > a:not(.logo)::before {
+    content: '';
+    position: absolute;
+    top: -5px; left: 50%;
+    width: 24px; height: 3px;
+    transform: translateX(-50%) scaleX(.4);
+    background: var(--accent);
+    border-radius: 0 0 4px 4px;
+    opacity: 0;
+    box-shadow:
+      0 0 8px var(--accent),
+      0 6px 14px var(--accent),
+      0 10px 24px rgba(88,166,255,.5);
+    transition: opacity .25s ease, transform .25s cubic-bezier(.4,0,.2,1);
+    pointer-events: none;
+  }
+  .dropdown > .drop-btn:hover, .dropdown > .drop-btn.open,
+  .nav-links > a:not(.logo):hover {
+    color: var(--text); background: rgba(88,166,255,.08);
+  }
+  .dropdown > .drop-btn:hover::before, .dropdown > .drop-btn.open::before,
+  .nav-links > a:not(.logo):hover::before {
+    opacity: 1; transform: translateX(-50%) scaleX(1);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .dropdown > .drop-btn::before, .nav-links > a:not(.logo)::before { transition: opacity .15s ease; }
+  }
   .drop-menu {
     position: absolute; top: calc(100% + 6px); left: 0;
     background: var(--bg2); border: 1px solid var(--border); border-radius: 8px;
