@@ -6313,17 +6313,15 @@ HOME_HTML = """<!DOCTYPE html>
       font-weight: 800; letter-spacing: -.025em; line-height: 1.02;
       font-size: clamp(2.6rem, 6vw, 5rem); margin-bottom: 22px;
     }
-    .shader-headline .bear, .shader-headline .bull { display: block; color: transparent; }
+    .shader-headline .bear, .shader-headline .bull { display: block; }
     .shader-headline .bear {
-      -webkit-text-stroke: 1.8px #f85149;
-              text-stroke: 1.8px #f85149;
-      text-shadow: 0 0 24px rgba(248,81,73,.35);
+      background: linear-gradient(180deg, #ffb1ad 0%, #f85149 55%, #b8302a 100%);
+      -webkit-background-clip: text; background-clip: text; color: transparent;
       opacity: 0; animation: shader-fade-up .9s .25s ease-out forwards;
     }
     .shader-headline .bull {
-      -webkit-text-stroke: 1.8px #3fb950;
-              text-stroke: 1.8px #3fb950;
-      text-shadow: 0 0 24px rgba(63,185,80,.35);
+      background: linear-gradient(180deg, #98ecaa 0%, #3fb950 55%, #237a36 100%);
+      -webkit-background-clip: text; background-clip: text; color: transparent;
       opacity: 0; animation: shader-fade-up .9s .45s ease-out forwards;
     }
     .shader-sub {
