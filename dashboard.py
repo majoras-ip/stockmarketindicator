@@ -5082,10 +5082,10 @@ function fetchBell(render) {
     })
     .catch(function(){});
 }
-// Initial fetch + poll every 10s
+// Initial fetch + poll every 2s
 if (document.getElementById('bell-badge')) {
   fetchBell(false);
-  setInterval(function(){ fetchBell(false); }, 10000);
+  setInterval(function(){ fetchBell(false); }, 2000);
 }
 (function initEmailBanner() {
   var isMissing = !!document.querySelector('meta[name="email-missing"]');
@@ -14622,7 +14622,7 @@ def _alert_poller():
                             log.exception("alert fire failed for alert %s", a["id"])
         except Exception:
             log.exception("alert poller iteration failed")
-        _time.sleep(30)
+        _time.sleep(10)
 
 
 def _start_alert_poller():
