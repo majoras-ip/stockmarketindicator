@@ -360,6 +360,14 @@ def _migrate_pg():
         _run("UPDATE users SET email_verified=1 WHERE email IS NOT NULL AND email <> ''")
     except Exception:
         pass
+    # One-shot migrations — guarded by a marker row so each runs at most once.
+    try:
+        _run("CREATE TABLE IF NOT EXISTS _migration_marks (mark TEXT PRIMARY KEY, applied_at TIMESTAMP DEFAULT NOW())")
+        if not _one("SELECT 1 FROM _migration_marks WHERE mark=%s", ("reset_game_rounds_v1",)):
+            _run("TRUNCATE TABLE game_rounds RESTART IDENTITY")
+            _run("INSERT INTO _migration_marks (mark) VALUES (%s)", ("reset_game_rounds_v1",))
+    except Exception:
+        pass
 
 init_db()
 _migrate_pg()
