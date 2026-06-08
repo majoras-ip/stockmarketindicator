@@ -318,6 +318,20 @@ def init_db():
                 created    TIMESTAMP DEFAULT NOW()
             )
         """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS game_rounds (
+                id          SERIAL PRIMARY KEY,
+                user_id     INTEGER NOT NULL,
+                ticker      TEXT NOT NULL,
+                start_date  TEXT NOT NULL,
+                reveal_days INTEGER NOT NULL,
+                user_guess  TEXT,
+                pct_change  DOUBLE PRECISION,
+                correct     INTEGER,
+                played_at   TIMESTAMP DEFAULT NOW(),
+                resolved_at TIMESTAMP
+            )
+        """)
         conn.commit()
     except Exception:
         conn.rollback()
@@ -4851,6 +4865,7 @@ _NAV_LINKS = """
     <div class="dropdown">
       <button class="drop-btn" onclick="toggleDrop(this, event)">Community ▾</button>
       <div class="drop-menu">
+        <a href="/game">🎯 Chart Guess</a>
         <a href="/request">Request Indicator</a>
         <a href="/faq">FAQ</a>
         {% if current_user %}<a href="/favorites">♥ My Favorites</a>{% endif %}
@@ -13866,6 +13881,435 @@ def me():
         signup_tier=signup_tier,
         email=email,
     )
+
+
+# ── Chart Guess game ──────────────────────────────────────────────────────────
+
+_GAME_TICKERS = [
+    "AAPL","MSFT","GOOGL","AMZN","META","NVDA","TSLA","AMD","INTC","CSCO",
+    "ORCL","CRM","ADBE","IBM","JPM","BAC","WFC","GS","MS","C","V","MA","AXP",
+    "JNJ","PFE","UNH","LLY","ABBV","MRK","XOM","CVX","COP","WMT","COST","HD",
+    "LOW","TGT","KO","PEP","DIS","NFLX","ABNB","UBER","PLTR","COIN","HOOD",
+    "SQ","PYPL","SHOP","GM","F","BA","LMT","RTX","GE","SPY","QQQ","DIA","IWM",
+]
+
+_GAME_HORIZONS = [1, 5, 30]      # trading days revealed after the cut point
+_GAME_HISTORY_DAYS = 90          # context shown before the cut point
+_GAME_CACHE = {}                 # (ticker, start_date_str) -> {"pre": [...], "post": [...], "actual_pct": float}
+
+def _fetch_game_window(ticker: str, start_date, reveal_days: int):
+    """Return the chart context + reveal data for one round. Cached by (ticker, start_date)."""
+    import yfinance as yf
+    from datetime import timedelta
+    key = (ticker, start_date.isoformat())
+    if key in _GAME_CACHE:
+        return _GAME_CACHE[key]
+    # Pull enough history on either side: 4 months before + ~7 weeks after (covers 30-day reveal)
+    start = start_date - timedelta(days=_GAME_HISTORY_DAYS + 30)
+    end   = start_date + timedelta(days=60)
+    df = yf.download(ticker, start=start.isoformat(), end=end.isoformat(),
+                     progress=False, auto_adjust=True, threads=False)
+    if df is None or df.empty:
+        return None
+    # yfinance sometimes returns a MultiIndex column frame even for a single ticker.
+    closes = df["Close"]
+    if hasattr(closes, "columns"):
+        closes = closes.iloc[:, 0]
+    pts = [(d.date(), float(p)) for d, p in zip(closes.index, closes.values) if p == p]  # drop NaN
+    if not pts:
+        return None
+    # Split at start_date: pre = up to and including start_date, post = after
+    pre  = [p for p in pts if p[0] <= start_date]
+    post = [p for p in pts if p[0] >  start_date]
+    if len(pre) < 30 or len(post) < reveal_days:
+        return None
+    pre = pre[-_GAME_HISTORY_DAYS:]
+    post = post[:reveal_days]
+    cache_entry = {
+        "pre": [(d.isoformat(), v) for d, v in pre],
+        "post": [(d.isoformat(), v) for d, v in post],
+    }
+    _GAME_CACHE[key] = cache_entry
+    return cache_entry
+
+
+def _pick_game_puzzle(max_tries: int = 12):
+    """Pick a random (ticker, start_date, reveal_days) that has enough history."""
+    from datetime import date, timedelta
+    import random
+    today = date.today()
+    for _ in range(max_tries):
+        ticker = random.choice(_GAME_TICKERS)
+        reveal = random.choice(_GAME_HORIZONS)
+        # Start date 90 days to ~10 years ago, with enough buffer for the reveal to be in the past
+        offset = random.randint(_GAME_HISTORY_DAYS + reveal + 5, 365 * 10)
+        sd = today - timedelta(days=offset)
+        window = _fetch_game_window(ticker, sd, reveal)
+        if window:
+            return ticker, sd, reveal, window
+    return None
+
+
+@app.route("/game")
+@login_required
+def game_page():
+    return render_template_string(GAME_HTML, current_user=current_user())
+
+
+@app.route("/api/game/new")
+@login_required
+def api_game_new():
+    user_id = session["user_id"]
+    picked = _pick_game_puzzle()
+    if not picked:
+        return jsonify({"error": "Couldn't load a puzzle, try again."}), 503
+    ticker, start_date, reveal_days, window = picked
+    pre = window["pre"]
+    post = window["post"]
+    last_close = pre[-1][1]
+    first_post = post[-1][1]
+    pct_change = ((first_post - last_close) / last_close) * 100.0
+
+    rows = _q(
+        "INSERT INTO game_rounds (user_id, ticker, start_date, reveal_days, pct_change) "
+        "VALUES (%s, %s, %s, %s, %s) RETURNING id",
+        (user_id, ticker, start_date.isoformat(), reveal_days, pct_change),
+    )
+    round_id = rows[0]["id"]
+
+    # Anonymize: relative prices indexed to 100 at the cut point. Strip dates.
+    base = last_close
+    norm_pre = [round((p[1] / base) * 100.0, 3) for p in pre]
+    return jsonify({
+        "round_id": round_id,
+        "series": norm_pre,
+        "horizon_days": reveal_days,
+        "horizon_label": {1: "1 trading day", 5: "1 week", 30: "1 month"}[reveal_days],
+    })
+
+
+@app.route("/api/game/guess", methods=["POST"])
+@login_required
+def api_game_guess():
+    user_id = session["user_id"]
+    data = request.get_json(silent=True) or {}
+    round_id = data.get("round_id")
+    guess = (data.get("guess") or "").lower()
+    if guess not in ("up", "down"):
+        return jsonify({"error": "Pick up or down."}), 400
+    row = _one("SELECT * FROM game_rounds WHERE id=%s AND user_id=%s", (round_id, user_id))
+    if not row:
+        return jsonify({"error": "Round not found."}), 404
+    if row["user_guess"]:
+        return jsonify({"error": "Round already resolved."}), 400
+
+    actual = "up" if (row["pct_change"] or 0) >= 0 else "down"
+    correct = 1 if guess == actual else 0
+    _run(
+        "UPDATE game_rounds SET user_guess=%s, correct=%s, resolved_at=NOW() WHERE id=%s",
+        (guess, correct, round_id),
+    )
+
+    # Reveal full chart for the round, normalized to 100 at the cut point
+    from datetime import date as _date
+    sd = _date.fromisoformat(row["start_date"])
+    window = _fetch_game_window(row["ticker"], sd, row["reveal_days"]) or {"pre": [], "post": []}
+    base = window["pre"][-1][1] if window["pre"] else 0
+    pre_norm  = [round((p[1] / base) * 100.0, 3) for p in window["pre"]] if base else []
+    post_norm = [round((p[1] / base) * 100.0, 3) for p in window["post"]] if base else []
+
+    # Updated stats for this user
+    stats_row = _one(
+        "SELECT COUNT(*) AS played, COALESCE(SUM(correct),0) AS correct FROM game_rounds "
+        "WHERE user_id=%s AND user_guess IS NOT NULL", (user_id,)
+    ) or {"played": 0, "correct": 0}
+    # Streak = count trailing correct rounds from most recent backwards
+    recent = _q(
+        "SELECT correct FROM game_rounds WHERE user_id=%s AND user_guess IS NOT NULL "
+        "ORDER BY resolved_at DESC LIMIT 50", (user_id,)
+    )
+    streak = 0
+    for r in recent:
+        if r["correct"] == 1:
+            streak += 1
+        else:
+            break
+
+    return jsonify({
+        "correct": bool(correct),
+        "actual": actual,
+        "pct_change": round(row["pct_change"], 2),
+        "ticker": row["ticker"],
+        "horizon_days": row["reveal_days"],
+        "pre_series": pre_norm,
+        "post_series": post_norm,
+        "stats": {
+            "played": int(stats_row["played"]),
+            "correct": int(stats_row["correct"]),
+            "streak": int(streak),
+            "accuracy": round((stats_row["correct"] / stats_row["played"]) * 100, 1) if stats_row["played"] else 0.0,
+        },
+    })
+
+
+@app.route("/api/game/leaderboard")
+@login_required
+def api_game_leaderboard():
+    rows = _q(
+        "SELECT u.username, COUNT(*) AS played, SUM(g.correct) AS correct "
+        "FROM game_rounds g JOIN users u ON u.id=g.user_id "
+        "WHERE g.user_guess IS NOT NULL "
+        "GROUP BY u.username HAVING COUNT(*) >= 10 "
+        "ORDER BY SUM(g.correct) DESC, COUNT(*) ASC LIMIT 10"
+    )
+    return jsonify([
+        {"username": r["username"], "played": int(r["played"]),
+         "correct": int(r["correct"] or 0),
+         "accuracy": round((int(r["correct"] or 0) / int(r["played"])) * 100, 1)}
+        for r in rows
+    ])
+
+
+GAME_HTML = """<!DOCTYPE html>
+<html data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">""" + _META + """
+  <title>Chart Guess · ChartEdge.trade</title>
+  <style>
+    :root[data-theme="dark"]  { --bg:#0d1117; --bg2:#161b22; --bg3:#21262d; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --green:#3fb950; --red:#f85149; }
+    :root[data-theme="light"] { --bg:#ffffff; --bg2:#f6f8fa; --bg3:#eaeef2; --border:#d0d7de; --text:#1f2328; --muted:#636c76; --accent:#0969da; --green:#1a7f37; --red:#cf222e; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+    nav { background: var(--bg2); border-bottom: 1px solid var(--border); padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; }
+    .logo { font-size: 1.1rem; font-weight: bold; text-decoration: none; }
+""" + _NAV_CSS + """
+    .hero { text-align: center; padding: 36px 24px 18px; border-bottom: 1px solid var(--border); }
+    .hero h1 { font-size: 1.7rem; margin-bottom: 6px; }
+    .hero h1 span { color: var(--accent); }
+    .hero p { color: var(--muted); font-size: .9rem; max-width: 540px; margin: 0 auto; }
+    .container { max-width: 880px; margin: 0 auto; padding: 28px 24px 60px; }
+    .stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 20px; }
+    .stat-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 14px; text-align: center; }
+    .stat-num { font-size: 1.5rem; font-weight: 800; color: var(--accent); }
+    .stat-lbl { font-size: .72rem; color: var(--muted); margin-top: 2px; text-transform: uppercase; letter-spacing: .05em; }
+    .chart-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; padding: 22px; margin-bottom: 18px; }
+    .chart-meta { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; font-size: .85rem; color: var(--muted); }
+    .chart-meta strong { color: var(--text); }
+    canvas { display: block; width: 100%; height: 320px; }
+    .actions { display: flex; gap: 12px; margin-top: 14px; }
+    .btn-guess { flex: 1; padding: 14px; font-size: 1rem; font-weight: 700; border: none; border-radius: 9px; cursor: pointer; transition: transform .15s, opacity .15s; }
+    .btn-up   { background: var(--green); color: #06120a; }
+    .btn-down { background: var(--red);   color: #fff; }
+    .btn-guess:hover { transform: translateY(-1px); }
+    .btn-guess:disabled { opacity: .4; cursor: default; transform: none; }
+    .btn-next { width: 100%; padding: 14px; font-size: 1rem; font-weight: 700; background: var(--accent); color: #fff; border: none; border-radius: 9px; cursor: pointer; margin-top: 12px; }
+    .btn-next:hover { opacity: .9; }
+    .result-card { padding: 16px; border-radius: 9px; margin-top: 14px; font-size: .95rem; line-height: 1.5; }
+    .result-correct { background: rgba(63,185,80,.12); border: 1px solid var(--green); color: var(--green); }
+    .result-wrong   { background: rgba(248,81,73,.12); border: 1px solid var(--red);   color: var(--red); }
+    .result-card strong { font-weight: 700; }
+    .lb-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin-top: 24px; }
+    .lb-card h3 { font-size: .85rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin-bottom: 14px; }
+    .lb-row { display: grid; grid-template-columns: 30px 1fr 90px 90px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: .88rem; }
+    .lb-row:last-child { border-bottom: none; }
+    .lb-rank { color: var(--muted); font-weight: 700; }
+    .lb-name { font-weight: 600; }
+    .lb-num  { text-align: right; font-variant-numeric: tabular-nums; }
+    .loading { color: var(--muted); padding: 28px; text-align: center; font-size: .9rem; }
+    footer { text-align: center; padding: 32px 24px; color: var(--muted); font-size: .8rem; border-top: 1px solid var(--border); }
+  </style>
+</head>
+<body>
+<nav>
+  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span><span style="color:var(--muted);font-weight:500;">.trade</span></a>
+  <button class="hamburger" onclick="toggleMobileNav(event)">☰</button>
+  <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
+</nav>
+
+<div class="hero">
+  <h1>Chart <span>Guess</span></h1>
+  <p>A real chart from a real stock at a real moment in history — minus the label. Predict where it went next.</p>
+</div>
+
+<div class="container">
+  <div class="stats-row">
+    <div class="stat-card"><div class="stat-num" id="s-played">0</div><div class="stat-lbl">Rounds</div></div>
+    <div class="stat-card"><div class="stat-num" id="s-correct">0</div><div class="stat-lbl">Correct</div></div>
+    <div class="stat-card"><div class="stat-num" id="s-acc">—</div><div class="stat-lbl">Accuracy</div></div>
+    <div class="stat-card"><div class="stat-num" id="s-streak">0</div><div class="stat-lbl">Streak</div></div>
+  </div>
+
+  <div class="chart-card">
+    <div class="chart-meta">
+      <span>Mystery stock · <strong id="horizon-label">—</strong> ahead</span>
+      <span id="round-tag" style="font-size:.78rem;">—</span>
+    </div>
+    <div id="chart-wrap">
+      <canvas id="chart" width="800" height="320"></canvas>
+    </div>
+    <div class="actions" id="guess-actions">
+      <button class="btn-guess btn-up" onclick="guess('up')" id="btn-up">📈 Up</button>
+      <button class="btn-guess btn-down" onclick="guess('down')" id="btn-down">📉 Down</button>
+    </div>
+    <div id="result"></div>
+    <button class="btn-next" id="btn-next" style="display:none;" onclick="newRound()">Next round →</button>
+  </div>
+
+  <div class="lb-card">
+    <h3>🏆 Leaderboard</h3>
+    <div id="lb">Loading…</div>
+  </div>
+</div>
+
+<footer>© 2026 ChartEdge.trade · Past performance does not guarantee future results · Not financial advice</footer>
+
+<script>
+""" + _THEME_JS + """
+
+var state = { roundId: null, pre: [], post: [], resolved: false };
+
+function drawChart(pre, post) {
+  var c = document.getElementById('chart');
+  var dpr = window.devicePixelRatio || 1;
+  var W = c.clientWidth, H = c.clientHeight;
+  c.width = W * dpr; c.height = H * dpr;
+  var ctx = c.getContext('2d'); ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, W, H);
+
+  var all = pre.concat(post || []);
+  if (!all.length) return;
+  var lo = Math.min.apply(null, all), hi = Math.max.apply(null, all);
+  var pad = (hi - lo) * 0.08 || 1;
+  lo -= pad; hi += pad;
+
+  var leftPad = 12, rightPad = 12, topPad = 14, botPad = 24;
+  var n = all.length;
+  function px(i)  { return leftPad + (W - leftPad - rightPad) * (i / Math.max(1, n - 1)); }
+  function py(v)  { return topPad + (H - topPad - botPad) * (1 - (v - lo) / (hi - lo)); }
+
+  // Subtle horizontal gridlines
+  ctx.strokeStyle = 'rgba(139,148,158,.15)';
+  ctx.lineWidth = 1;
+  for (var g = 0; g <= 4; g++) {
+    var y = topPad + (H - topPad - botPad) * (g / 4);
+    ctx.beginPath(); ctx.moveTo(leftPad, y); ctx.lineTo(W - rightPad, y); ctx.stroke();
+  }
+
+  // Pre line
+  ctx.strokeStyle = '#58a6ff';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  for (var i = 0; i < pre.length; i++) {
+    var x = px(i), y = py(pre[i]);
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+
+  // Post line (only after reveal)
+  if (post && post.length) {
+    // Vertical reveal divider
+    var dx = px(pre.length - 1);
+    ctx.strokeStyle = 'rgba(139,148,158,.45)';
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath(); ctx.moveTo(dx, topPad); ctx.lineTo(dx, H - botPad); ctx.stroke();
+    ctx.setLineDash([]);
+
+    var lastPre = pre[pre.length - 1];
+    var col = post[post.length - 1] >= lastPre ? '#3fb950' : '#f85149';
+    ctx.strokeStyle = col;
+    ctx.lineWidth = 2.4;
+    ctx.beginPath();
+    ctx.moveTo(dx, py(lastPre));
+    for (var j = 0; j < post.length; j++) {
+      ctx.lineTo(px(pre.length + j), py(post[j]));
+    }
+    ctx.stroke();
+  }
+}
+
+function setActionsEnabled(on) {
+  document.getElementById('btn-up').disabled = !on;
+  document.getElementById('btn-down').disabled = !on;
+}
+
+function newRound() {
+  document.getElementById('result').innerHTML = '';
+  document.getElementById('btn-next').style.display = 'none';
+  document.getElementById('horizon-label').textContent = '—';
+  document.getElementById('round-tag').textContent = 'Loading…';
+  setActionsEnabled(false);
+  state = { roundId: null, pre: [], post: [], resolved: false };
+  drawChart([], []);
+  fetch('/api/game/new')
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if (d.error) { document.getElementById('round-tag').textContent = d.error; return; }
+      state.roundId = d.round_id; state.pre = d.series;
+      document.getElementById('horizon-label').textContent = d.horizon_label;
+      document.getElementById('round-tag').textContent = 'Round #' + d.round_id;
+      drawChart(state.pre, []);
+      setActionsEnabled(true);
+    })
+    .catch(function(){ document.getElementById('round-tag').textContent = 'Network error.'; });
+}
+
+function guess(dir) {
+  if (state.resolved || state.roundId == null) return;
+  setActionsEnabled(false);
+  fetch('/api/game/guess', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ round_id: state.roundId, guess: dir }),
+  })
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if (d.error) { document.getElementById('result').innerHTML = '<div class="result-card result-wrong">' + d.error + '</div>'; setActionsEnabled(true); return; }
+      state.resolved = true;
+      state.post = d.post_series;
+      drawChart(state.pre, state.post);
+      var pct = (d.pct_change >= 0 ? '+' : '') + d.pct_change + '%';
+      var msg = d.correct
+        ? '<div class="result-card result-correct"><strong>✓ Correct.</strong> ' + d.ticker + ' moved <strong>' + pct + '</strong> over the next ' + d.horizon_days + ' trading day' + (d.horizon_days === 1 ? '' : 's') + '.</div>'
+        : '<div class="result-card result-wrong"><strong>✗ Wrong.</strong> ' + d.ticker + ' moved <strong>' + pct + '</strong> over the next ' + d.horizon_days + ' trading day' + (d.horizon_days === 1 ? '' : 's') + '.</div>';
+      document.getElementById('result').innerHTML = msg;
+      document.getElementById('btn-next').style.display = 'block';
+      var s = d.stats;
+      document.getElementById('s-played').textContent  = s.played;
+      document.getElementById('s-correct').textContent = s.correct;
+      document.getElementById('s-acc').textContent     = (s.accuracy || 0) + '%';
+      document.getElementById('s-streak').textContent  = s.streak;
+      loadLeaderboard();
+    })
+    .catch(function(){ document.getElementById('result').innerHTML = '<div class="result-card result-wrong">Network error.</div>'; setActionsEnabled(true); });
+}
+
+function loadLeaderboard() {
+  fetch('/api/game/leaderboard')
+    .then(function(r){ return r.json(); })
+    .then(function(rows){
+      var el = document.getElementById('lb');
+      if (!rows.length) { el.innerHTML = '<div style="color:var(--muted);font-size:.85rem;padding:6px 0;">No one has played 10 rounds yet — be the first!</div>'; return; }
+      var html = '';
+      for (var i = 0; i < rows.length; i++) {
+        var r = rows[i];
+        html += '<div class="lb-row">'
+              +   '<div class="lb-rank">#' + (i + 1) + '</div>'
+              +   '<div class="lb-name">' + r.username + '</div>'
+              +   '<div class="lb-num">' + r.correct + ' / ' + r.played + '</div>'
+              +   '<div class="lb-num">' + r.accuracy + '%</div>'
+              + '</div>';
+      }
+      el.innerHTML = html;
+    });
+}
+
+window.addEventListener('resize', function(){ drawChart(state.pre, state.post); });
+loadLeaderboard();
+newRound();
+</script>
+</body>
+</html>"""
 
 
 # ── Entry point ───────────────────────────────────────────────────────────────
