@@ -332,6 +332,31 @@ def init_db():
                 resolved_at TIMESTAMP
             )
         """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS price_alerts (
+                id              SERIAL PRIMARY KEY,
+                user_id         INTEGER NOT NULL,
+                ticker          TEXT NOT NULL,
+                direction       TEXT NOT NULL,
+                threshold       DOUBLE PRECISION NOT NULL,
+                status          TEXT DEFAULT 'active',
+                triggered_price DOUBLE PRECISION,
+                created         TIMESTAMP DEFAULT NOW(),
+                triggered_at    TIMESTAMP
+            )
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS notifications (
+                id        SERIAL PRIMARY KEY,
+                user_id   INTEGER NOT NULL,
+                alert_id  INTEGER,
+                ticker    TEXT,
+                message   TEXT NOT NULL,
+                price     DOUBLE PRECISION,
+                seen      INTEGER DEFAULT 0,
+                fired_at  TIMESTAMP DEFAULT NOW()
+            )
+        """)
         conn.commit()
     except Exception:
         conn.rollback()
@@ -4799,6 +4824,27 @@ _NAV_CSS = """
     .drop-menu a { padding: 8px 16px; font-size: 0.9rem; }
     .theme-toggle { width: 100%; margin: 8px 0 4px; }
   }
+  /* Notification bell */
+  .bell-btn { position: relative; padding: 6px 10px !important; min-width: 36px; }
+  .bell-icon { font-size: 1.05rem; line-height: 1; }
+  .bell-badge {
+    position: absolute; top: 0px; right: 2px;
+    background: #f85149; color: #fff;
+    font-size: .62rem; font-weight: 800;
+    min-width: 16px; height: 16px; border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    padding: 0 4px; line-height: 1;
+    border: 1.5px solid var(--bg2);
+  }
+  .bell-menu { min-width: 280px; max-width: 320px; max-height: 360px; overflow-y: auto; }
+  .bell-empty { color: var(--muted); font-size: .82rem; padding: 14px 16px; }
+  .bell-row { display: block; padding: 10px 14px; border-bottom: 1px solid var(--border); text-decoration: none; }
+  .bell-row:last-child { border-bottom: none; }
+  .bell-row .bell-msg { color: var(--text); font-size: .85rem; line-height: 1.4; }
+  .bell-row .bell-time { color: var(--muted); font-size: .72rem; margin-top: 3px; }
+  .bell-row.unseen { background: rgba(88,166,255,0.05); }
+  .bell-foot { padding: 10px 14px; text-align: center; border-top: 1px solid var(--border); }
+  .bell-foot a { color: var(--accent); text-decoration: none; font-size: .82rem; font-weight: 600; }
 """
 
 _NAV_LINKS = """
@@ -4880,6 +4926,17 @@ _NAV_LINKS = """
       </div>
     </div>
     <a href="/pricing" style="font-size:.85rem;color:var(--accent);padding:6px 10px;text-decoration:none;font-weight:600;">Pricing</a>
+    {% if current_user %}
+    <div class="dropdown" id="bell-dropdown">
+      <button class="drop-btn bell-btn" onclick="toggleBell(this, event)" aria-label="Notifications">
+        <span class="bell-icon">🔔</span>
+        <span class="bell-badge" id="bell-badge" style="display:none;">0</span>
+      </button>
+      <div class="drop-menu bell-menu" id="bell-menu">
+        <div class="bell-empty" id="bell-empty">Loading…</div>
+      </div>
+    </div>
+    {% endif %}
     <div class="dropdown">
       {% if current_user %}
       <button class="drop-btn" onclick="toggleDrop(this, event)">{{ current_user }} ▾</button>
@@ -4887,6 +4944,7 @@ _NAV_LINKS = """
         <a href="/me">👤 Profile</a>
         <a href="/settings">⚙️ Settings</a>
         <a href="/favorites">♥ Favorites</a>
+        <a href="/alerts">🔔 Price Alerts</a>
         <a href="/billing">Billing</a>
         <a href="/redeem">Redeem Code</a>
         <a href="/refer">Refer a Friend</a>
@@ -4963,6 +5021,59 @@ function toggleTheme() {
     if (!ticking) { requestAnimationFrame(update); ticking = true; }
   }, { passive: true });
 })();
+function toggleBell(btn, event) {
+  event.stopPropagation();
+  var menu = document.getElementById('bell-menu');
+  var isOpen = menu.classList.contains('open');
+  document.querySelectorAll('.drop-menu').forEach(function(m){ m.classList.remove('open'); });
+  document.querySelectorAll('.drop-btn').forEach(function(b){ b.classList.remove('open'); });
+  if (!isOpen) {
+    menu.classList.add('open');
+    btn.classList.add('open');
+    fetchBell(true);
+    // Mark as seen on open
+    fetch('/api/notifications/seen', { method: 'POST' }).then(function(){
+      var badge = document.getElementById('bell-badge');
+      if (badge) badge.style.display = 'none';
+    });
+  }
+}
+function fetchBell(render) {
+  if (!document.getElementById('bell-badge')) return;
+  fetch('/api/notifications')
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      var badge = document.getElementById('bell-badge');
+      if (d.unread > 0) {
+        badge.textContent = d.unread > 9 ? '9+' : d.unread;
+        badge.style.display = 'flex';
+      } else {
+        badge.style.display = 'none';
+      }
+      if (!render) return;
+      var menu = document.getElementById('bell-menu');
+      if (!d.items || !d.items.length) {
+        menu.innerHTML = '<div class="bell-empty">No alerts yet. <a href="/alerts" style="color:var(--accent);">Create one</a></div>';
+        return;
+      }
+      var html = '';
+      for (var i = 0; i < d.items.length; i++) {
+        var n = d.items[i];
+        html += '<a class="bell-row ' + (n.seen ? '' : 'unseen') + '" href="/alerts">'
+              +   '<div class="bell-msg">' + n.message + '</div>'
+              +   '<div class="bell-time">' + (n.fired_at || '') + '</div>'
+              + '</a>';
+      }
+      html += '<div class="bell-foot"><a href="/alerts">Manage alerts →</a></div>';
+      menu.innerHTML = html;
+    })
+    .catch(function(){});
+}
+// Initial fetch + poll every 30s
+if (document.getElementById('bell-badge')) {
+  fetchBell(false);
+  setInterval(function(){ fetchBell(false); }, 30000);
+}
 (function initEmailBanner() {
   var isMissing = !!document.querySelector('meta[name="email-missing"]');
   var isUnverified = !!document.querySelector('meta[name="email-unverified"]');
@@ -14394,6 +14505,371 @@ function loadLeaderboard() {
 window.addEventListener('resize', function(){ drawChart(); });
 loadLeaderboard();
 startNewGame();
+</script>
+</body>
+</html>"""
+
+
+# ── Price alerts + notification bell ─────────────────────────────────────────
+
+_ALERT_LIMITS = {"free": 1, "basic": 5, "pro": 25}
+
+
+def send_alert_email(to_email: str, username: str, ticker: str, price: float,
+                     direction: str, threshold: float) -> None:
+    if not resend.api_key or not to_email:
+        return
+    verb = "above" if direction == "above" else "below"
+    try:
+        resend.Emails.send({
+            "from": "ChartEdge.trade <onboarding@resend.dev>",
+            "to": to_email,
+            "subject": f"🔔 {ticker} hit ${price:.2f}",
+            "html": f"""
+            <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:520px;margin:0 auto;padding:32px;background:#0d1117;color:#e6edf3;border-radius:10px;">
+              <h1 style="color:#58a6ff;margin-bottom:8px;">{ticker} alert triggered</h1>
+              <p style="color:#8b949e;margin-bottom:18px;">Hi {username}, your alert just fired.</p>
+              <p style="color:#e6edf3;font-size:1.1rem;margin-bottom:20px;">
+                <strong>{ticker}</strong> moved <strong>{verb}</strong> your threshold of
+                <strong>${threshold:.2f}</strong> — currently trading at
+                <strong style="color:{'#3fb950' if direction == 'above' else '#f85149'};">${price:.2f}</strong>.
+              </p>
+              <p style="color:#8b949e;font-size:.82rem;">This alert is now inactive — set a new one any time from your alerts page.</p>
+              <p style="color:#636c76;font-size:.78rem;margin-top:24px;">© 2026 ChartEdge.trade · Not financial advice</p>
+            </div>
+            """,
+        })
+    except Exception as e:
+        log.warning("Failed to send alert email: %s", e)
+
+
+def _fetch_quote(ticker: str):
+    """Return current price for ticker via Finnhub, or None on failure."""
+    if not FINNHUB_API_KEY:
+        return None
+    try:
+        import requests as _req
+        r = _req.get(
+            "https://finnhub.io/api/v1/quote",
+            params={"symbol": ticker, "token": FINNHUB_API_KEY},
+            timeout=6,
+        )
+        if r.status_code != 200:
+            return None
+        data = r.json() or {}
+        c = data.get("c")
+        return float(c) if c else None
+    except Exception:
+        return None
+
+
+def _alert_poller():
+    """Background loop: every ~90s, check active alerts and fire triggers."""
+    import time as _time
+    log.info("alert poller started")
+    while True:
+        try:
+            alerts = _q(
+                "SELECT a.id, a.user_id, a.ticker, a.direction, a.threshold, u.email, u.username "
+                "FROM price_alerts a JOIN users u ON u.id = a.user_id "
+                "WHERE a.status='active'"
+            )
+            if alerts:
+                # Group by ticker so we hit Finnhub once per symbol per cycle
+                by_ticker = {}
+                for a in alerts:
+                    by_ticker.setdefault(a["ticker"], []).append(a)
+                for ticker, group in by_ticker.items():
+                    price = _fetch_quote(ticker)
+                    if price is None:
+                        continue
+                    for a in group:
+                        threshold = float(a["threshold"])
+                        fired = (a["direction"] == "above" and price >= threshold) or \
+                                (a["direction"] == "below" and price <= threshold)
+                        if not fired:
+                            continue
+                        verb = "above" if a["direction"] == "above" else "below"
+                        msg = f"{ticker} hit ${price:.2f} ({verb} your ${threshold:.2f} threshold)"
+                        try:
+                            _run(
+                                "UPDATE price_alerts SET status='triggered', triggered_price=%s, triggered_at=NOW() "
+                                "WHERE id=%s AND status='active'",
+                                (price, a["id"]),
+                            )
+                            _run(
+                                "INSERT INTO notifications (user_id, alert_id, ticker, message, price) "
+                                "VALUES (%s, %s, %s, %s, %s)",
+                                (a["user_id"], a["id"], ticker, msg, price),
+                            )
+                            if a["email"]:
+                                send_alert_email(a["email"], a["username"] or "there",
+                                                 ticker, price, a["direction"], threshold)
+                        except Exception:
+                            log.exception("alert fire failed for alert %s", a["id"])
+        except Exception:
+            log.exception("alert poller iteration failed")
+        _time.sleep(90)
+
+
+def _start_alert_poller():
+    import threading as _th
+    t = _th.Thread(target=_alert_poller, name="alert-poller", daemon=True)
+    t.start()
+
+
+# Start the poller once at import time (gunicorn/Flask dev server both honor module-level).
+try:
+    _start_alert_poller()
+except Exception:
+    log.exception("failed to start alert poller")
+
+
+@app.route("/alerts")
+@login_required
+def alerts_page():
+    return render_template_string(ALERTS_HTML, current_user=current_user())
+
+
+@app.route("/api/alerts", methods=["GET"])
+@login_required
+def api_alerts_list():
+    rows = _q(
+        "SELECT id, ticker, direction, threshold, status, triggered_price, "
+        "       to_char(created, 'YYYY-MM-DD HH24:MI') AS created, "
+        "       to_char(triggered_at, 'YYYY-MM-DD HH24:MI') AS triggered_at "
+        "FROM price_alerts WHERE user_id=%s ORDER BY id DESC LIMIT 50",
+        (session["user_id"],),
+    )
+    plan = _get_user_plan(session["user_id"])
+    return jsonify({
+        "alerts": [dict(r) for r in rows],
+        "plan": plan,
+        "limit": _ALERT_LIMITS.get(plan, 1),
+        "active_count": sum(1 for r in rows if r["status"] == "active"),
+    })
+
+
+@app.route("/api/alerts", methods=["POST"])
+@login_required
+def api_alerts_create():
+    user_id = session["user_id"]
+    data = request.get_json(silent=True) or {}
+    ticker = (data.get("ticker") or "").strip().upper()
+    direction = (data.get("direction") or "").lower()
+    try:
+        threshold = float(data.get("threshold"))
+    except (TypeError, ValueError):
+        return jsonify({"error": "Invalid threshold."}), 400
+    if not ticker or not ticker.replace(".", "").replace("-", "").isalnum() or len(ticker) > 10:
+        return jsonify({"error": "Invalid ticker."}), 400
+    if direction not in ("above", "below"):
+        return jsonify({"error": "Direction must be above or below."}), 400
+    if threshold <= 0 or threshold > 1_000_000:
+        return jsonify({"error": "Threshold out of range."}), 400
+
+    plan = _get_user_plan(user_id)
+    limit = _ALERT_LIMITS.get(plan, 1)
+    active = _scalar(
+        "SELECT COUNT(*) FROM price_alerts WHERE user_id=%s AND status='active'",
+        (user_id,),
+    ) or 0
+    if active >= limit:
+        return jsonify({"error": f"Plan limit reached — {plan} plan allows {limit} active alert(s)."}), 403
+
+    _run(
+        "INSERT INTO price_alerts (user_id, ticker, direction, threshold) VALUES (%s, %s, %s, %s)",
+        (user_id, ticker, direction, threshold),
+    )
+    return jsonify({"ok": True})
+
+
+@app.route("/api/alerts/<int:alert_id>", methods=["DELETE"])
+@login_required
+def api_alerts_delete(alert_id):
+    _run("DELETE FROM price_alerts WHERE id=%s AND user_id=%s",
+         (alert_id, session["user_id"]))
+    return jsonify({"ok": True})
+
+
+@app.route("/api/notifications")
+@login_required
+def api_notifications_list():
+    user_id = session["user_id"]
+    rows = _q(
+        "SELECT id, ticker, message, price, seen, "
+        "       to_char(fired_at, 'YYYY-MM-DD HH24:MI') AS fired_at "
+        "FROM notifications WHERE user_id=%s ORDER BY id DESC LIMIT 20",
+        (user_id,),
+    )
+    unread = _scalar(
+        "SELECT COUNT(*) FROM notifications WHERE user_id=%s AND seen=0",
+        (user_id,),
+    ) or 0
+    return jsonify({"items": [dict(r) for r in rows], "unread": int(unread)})
+
+
+@app.route("/api/notifications/seen", methods=["POST"])
+@login_required
+def api_notifications_mark_seen():
+    _run("UPDATE notifications SET seen=1 WHERE user_id=%s AND seen=0",
+         (session["user_id"],))
+    return jsonify({"ok": True})
+
+
+ALERTS_HTML = """<!DOCTYPE html>
+<html data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">""" + _META + """
+  <title>Price Alerts · ChartEdge.trade</title>
+  <style>
+    :root[data-theme="dark"]  { --bg:#0d1117; --bg2:#161b22; --bg3:#21262d; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --green:#3fb950; --red:#f85149; }
+    :root[data-theme="light"] { --bg:#ffffff; --bg2:#f6f8fa; --bg3:#eaeef2; --border:#d0d7de; --text:#1f2328; --muted:#636c76; --accent:#0969da; --green:#1a7f37; --red:#cf222e; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+    nav { background: var(--bg2); border-bottom: 1px solid var(--border); padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; }
+    .logo { font-size: 1.1rem; font-weight: bold; text-decoration: none; }
+""" + _NAV_CSS + """
+    .hero { text-align: center; padding: 36px 24px 18px; border-bottom: 1px solid var(--border); }
+    .hero h1 { font-size: 1.7rem; margin-bottom: 6px; }
+    .hero h1 span { color: var(--accent); }
+    .hero p { color: var(--muted); font-size: .9rem; max-width: 540px; margin: 0 auto; }
+    .container { max-width: 780px; margin: 0 auto; padding: 28px 24px 60px; }
+    .card { background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; padding: 22px; margin-bottom: 20px; }
+    .card h3 { font-size: .82rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin-bottom: 14px; }
+    .form-row { display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 10px; align-items: end; }
+    .form-row label { display: block; font-size: .72rem; color: var(--muted); margin-bottom: 5px; text-transform: uppercase; letter-spacing: .05em; }
+    .form-row input, .form-row select { width: 100%; background: var(--bg3); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 9px 12px; font-size: .9rem; font-family: inherit; }
+    .form-row input:focus, .form-row select:focus { outline: none; border-color: var(--accent); }
+    .btn-add { background: var(--accent); color: #fff; border: none; padding: 10px 18px; border-radius: 8px; font-weight: 700; cursor: pointer; font-size: .9rem; height: 40px; }
+    .btn-add:hover { opacity: .9; }
+    .btn-add:disabled { opacity: .4; cursor: default; }
+    .alert-row { display: grid; grid-template-columns: 70px 80px 100px 1fr auto; align-items: center; gap: 10px; padding: 12px 0; border-bottom: 1px solid var(--border); font-size: .9rem; }
+    .alert-row:last-child { border-bottom: none; }
+    .alert-ticker { font-weight: 700; }
+    .alert-dir { color: var(--muted); font-size: .82rem; }
+    .alert-thresh { font-variant-numeric: tabular-nums; }
+    .alert-status { font-size: .78rem; padding: 3px 9px; border-radius: 12px; font-weight: 600; }
+    .status-active    { background: rgba(63,185,80,.16); color: var(--green); }
+    .status-triggered { background: rgba(88,166,255,.16); color: var(--accent); }
+    .btn-del { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 1rem; padding: 4px 8px; border-radius: 6px; }
+    .btn-del:hover { color: var(--red); background: var(--bg3); }
+    .empty { color: var(--muted); font-size: .9rem; padding: 20px 0; text-align: center; }
+    .plan-info { color: var(--muted); font-size: .82rem; margin-top: 14px; }
+    .err { background: rgba(248,81,73,.12); border: 1px solid var(--red); color: var(--red); border-radius: 8px; padding: 10px 14px; font-size: .85rem; margin-bottom: 14px; }
+    footer { text-align: center; padding: 32px 24px; color: var(--muted); font-size: .8rem; border-top: 1px solid var(--border); }
+    @media (max-width: 640px) {
+      .form-row { grid-template-columns: 1fr 1fr; }
+      .form-row .btn-add { grid-column: 1 / -1; height: auto; padding: 12px; }
+      .alert-row { grid-template-columns: 1fr 1fr auto; row-gap: 4px; }
+    }
+  </style>
+</head>
+<body>
+<nav>
+  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span><span style="color:var(--muted);font-weight:500;">.trade</span></a>
+  <button class="hamburger" onclick="toggleMobileNav(event)">☰</button>
+  <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
+</nav>
+
+<div class="hero">
+  <h1>🔔 Price <span>Alerts</span></h1>
+  <p>Get pinged the moment a stock breaks above or below your target. Email + in-app bell.</p>
+</div>
+
+<div class="container">
+  <div class="card">
+    <h3>New alert</h3>
+    <div id="form-err"></div>
+    <div class="form-row">
+      <div>
+        <label>Ticker</label>
+        <input id="a-ticker" type="text" placeholder="AAPL" maxlength="10">
+      </div>
+      <div>
+        <label>Direction</label>
+        <select id="a-dir">
+          <option value="above">Above</option>
+          <option value="below">Below</option>
+        </select>
+      </div>
+      <div>
+        <label>Price ($)</label>
+        <input id="a-thresh" type="number" min="0" step="0.01" placeholder="200">
+      </div>
+      <button class="btn-add" onclick="createAlert()">Add</button>
+    </div>
+    <div class="plan-info" id="plan-info">—</div>
+  </div>
+
+  <div class="card">
+    <h3>Your alerts</h3>
+    <div id="alerts-list">Loading…</div>
+  </div>
+</div>
+
+<footer>© 2026 ChartEdge.trade · Alerts check live prices every ~90 seconds · Not financial advice</footer>
+
+<script>
+""" + _THEME_JS + """
+
+function loadAlerts() {
+  fetch('/api/alerts')
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      var el = document.getElementById('alerts-list');
+      document.getElementById('plan-info').textContent =
+        d.active_count + ' / ' + d.limit + ' active on your ' + d.plan + ' plan.';
+      if (!d.alerts.length) {
+        el.innerHTML = '<div class="empty">No alerts yet — add one above.</div>';
+        return;
+      }
+      var html = '';
+      for (var i = 0; i < d.alerts.length; i++) {
+        var a = d.alerts[i];
+        var statusCls = a.status === 'triggered' ? 'status-triggered' : 'status-active';
+        var statusTxt = a.status === 'triggered' ? 'Triggered' : 'Active';
+        html += '<div class="alert-row">'
+              +   '<div class="alert-ticker">' + a.ticker + '</div>'
+              +   '<div class="alert-dir">' + (a.direction === 'above' ? '↑ Above' : '↓ Below') + '</div>'
+              +   '<div class="alert-thresh">$' + Number(a.threshold).toFixed(2) + '</div>'
+              +   '<div><span class="alert-status ' + statusCls + '">' + statusTxt + '</span>'
+              +     (a.triggered_price ? ' <span style="color:var(--muted);font-size:.78rem;">at $' + Number(a.triggered_price).toFixed(2) + '</span>' : '')
+              +   '</div>'
+              +   '<button class="btn-del" title="Delete" onclick="deleteAlert(' + a.id + ')">×</button>'
+              + '</div>';
+      }
+      el.innerHTML = html;
+    });
+}
+
+function createAlert() {
+  var ticker = document.getElementById('a-ticker').value.trim().toUpperCase();
+  var direction = document.getElementById('a-dir').value;
+  var threshold = parseFloat(document.getElementById('a-thresh').value);
+  var errEl = document.getElementById('form-err');
+  errEl.innerHTML = '';
+  fetch('/api/alerts', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ticker: ticker, direction: direction, threshold: threshold }),
+  })
+    .then(function(r){ return r.json().then(function(d){ return { ok: r.ok, body: d }; }); })
+    .then(function(res){
+      if (!res.ok) { errEl.innerHTML = '<div class="err">' + (res.body.error || 'Failed.') + '</div>'; return; }
+      document.getElementById('a-ticker').value = '';
+      document.getElementById('a-thresh').value = '';
+      loadAlerts();
+    });
+}
+
+function deleteAlert(id) {
+  fetch('/api/alerts/' + id, { method: 'DELETE' })
+    .then(function(){ loadAlerts(); });
+}
+
+loadAlerts();
 </script>
 </body>
 </html>"""
