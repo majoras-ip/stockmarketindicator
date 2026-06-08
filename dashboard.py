@@ -9814,8 +9814,8 @@ INSIDER_HTML = """<!DOCTYPE html>
 
   <div class="filter-section">
     <div class="search-row">
-      <input type="text" id="ticker-input" placeholder="Filter by ticker (e.g. AAPL)" oninput="applyFilters()">
-      <input type="text" id="name-input" placeholder="Filter by name (e.g. Pelosi)" oninput="applyFilters()" style="max-width:220px;">
+      <input type="text" id="ticker-input" placeholder="Filter by ticker (e.g. AAPL)" oninput="currentPage=1; applyFilters()">
+      <input type="text" id="name-input" placeholder="Filter by name (e.g. Pelosi)" oninput="currentPage=1; applyFilters()" style="max-width:220px;">
     </div>
     <div class="filter-row">
       <span class="filter-label">Source:</span>
@@ -9879,7 +9879,6 @@ function applyFilters() {
     if (name   && !(f.insider || '').toLowerCase().includes(name)) return false;
     return true;
   });
-  currentPage = 1;
   var label = '';
   if (name) label = 'Trades by "' + document.getElementById('name-input').value.trim() + '"';
   else if (ticker) label = 'Filings for ' + ticker;
