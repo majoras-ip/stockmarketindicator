@@ -14594,6 +14594,7 @@ def _alert_poller():
                     by_ticker.setdefault(a["ticker"], []).append(a)
                 for ticker, group in by_ticker.items():
                     price = _fetch_quote(ticker)
+                    _time.sleep(0.05)  # tiny gap to avoid bursting Finnhub's per-minute window
                     if price is None:
                         continue
                     for a in group:
