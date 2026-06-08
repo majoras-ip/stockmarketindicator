@@ -102,6 +102,41 @@ def send_password_reset_email(to_email: str, username: str, reset_url: str) -> N
     except Exception as e:
         log.warning("Failed to send password reset email: %s", e)
 
+
+def send_email_verification_email(to_email: str, username: str, verify_url: str) -> None:
+    if not resend.api_key or not to_email:
+        return
+    try:
+        resend.Emails.send({
+            "from": "ChartEdge.trade <onboarding@resend.dev>",
+            "to": to_email,
+            "subject": "Verify your ChartEdge.trade email",
+            "html": f"""
+            <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:520px;margin:0 auto;padding:32px;background:#0d1117;color:#e6edf3;border-radius:10px;">
+              <h1 style="color:#58a6ff;margin-bottom:8px;">Confirm your email</h1>
+              <p style="color:#8b949e;margin-bottom:18px;">Hi {username}, copy and paste the link below into your browser to confirm this email address. This link expires in 24 hours.</p>
+              <p style="color:#58a6ff;font-size:.82rem;word-break:break-all;background:#161b22;padding:12px 14px;border-radius:8px;border:1px solid #30363d;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;margin-bottom:24px;">{verify_url}</p>
+              <p style="color:#8b949e;font-size:.82rem;margin-top:16px;">Verifying your email is what lets you reset your password later — without it, account recovery isn't possible.</p>
+              <p style="color:#636c76;font-size:.78rem;margin-top:24px;">© 2026 ChartEdge.trade · Not financial advice</p>
+            </div>
+            """,
+        })
+    except Exception as e:
+        log.warning("Failed to send verification email: %s", e)
+
+
+def _issue_email_verification(user_id: int, username: str, email: str) -> None:
+    """Generate a token, store it, and email the verification link."""
+    from datetime import datetime, timezone, timedelta
+    token = secrets.token_urlsafe(32)
+    expires_at = datetime.now(timezone.utc) + timedelta(hours=24)
+    _run(
+        "INSERT INTO email_verification_tokens (token, user_id, expires_at) VALUES (%s, %s, %s)",
+        (token, user_id, expires_at),
+    )
+    verify_url = f"{APP_URL}/verify-email?token={token}"
+    send_email_verification_email(email, username, verify_url)
+
 # ── Database ──────────────────────────────────────────────────────────────────
 
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
@@ -274,6 +309,15 @@ def init_db():
                 created    TIMESTAMP DEFAULT NOW()
             )
         """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS email_verification_tokens (
+                token      TEXT PRIMARY KEY,
+                user_id    INTEGER NOT NULL,
+                expires_at TIMESTAMP NOT NULL,
+                used       INTEGER DEFAULT 0,
+                created    TIMESTAMP DEFAULT NOW()
+            )
+        """)
         conn.commit()
     except Exception:
         conn.rollback()
@@ -294,6 +338,14 @@ def _migrate_pg():
             _run(f"ALTER TABLE users ADD COLUMN {col}")
         except Exception:
             pass
+    # email_verified — grandfather everyone with an email on file the first
+    # time this column is added. The ALTER throws (and we skip the UPDATE)
+    # on subsequent runs, so new signups don't get auto-verified.
+    try:
+        _run("ALTER TABLE users ADD COLUMN email_verified INTEGER DEFAULT 0")
+        _run("UPDATE users SET email_verified=1 WHERE email IS NOT NULL AND email <> ''")
+    except Exception:
+        pass
 
 init_db()
 _migrate_pg()
@@ -326,18 +378,27 @@ def inject_nav_plan():
     uid = session.get("user_id")
     plan = _get_user_plan(uid) if uid else "free"
     email_missing = False
+    email_unverified = False
     if uid:
-        row = _one("SELECT email FROM users WHERE id=%s", (uid,))
-        if row and not (row["email"] or "").strip():
-            email_missing = True
-    return {"nav_plan": plan, "show_email_banner": email_missing}
+        row = _one("SELECT email, email_verified FROM users WHERE id=%s", (uid,))
+        if row:
+            email = (row["email"] or "").strip()
+            if not email:
+                email_missing = True
+            elif not row["email_verified"]:
+                email_unverified = True
+    return {
+        "nav_plan": plan,
+        "show_email_banner": email_missing,
+        "show_verify_banner": email_unverified,
+    }
 
 
 # Routes that don't require login
 _PUBLIC_ROUTES = {
     "index", "login", "register", "google_login", "google_callback",
     "pricing", "privacy", "terms", "stripe_webhook", "admin_codes",
-    "forgot_password", "reset_password",
+    "forgot_password", "reset_password", "verify_email",
 }
 
 @app.before_request
@@ -1981,9 +2042,13 @@ def register():
                                 _run("UPDATE users SET plan='basic', plan_expires=%s WHERE id=%s",
                                      (ref_expires, referrer["id"]))
 
-                    # Send welcome email
+                    # Send welcome email + verification link
                     if email:
                         send_welcome_email(email, username, ref_code)
+                        try:
+                            _issue_email_verification(user_id, username, email)
+                        except Exception:
+                            log.exception("Failed to issue email verification on register")
 
                     return redirect("/indicators")
                 except psycopg2.errors.UniqueViolation:
@@ -2023,8 +2088,10 @@ def forgot_password():
         if not email:
             error = "Please enter your email address."
         else:
-            row = _one("SELECT id, username FROM users WHERE email=%s", (email,))
-            if row:
+            row = _one("SELECT id, username, email_verified FROM users WHERE email=%s", (email,))
+            # Only send the reset email if the address has been verified — an
+            # unverified address may not even belong to the account holder.
+            if row and row["email_verified"]:
                 from datetime import datetime, timezone, timedelta
                 token = secrets.token_urlsafe(32)
                 expires_at = datetime.now(timezone.utc) + timedelta(hours=1)
@@ -2034,8 +2101,38 @@ def forgot_password():
                 )
                 reset_url = f"{APP_URL}/reset-password?token={token}"
                 send_password_reset_email(email, row["username"], reset_url)
-            success = "If that email is on file, a reset link is on its way. Check your inbox (and spam folder)."
+            success = "If that email is on file and verified, a reset link is on its way. Check your inbox (and spam folder)."
     return render_template_string(AUTH_HTML, mode="forgot", error=error, success=success)
+
+
+@app.route("/verify-email")
+def verify_email():
+    from datetime import datetime, timezone
+    token = request.args.get("token", "")
+    if not token:
+        return render_template_string(AUTH_HTML, mode="verify", error="Missing verification token.", success=None)
+    row = _one("SELECT * FROM email_verification_tokens WHERE token=%s", (token,))
+    if not row or row["used"] or row["expires_at"].replace(tzinfo=timezone.utc) < datetime.now(timezone.utc):
+        return render_template_string(AUTH_HTML, mode="verify", error="This verification link is invalid or has expired. Request a new one from your profile.", success=None)
+    _run("UPDATE users SET email_verified=1 WHERE id=%s", (row["user_id"],))
+    _run("UPDATE email_verification_tokens SET used=1 WHERE token=%s", (token,))
+    return render_template_string(AUTH_HTML, mode="verify", error=None, success="Email verified. You can now reset your password if you ever lose access.")
+
+
+@app.route("/verify-email/resend", methods=["POST"])
+@login_required
+def resend_verification_email():
+    user_id = session["user_id"]
+    row = _one("SELECT email, username, email_verified FROM users WHERE id=%s", (user_id,))
+    if not row or not row["email"] or row["email_verified"]:
+        return redirect("/me")
+    try:
+        _issue_email_verification(user_id, row["username"], row["email"])
+        session["flash"] = "Verification email sent. Check your inbox."
+    except Exception:
+        log.exception("Failed to resend verification email")
+        session["flash"] = "Couldn't send verification email — try again in a minute."
+    return redirect(request.referrer or "/me")
 
 
 @app.route("/reset-password", methods=["GET", "POST"])
@@ -2088,7 +2185,10 @@ def google_callback():
             while _one("SELECT 1 FROM users WHERE username=%s", (username,)):
                 username = f"{base}{i}"
                 i += 1
-            _run("INSERT INTO users (username, pw_hash, google_id) VALUES (%s, '', %s)", (username, google_id))
+            _run(
+                "INSERT INTO users (username, pw_hash, google_id, email, email_verified) VALUES (%s, '', %s, %s, 1)",
+                (username, google_id, email or None),
+            )
             row = _one("SELECT * FROM users WHERE google_id=%s", (google_id,))
 
         session["user_id"]  = row["id"]
@@ -2523,7 +2623,14 @@ def profile_update():
         if "@" not in new_email or "." not in new_email or len(new_email) > 120:
             error = error or "Please enter a valid email address."
         else:
-            _run("UPDATE users SET email=%s WHERE id=%s", (new_email, user_id))
+            current = _one("SELECT email FROM users WHERE id=%s", (user_id,))
+            if (current["email"] or "").strip().lower() != new_email.lower():
+                # Email changed — store it but force re-verification.
+                _run("UPDATE users SET email=%s, email_verified=0 WHERE id=%s", (new_email, user_id))
+                try:
+                    _issue_email_verification(user_id, session.get("username", "there"), new_email)
+                except Exception:
+                    log.exception("Failed to issue email verification on email change")
 
     pic_file = request.files.get("profile_pic")
     if pic_file and pic_file.filename:
@@ -4540,7 +4647,8 @@ _META = """
   <meta name="twitter:card" content="summary">
   <meta name="twitter:title" content="ChartEdge.trade — Free TradingView Indicators">
   <meta name="twitter:description" content="Free Pine Script indicators for TradingView. No paid plan required.">{% if show_email_banner %}
-  <meta name="email-missing" content="1">{% endif %}""" + _GA_SCRIPT + """
+  <meta name="email-missing" content="1">{% endif %}{% if show_verify_banner %}
+  <meta name="email-unverified" content="1">{% endif %}""" + _GA_SCRIPT + """
   <script>
     (function() {
       var t = localStorage.getItem('theme') || 'dark';
@@ -4833,18 +4941,28 @@ function toggleTheme() {
   }, { passive: true });
 })();
 (function initEmailBanner() {
-  if (!document.querySelector('meta[name="email-missing"]')) return;
-  if (sessionStorage.getItem('ce_email_banner_dismissed') === '1') return;
+  var isMissing = !!document.querySelector('meta[name="email-missing"]');
+  var isUnverified = !!document.querySelector('meta[name="email-unverified"]');
+  if (!isMissing && !isUnverified) return;
+  var key = isMissing ? 'ce_email_banner_dismissed' : 'ce_verify_banner_dismissed';
+  if (sessionStorage.getItem(key) === '1') return;
   function mount() {
     if (document.getElementById('ce-email-banner')) return;
     var b = document.createElement('div');
     b.id = 'ce-email-banner';
-    b.style.cssText = 'position:fixed;top:56px;left:0;right:0;z-index:999;background:linear-gradient(90deg,#1f6feb 0%,#388bfd 100%);color:#fff;padding:10px 16px;display:flex;align-items:center;justify-content:center;gap:14px;font-size:.85rem;box-shadow:0 4px 14px rgba(0,0,0,.25);flex-wrap:wrap;';
-    b.innerHTML = '<span>📧 Add a recovery email so you can reset your password if you forget it.</span><a href="/me#edit-section" style="background:rgba(255,255,255,.18);color:#fff;padding:5px 14px;border-radius:6px;text-decoration:none;font-weight:600;">Add email →</a><button aria-label="Dismiss" id="ce-email-banner-x" style="background:none;border:none;color:#fff;font-size:1.1rem;cursor:pointer;padding:0 6px;line-height:1;">×</button>';
+    var bg = isMissing
+      ? 'linear-gradient(90deg,#1f6feb 0%,#388bfd 100%)'
+      : 'linear-gradient(90deg,#bf8700 0%,#daa520 100%)';
+    b.style.cssText = 'position:fixed;top:56px;left:0;right:0;z-index:999;background:' + bg + ';color:#fff;padding:10px 16px;display:flex;align-items:center;justify-content:center;gap:14px;font-size:.85rem;box-shadow:0 4px 14px rgba(0,0,0,.25);flex-wrap:wrap;';
+    if (isMissing) {
+      b.innerHTML = '<span>📧 Add a recovery email so you can reset your password if you forget it.</span><a href="/me#edit-section" style="background:rgba(255,255,255,.18);color:#fff;padding:5px 14px;border-radius:6px;text-decoration:none;font-weight:600;">Add email →</a><button aria-label="Dismiss" id="ce-email-banner-x" style="background:none;border:none;color:#fff;font-size:1.1rem;cursor:pointer;padding:0 6px;line-height:1;">×</button>';
+    } else {
+      b.innerHTML = '<span>✉️ Verify your email — without it, password reset won\\'t work.</span><form method="POST" action="/verify-email/resend" style="display:inline;margin:0;"><button type="submit" style="background:rgba(255,255,255,.18);color:#fff;padding:5px 14px;border-radius:6px;border:none;font-weight:600;cursor:pointer;font-size:.85rem;">Resend email →</button></form><button aria-label="Dismiss" id="ce-email-banner-x" style="background:none;border:none;color:#fff;font-size:1.1rem;cursor:pointer;padding:0 6px;line-height:1;">×</button>';
+    }
     document.body.insertBefore(b, document.body.firstChild);
     document.body.style.paddingTop = '108px';
     document.getElementById('ce-email-banner-x').addEventListener('click', function() {
-      sessionStorage.setItem('ce_email_banner_dismissed', '1');
+      sessionStorage.setItem(key, '1');
       b.remove();
       document.body.style.paddingTop = '';
     });
@@ -5524,7 +5642,7 @@ AUTH_HTML = """<!DOCTYPE html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">""" + _META + """
-  <title>{% if mode == 'register' %}Register{% elif mode == 'forgot' %}Forgot password{% elif mode == 'reset' %}Reset password{% else %}Login{% endif %} — ChartEdge.trade</title>
+  <title>{% if mode == 'register' %}Register{% elif mode == 'forgot' %}Forgot password{% elif mode == 'reset' %}Reset password{% elif mode == 'verify' %}Verify email{% else %}Login{% endif %} — ChartEdge.trade</title>
   {% if mode == 'register' %}<script src="https://js.hcaptcha.com/1/api.js" async defer></script>{% endif %}
   <style>
     :root[data-theme="dark"]  { --bg:#0d1117; --bg2:#161b22; --bg3:#21262d; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --red:#f85149; --green:#3fb950; }
@@ -5639,6 +5757,7 @@ AUTH_HTML = """<!DOCTYPE html>
         {% if mode == 'register' %}Create your account
         {% elif mode == 'forgot' %}Forgot password?
         {% elif mode == 'reset' %}Set a new password
+        {% elif mode == 'verify' %}Email verification
         {% else %}Welcome back{% endif %}
       </h1>
       <p class="auth-desc">
@@ -5648,6 +5767,8 @@ AUTH_HTML = """<!DOCTYPE html>
           Enter the email tied to your account. We'll send you a one-time link to set a new password.
         {% elif mode == 'reset' %}
           Choose a new password to finish resetting your account.
+        {% elif mode == 'verify' %}
+          Confirming the email on your ChartEdge.trade account.
         {% else %}
           Sign in to access your indicators, watchlists, and Pro tools.
         {% endif %}
@@ -5671,7 +5792,7 @@ AUTH_HTML = """<!DOCTYPE html>
     <div class="auth-divider"><span>OR</span></div>
     {% endif %}
 
-    {% if not (mode == 'reset' and success) %}
+    {% if not (mode == 'reset' and success) and mode != 'verify' %}
     <form method="POST" class="auth-form">
       {% if mode in ('register', 'login') %}
       <div class="auth-field">
@@ -5758,7 +5879,7 @@ AUTH_HTML = """<!DOCTYPE html>
     <p class="auth-switch">
       {% if mode == 'register' %}
         Already have an account? <a href="/login">Sign in</a>
-      {% elif mode in ('forgot', 'reset') %}
+      {% elif mode in ('forgot', 'reset', 'verify') %}
         <a href="/login">← Back to sign in</a>
       {% else %}
         New to ChartEdge.trade? <a href="/register">Create one</a>
