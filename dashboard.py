@@ -13893,42 +13893,42 @@ _GAME_TICKERS = [
     "SQ","PYPL","SHOP","GM","F","BA","LMT","RTX","GE","SPY","QQQ","DIA","IWM",
 ]
 
-_GAME_HORIZONS = [1, 5, 30]      # trading days revealed after the cut point
-_GAME_HISTORY_DAYS = 90          # context shown before the cut point
-_GAME_CACHE = {}                 # (ticker, start_date_str) -> {"pre": [...], "post": [...], "actual_pct": float}
+_GAME_HORIZONS = [3, 5, 10]      # trading days revealed after the cut point
+_GAME_PRE_CANDLES = 7            # candlesticks shown before the cut point
+_GAME_CACHE = {}                 # (ticker, start_date_str) -> {"pre": [...], "post": [...]}
 
 def _fetch_game_window(ticker: str, start_date, reveal_days: int):
-    """Return the chart context + reveal data for one round. Cached by (ticker, start_date)."""
+    """Return OHLC candlesticks for one round. Cached by (ticker, start_date)."""
     import yfinance as yf
     from datetime import timedelta
     key = (ticker, start_date.isoformat())
     if key in _GAME_CACHE:
         return _GAME_CACHE[key]
-    # Pull enough history on either side: 4 months before + ~7 weeks after (covers 30-day reveal)
-    start = start_date - timedelta(days=_GAME_HISTORY_DAYS + 30)
-    end   = start_date + timedelta(days=60)
+    # Pull enough history on either side
+    start = start_date - timedelta(days=_GAME_PRE_CANDLES * 2 + 14)
+    end   = start_date + timedelta(days=reveal_days * 2 + 14)
     df = yf.download(ticker, start=start.isoformat(), end=end.isoformat(),
                      progress=False, auto_adjust=True, threads=False)
     if df is None or df.empty:
         return None
-    # yfinance sometimes returns a MultiIndex column frame even for a single ticker.
-    closes = df["Close"]
-    if hasattr(closes, "columns"):
-        closes = closes.iloc[:, 0]
-    pts = [(d.date(), float(p)) for d, p in zip(closes.index, closes.values) if p == p]  # drop NaN
-    if not pts:
+    # Single-ticker downloads can come back with a MultiIndex column frame.
+    def _col(name):
+        s = df[name]
+        return s.iloc[:, 0] if hasattr(s, "columns") else s
+    o, h, l, c = _col("Open"), _col("High"), _col("Low"), _col("Close")
+    candles = []
+    for d, ov, hv, lv, cv in zip(o.index, o.values, h.values, l.values, c.values):
+        if ov == ov and hv == hv and lv == lv and cv == cv:  # drop NaN rows
+            candles.append((d.date(), float(ov), float(hv), float(lv), float(cv)))
+    if not candles:
         return None
-    # Split at start_date: pre = up to and including start_date, post = after
-    pre  = [p for p in pts if p[0] <= start_date]
-    post = [p for p in pts if p[0] >  start_date]
-    if len(pre) < 30 or len(post) < reveal_days:
+    pre  = [k for k in candles if k[0] <= start_date]
+    post = [k for k in candles if k[0] >  start_date]
+    if len(pre) < _GAME_PRE_CANDLES or len(post) < reveal_days:
         return None
-    pre = pre[-_GAME_HISTORY_DAYS:]
+    pre = pre[-_GAME_PRE_CANDLES:]
     post = post[:reveal_days]
-    cache_entry = {
-        "pre": [(d.isoformat(), v) for d, v in pre],
-        "post": [(d.isoformat(), v) for d, v in post],
-    }
+    cache_entry = {"pre": pre, "post": post}
     _GAME_CACHE[key] = cache_entry
     return cache_entry
 
@@ -13941,8 +13941,8 @@ def _pick_game_puzzle(max_tries: int = 12):
     for _ in range(max_tries):
         ticker = random.choice(_GAME_TICKERS)
         reveal = random.choice(_GAME_HORIZONS)
-        # Start date 90 days to ~10 years ago, with enough buffer for the reveal to be in the past
-        offset = random.randint(_GAME_HISTORY_DAYS + reveal + 5, 365 * 10)
+        # Start date 30 days to ~10 years ago, with enough buffer for the reveal to be in the past
+        offset = random.randint(reveal + 14, 365 * 10)
         sd = today - timedelta(days=offset)
         window = _fetch_game_window(ticker, sd, reveal)
         if window:
@@ -13956,6 +13956,22 @@ def game_page():
     return render_template_string(GAME_HTML, current_user=current_user())
 
 
+def _normalize_candles(candles, base):
+    """Return list of {o,h,l,c} dicts with prices indexed to 100 at base."""
+    out = []
+    for _d, o, h, l, c in candles:
+        out.append({
+            "o": round((o / base) * 100.0, 3),
+            "h": round((h / base) * 100.0, 3),
+            "l": round((l / base) * 100.0, 3),
+            "c": round((c / base) * 100.0, 3),
+        })
+    return out
+
+
+_GAME_HORIZON_LABELS = {3: "3 trading days", 5: "1 week", 10: "2 weeks"}
+
+
 @app.route("/api/game/new")
 @login_required
 def api_game_new():
@@ -13966,9 +13982,9 @@ def api_game_new():
     ticker, start_date, reveal_days, window = picked
     pre = window["pre"]
     post = window["post"]
-    last_close = pre[-1][1]
-    first_post = post[-1][1]
-    pct_change = ((first_post - last_close) / last_close) * 100.0
+    last_close = pre[-1][4]
+    final_close = post[-1][4]
+    pct_change = ((final_close - last_close) / last_close) * 100.0
 
     rows = _q(
         "INSERT INTO game_rounds (user_id, ticker, start_date, reveal_days, pct_change) "
@@ -13977,14 +13993,11 @@ def api_game_new():
     )
     round_id = rows[0]["id"]
 
-    # Anonymize: relative prices indexed to 100 at the cut point. Strip dates.
-    base = last_close
-    norm_pre = [round((p[1] / base) * 100.0, 3) for p in pre]
     return jsonify({
         "round_id": round_id,
-        "series": norm_pre,
+        "pre_candles": _normalize_candles(pre, last_close),
         "horizon_days": reveal_days,
-        "horizon_label": {1: "1 trading day", 5: "1 week", 30: "1 month"}[reveal_days],
+        "horizon_label": _GAME_HORIZON_LABELS.get(reveal_days, f"{reveal_days} trading days"),
     })
 
 
@@ -14014,9 +14027,9 @@ def api_game_guess():
     from datetime import date as _date
     sd = _date.fromisoformat(row["start_date"])
     window = _fetch_game_window(row["ticker"], sd, row["reveal_days"]) or {"pre": [], "post": []}
-    base = window["pre"][-1][1] if window["pre"] else 0
-    pre_norm  = [round((p[1] / base) * 100.0, 3) for p in window["pre"]] if base else []
-    post_norm = [round((p[1] / base) * 100.0, 3) for p in window["post"]] if base else []
+    base = window["pre"][-1][4] if window["pre"] else 0
+    pre_candles  = _normalize_candles(window["pre"], base)  if base else []
+    post_candles = _normalize_candles(window["post"], base) if base else []
 
     # Updated stats for this user
     stats_row = _one(
@@ -14041,8 +14054,8 @@ def api_game_guess():
         "pct_change": round(row["pct_change"], 2),
         "ticker": row["ticker"],
         "horizon_days": row["reveal_days"],
-        "pre_series": pre_norm,
-        "post_series": post_norm,
+        "pre_candles": pre_candles,
+        "post_candles": post_candles,
         "stats": {
             "played": int(stats_row["played"]),
             "correct": int(stats_row["correct"]),
@@ -14167,9 +14180,9 @@ GAME_HTML = """<!DOCTYPE html>
 <script>
 """ + _THEME_JS + """
 
-var state = { roundId: null, pre: [], post: [], resolved: false };
+var state = { roundId: null, pre: [], post: [], shownPost: 0, totalSlots: 0, resolved: false };
 
-function drawChart(pre, post) {
+function drawChart() {
   var c = document.getElementById('chart');
   var dpr = window.devicePixelRatio || 1;
   var W = c.clientWidth, H = c.clientHeight;
@@ -14177,55 +14190,73 @@ function drawChart(pre, post) {
   var ctx = c.getContext('2d'); ctx.scale(dpr, dpr);
   ctx.clearRect(0, 0, W, H);
 
-  var all = pre.concat(post || []);
+  var pre = state.pre || [];
+  var post = (state.post || []).slice(0, state.shownPost);
+  var all = pre.concat(post);
   if (!all.length) return;
-  var lo = Math.min.apply(null, all), hi = Math.max.apply(null, all);
+
+  // Y-axis range — reserve room for hidden post candles so the chart doesn't jump on reveal
+  var lo = Infinity, hi = -Infinity;
+  function tally(k) { if (k.l < lo) lo = k.l; if (k.h > hi) hi = k.h; }
+  pre.forEach(tally);
+  post.forEach(tally);
+  if (lo === Infinity) return;
   var pad = (hi - lo) * 0.08 || 1;
   lo -= pad; hi += pad;
 
-  var leftPad = 12, rightPad = 12, topPad = 14, botPad = 24;
-  var n = all.length;
-  function px(i)  { return leftPad + (W - leftPad - rightPad) * (i / Math.max(1, n - 1)); }
-  function py(v)  { return topPad + (H - topPad - botPad) * (1 - (v - lo) / (hi - lo)); }
+  var leftPad = 16, rightPad = 16, topPad = 14, botPad = 22;
+  var slots = state.totalSlots || (pre.length + post.length) || 1;
+  var slotW = (W - leftPad - rightPad) / slots;
+  var bodyW = Math.max(3, slotW * 0.62);
 
-  // Subtle horizontal gridlines
-  ctx.strokeStyle = 'rgba(139,148,158,.15)';
+  function cx(i) { return leftPad + slotW * (i + 0.5); }
+  function py(v) { return topPad + (H - topPad - botPad) * (1 - (v - lo) / (hi - lo)); }
+
+  // Horizontal gridlines
+  ctx.strokeStyle = 'rgba(139,148,158,.12)';
   ctx.lineWidth = 1;
   for (var g = 0; g <= 4; g++) {
     var y = topPad + (H - topPad - botPad) * (g / 4);
     ctx.beginPath(); ctx.moveTo(leftPad, y); ctx.lineTo(W - rightPad, y); ctx.stroke();
   }
 
-  // Pre line
-  ctx.strokeStyle = '#58a6ff';
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  for (var i = 0; i < pre.length; i++) {
-    var x = px(i), y = py(pre[i]);
-    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  function drawCandle(k, i, prePhase) {
+    var up = k.c >= k.o;
+    var col = prePhase ? '#58a6ff' : (up ? '#3fb950' : '#f85149');
+    var x = cx(i);
+    // Wick
+    ctx.strokeStyle = col;
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(x, py(k.h));
+    ctx.lineTo(x, py(k.l));
+    ctx.stroke();
+    // Body
+    var yo = py(k.o), yc = py(k.c);
+    var top = Math.min(yo, yc), bh = Math.max(1.5, Math.abs(yc - yo));
+    if (prePhase) {
+      ctx.fillStyle = up ? 'rgba(88,166,255,0.85)' : 'rgba(88,166,255,0.35)';
+      ctx.strokeStyle = '#58a6ff';
+    } else {
+      ctx.fillStyle = up ? '#3fb950' : '#f85149';
+      ctx.strokeStyle = col;
+    }
+    ctx.fillRect(x - bodyW / 2, top, bodyW, bh);
+    ctx.strokeRect(x - bodyW / 2, top, bodyW, bh);
   }
-  ctx.stroke();
 
-  // Post line (only after reveal)
-  if (post && post.length) {
-    // Vertical reveal divider
-    var dx = px(pre.length - 1);
+  for (var i = 0; i < pre.length; i++) drawCandle(pre[i], i, true);
+
+  // Reveal divider once we're past the pre phase
+  if (post.length || state.resolved) {
+    var dx = leftPad + slotW * pre.length;
     ctx.strokeStyle = 'rgba(139,148,158,.45)';
     ctx.setLineDash([4, 4]);
     ctx.beginPath(); ctx.moveTo(dx, topPad); ctx.lineTo(dx, H - botPad); ctx.stroke();
     ctx.setLineDash([]);
-
-    var lastPre = pre[pre.length - 1];
-    var col = post[post.length - 1] >= lastPre ? '#3fb950' : '#f85149';
-    ctx.strokeStyle = col;
-    ctx.lineWidth = 2.4;
-    ctx.beginPath();
-    ctx.moveTo(dx, py(lastPre));
-    for (var j = 0; j < post.length; j++) {
-      ctx.lineTo(px(pre.length + j), py(post[j]));
-    }
-    ctx.stroke();
   }
+
+  for (var j = 0; j < post.length; j++) drawCandle(post[j], pre.length + j, false);
 }
 
 function setActionsEnabled(on) {
@@ -14239,19 +14270,42 @@ function newRound() {
   document.getElementById('horizon-label').textContent = '—';
   document.getElementById('round-tag').textContent = 'Loading…';
   setActionsEnabled(false);
-  state = { roundId: null, pre: [], post: [], resolved: false };
-  drawChart([], []);
+  state = { roundId: null, pre: [], post: [], shownPost: 0, totalSlots: 0, resolved: false };
+  drawChart();
   fetch('/api/game/new')
     .then(function(r){ return r.json(); })
     .then(function(d){
       if (d.error) { document.getElementById('round-tag').textContent = d.error; return; }
-      state.roundId = d.round_id; state.pre = d.series;
+      state.roundId = d.round_id;
+      state.pre = d.pre_candles;
+      state.totalSlots = d.pre_candles.length + d.horizon_days;
       document.getElementById('horizon-label').textContent = d.horizon_label;
       document.getElementById('round-tag').textContent = 'Round #' + d.round_id;
-      drawChart(state.pre, []);
+      drawChart();
       setActionsEnabled(true);
     })
     .catch(function(){ document.getElementById('round-tag').textContent = 'Network error.'; });
+}
+
+function revealCandles(pendingResultHtml, stats) {
+  // Drop one post candle at a time onto the chart.
+  var STEP_MS = 280;
+  function step() {
+    if (state.shownPost >= state.post.length) {
+      document.getElementById('result').innerHTML = pendingResultHtml;
+      document.getElementById('btn-next').style.display = 'block';
+      document.getElementById('s-played').textContent  = stats.played;
+      document.getElementById('s-correct').textContent = stats.correct;
+      document.getElementById('s-acc').textContent     = (stats.accuracy || 0) + '%';
+      document.getElementById('s-streak').textContent  = stats.streak;
+      loadLeaderboard();
+      return;
+    }
+    state.shownPost += 1;
+    drawChart();
+    setTimeout(step, STEP_MS);
+  }
+  step();
 }
 
 function guess(dir) {
@@ -14266,20 +14320,16 @@ function guess(dir) {
     .then(function(d){
       if (d.error) { document.getElementById('result').innerHTML = '<div class="result-card result-wrong">' + d.error + '</div>'; setActionsEnabled(true); return; }
       state.resolved = true;
-      state.post = d.post_series;
-      drawChart(state.pre, state.post);
+      state.pre = d.pre_candles;
+      state.post = d.post_candles;
+      state.shownPost = 0;
+      state.totalSlots = d.pre_candles.length + d.post_candles.length;
       var pct = (d.pct_change >= 0 ? '+' : '') + d.pct_change + '%';
+      var pluralS = (d.horizon_days === 1 ? '' : 's');
       var msg = d.correct
-        ? '<div class="result-card result-correct"><strong>✓ Correct.</strong> ' + d.ticker + ' moved <strong>' + pct + '</strong> over the next ' + d.horizon_days + ' trading day' + (d.horizon_days === 1 ? '' : 's') + '.</div>'
-        : '<div class="result-card result-wrong"><strong>✗ Wrong.</strong> ' + d.ticker + ' moved <strong>' + pct + '</strong> over the next ' + d.horizon_days + ' trading day' + (d.horizon_days === 1 ? '' : 's') + '.</div>';
-      document.getElementById('result').innerHTML = msg;
-      document.getElementById('btn-next').style.display = 'block';
-      var s = d.stats;
-      document.getElementById('s-played').textContent  = s.played;
-      document.getElementById('s-correct').textContent = s.correct;
-      document.getElementById('s-acc').textContent     = (s.accuracy || 0) + '%';
-      document.getElementById('s-streak').textContent  = s.streak;
-      loadLeaderboard();
+        ? '<div class="result-card result-correct"><strong>✓ Correct.</strong> ' + d.ticker + ' moved <strong>' + pct + '</strong> over the next ' + d.horizon_days + ' trading day' + pluralS + '.</div>'
+        : '<div class="result-card result-wrong"><strong>✗ Wrong.</strong> ' + d.ticker + ' moved <strong>' + pct + '</strong> over the next ' + d.horizon_days + ' trading day' + pluralS + '.</div>';
+      revealCandles(msg, d.stats);
     })
     .catch(function(){ document.getElementById('result').innerHTML = '<div class="result-card result-wrong">Network error.</div>'; setActionsEnabled(true); });
 }
@@ -14304,7 +14354,7 @@ function loadLeaderboard() {
     });
 }
 
-window.addEventListener('resize', function(){ drawChart(state.pre, state.post); });
+window.addEventListener('resize', function(){ drawChart(); });
 loadLeaderboard();
 newRound();
 </script>
