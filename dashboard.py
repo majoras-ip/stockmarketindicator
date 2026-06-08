@@ -14147,8 +14147,8 @@ GAME_HTML = """<!DOCTYPE html>
 
 <div class="container">
   <div class="stats-row">
-    <div class="stat-card"><div class="stat-num" id="s-played">0</div><div class="stat-lbl">Rounds</div></div>
-    <div class="stat-card"><div class="stat-num" id="s-correct">0</div><div class="stat-lbl">Correct</div></div>
+    <div class="stat-card"><div class="stat-num" id="s-played">0</div><div class="stat-lbl">All-time rounds</div></div>
+    <div class="stat-card"><div class="stat-num" id="s-correct">0</div><div class="stat-lbl">All-time correct</div></div>
     <div class="stat-card"><div class="stat-num" id="s-acc">—</div><div class="stat-lbl">Accuracy</div></div>
     <div class="stat-card"><div class="stat-num" id="s-streak">0</div><div class="stat-lbl">Streak</div></div>
   </div>
@@ -14180,6 +14180,9 @@ GAME_HTML = """<!DOCTYPE html>
 <script>
 """ + _THEME_JS + """
 
+var ROUNDS_PER_GAME = 10;
+var sessionRound = 0;     // 1-based; incremented when a new round loads
+var sessionCorrect = 0;
 var state = { roundId: null, pre: [], post: [], shownPost: 0, totalSlots: 0, resolved: false };
 
 function drawChart() {
@@ -14264,11 +14267,19 @@ function setActionsEnabled(on) {
   document.getElementById('btn-down').disabled = !on;
 }
 
+function startNewGame() {
+  sessionRound = 0;
+  sessionCorrect = 0;
+  newRound();
+}
+
 function newRound() {
+  if (sessionRound >= ROUNDS_PER_GAME) { startNewGame(); return; }
+  sessionRound += 1;
   document.getElementById('result').innerHTML = '';
   document.getElementById('btn-next').style.display = 'none';
   document.getElementById('horizon-label').textContent = '—';
-  document.getElementById('round-tag').textContent = 'Loading…';
+  document.getElementById('round-tag').textContent = 'Round ' + sessionRound + ' / ' + ROUNDS_PER_GAME + ' · Loading…';
   setActionsEnabled(false);
   state = { roundId: null, pre: [], post: [], shownPost: 0, totalSlots: 0, resolved: false };
   drawChart();
@@ -14280,20 +14291,38 @@ function newRound() {
       state.pre = d.pre_candles;
       state.totalSlots = d.pre_candles.length + d.horizon_days;
       document.getElementById('horizon-label').textContent = d.horizon_label;
-      document.getElementById('round-tag').textContent = 'Round #' + d.round_id;
+      document.getElementById('round-tag').textContent = 'Round ' + sessionRound + ' / ' + ROUNDS_PER_GAME + ' · Score ' + sessionCorrect;
       drawChart();
       setActionsEnabled(true);
     })
     .catch(function(){ document.getElementById('round-tag').textContent = 'Network error.'; });
 }
 
-function revealCandles(pendingResultHtml, stats) {
+function revealCandles(pendingResultHtml, wasCorrect, stats) {
   // Drop one post candle at a time onto the chart.
   var STEP_MS = 280;
   function step() {
     if (state.shownPost >= state.post.length) {
-      document.getElementById('result').innerHTML = pendingResultHtml;
+      if (wasCorrect) sessionCorrect += 1;
+      var isGameOver = sessionRound >= ROUNDS_PER_GAME;
+      var html = pendingResultHtml;
+      if (isGameOver) {
+        var pct = Math.round((sessionCorrect / ROUNDS_PER_GAME) * 100);
+        var verdict = sessionCorrect >= 8 ? '🏆 Excellent!'
+                    : sessionCorrect >= 6 ? '👍 Solid run.'
+                    : sessionCorrect >= 4 ? '🧠 Not bad.'
+                    : '💀 Coinflip territory.';
+        html += '<div class="result-card" style="background:var(--bg3);border:1px solid var(--border);color:var(--text);margin-top:10px;">'
+              +   '<strong>Game over — ' + sessionCorrect + ' / ' + ROUNDS_PER_GAME + ' (' + pct + '%)</strong><br>'
+              +   '<span style="color:var(--muted);font-size:.85rem;">' + verdict + '</span>'
+              + '</div>';
+        document.getElementById('btn-next').textContent = 'Start new game →';
+      } else {
+        document.getElementById('btn-next').textContent = 'Next round →';
+      }
+      document.getElementById('result').innerHTML = html;
       document.getElementById('btn-next').style.display = 'block';
+      document.getElementById('round-tag').textContent = 'Round ' + sessionRound + ' / ' + ROUNDS_PER_GAME + ' · Score ' + sessionCorrect;
       document.getElementById('s-played').textContent  = stats.played;
       document.getElementById('s-correct').textContent = stats.correct;
       document.getElementById('s-acc').textContent     = (stats.accuracy || 0) + '%';
@@ -14329,7 +14358,7 @@ function guess(dir) {
       var msg = d.correct
         ? '<div class="result-card result-correct"><strong>✓ Correct.</strong> ' + d.ticker + ' moved <strong>' + pct + '</strong> over the next ' + d.horizon_days + ' trading day' + pluralS + '.</div>'
         : '<div class="result-card result-wrong"><strong>✗ Wrong.</strong> ' + d.ticker + ' moved <strong>' + pct + '</strong> over the next ' + d.horizon_days + ' trading day' + pluralS + '.</div>';
-      revealCandles(msg, d.stats);
+      revealCandles(msg, d.correct, d.stats);
     })
     .catch(function(){ document.getElementById('result').innerHTML = '<div class="result-card result-wrong">Network error.</div>'; setActionsEnabled(true); });
 }
@@ -14356,7 +14385,7 @@ function loadLeaderboard() {
 
 window.addEventListener('resize', function(){ drawChart(); });
 loadLeaderboard();
-newRound();
+startNewGame();
 </script>
 </body>
 </html>"""
