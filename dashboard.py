@@ -5042,7 +5042,7 @@ function toggleBell(btn, event) {
 var _ce_originalTitle = null;
 function _ce_updateTabTitle(unread) {
   if (_ce_originalTitle === null) {
-    _ce_originalTitle = document.title.replace(/^\(\d+\+?\)\s*/, '');
+    _ce_originalTitle = document.title.replace(/^\\(\\d+\\+?\\)\\s*/, '');
   }
   if (unread > 0) {
     document.title = '(' + (unread > 9 ? '9+' : unread) + ') ' + _ce_originalTitle;
