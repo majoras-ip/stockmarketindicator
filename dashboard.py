@@ -655,6 +655,70 @@ def api_forecast():
         return jsonify({"error": str(e)}), 500
 
 
+# ── Expected Move ─────────────────────────────────────────────────────────────
+
+@app.route("/expected-move")
+def expected_move_page():
+    return render_template_string(EXPECTED_MOVE_HTML, current_user=current_user())
+
+
+@app.route("/api/expected_move")
+def api_expected_move():
+    """Honest expected-move bands (magnitude only, no directional call)."""
+    import numpy as np
+    ticker   = request.args.get("ticker", "SPY").upper()
+    interval = request.args.get("interval", "1h")
+
+    try:
+        import yfinance as yf
+        period_map = {"1m": "7d", "5m": "60d", "15m": "60d", "1h": "730d", "1d": "2y"}
+        period = period_map.get(interval, "60d")
+        raw = yf.download(ticker, period=period, interval=interval, progress=False, auto_adjust=True)
+        if raw is None or len(raw) < 30:
+            return jsonify({"error": "Not enough data"}), 400
+
+        if isinstance(raw.columns, __import__('pandas').MultiIndex):
+            raw.columns = raw.columns.get_level_values(0)
+
+        close = raw["Close"].dropna()
+        if len(close) < 30:
+            return jsonify({"error": "Not enough data"}), 400
+
+        last_price = float(close.iloc[-1])
+        log_ret    = np.log(close / close.shift(1)).dropna()
+        rv_per_bar = float(log_ret.tail(30).std())
+
+        from prediction.expected_move import expected_move
+
+        bar_min = {"1m": 1, "5m": 5, "15m": 15, "1h": 60, "1d": 1440}.get(interval, 60)
+
+        def _label(h):
+            if interval == "1d":
+                return f"{h} day" + ("s" if h > 1 else "")
+            mins = h * bar_min
+            if mins < 60:
+                return f"{mins} min"
+            if mins % 60 == 0:
+                return f"{mins // 60}h"
+            return f"{mins // 60}h {mins % 60}m"
+
+        moves = []
+        for h in (1, 6, 24):
+            em = expected_move(last_price, horizon_bars=h, rv_per_bar=rv_per_bar)
+            em["label"] = _label(h)
+            moves.append(em)
+
+        return jsonify({
+            "ticker": ticker,
+            "interval": interval,
+            "last_price": round(last_price, 4),
+            "moves": moves,
+        })
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 # ── Pine Script JSON endpoint ─────────────────────────────────────────────────
 
 @app.route("/api/pine")
@@ -4853,6 +4917,7 @@ _NAV_LINKS = """
       <div class="drop-menu">
         <a href="/indicators">Indicators</a>
         <a href="/generate">Forecast</a>
+        <a href="/expected-move">Expected Move</a>
         <a href="/dashboard">Live Chart</a>
         <a href="/heatmap">Market Heatmap</a>
         <a href="/earnings">Earnings Calendar</a>
@@ -8596,6 +8661,112 @@ async function loadEarnings() {
   }
 }
 loadEarnings();
+""" + _THEME_JS + """
+</script>
+</body>
+</html>"""
+
+
+EXPECTED_MOVE_HTML = """<!DOCTYPE html>
+<html data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">""" + _META + """
+  <title>Expected Move — ChartEdge.trade</title>
+  <style>
+    :root[data-theme="dark"]  { --bg:#0d1117; --bg2:#161b22; --bg3:#21262d; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --green:#3fb950; --red:#f85149; }
+    :root[data-theme="light"] { --bg:#ffffff; --bg2:#f6f8fa; --bg3:#eaeef2; --border:#d0d7de; --text:#1f2328; --muted:#636c76; --accent:#0969da; --green:#1a7f37; --red:#cf222e; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; transition: background 0.2s, color 0.2s; }
+    nav { background: var(--bg2); border-bottom: 1px solid var(--border); padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; }
+    .logo { color: var(--accent); font-size: 1.1rem; font-weight: bold; text-decoration: none; }
+    """ + _NAV_CSS + """
+    .hero { text-align: center; padding: 40px 24px 28px; border-bottom: 1px solid var(--border); }
+    .hero h1 { font-size: 1.6rem; margin-bottom: 8px; }
+    .hero h1 span { color: var(--accent); }
+    .hero p { color: var(--muted); font-size: 0.9rem; }
+    .container { max-width: 760px; margin: 0 auto; padding: 28px 24px; }
+    .controls { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-bottom: 24px; }
+    .controls input, .controls select { background: var(--bg2); border: 1px solid var(--border); color: var(--text); padding: 10px 14px; border-radius: 8px; font-size: 0.9rem; }
+    .controls input { width: 120px; text-transform: uppercase; }
+    .controls button { background: var(--accent); color: #fff; border: none; padding: 10px 20px; border-radius: 8px; font-size: 0.9rem; font-weight: 600; cursor: pointer; }
+    .controls button:hover { opacity: 0.9; }
+    .price { text-align: center; color: var(--muted); font-size: 0.9rem; margin-bottom: 18px; }
+    .price b { color: var(--text); font-size: 1.05rem; }
+    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; }
+    .card { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 18px; }
+    .card .horizon { color: var(--muted); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; }
+    .card .move { font-size: 1.7rem; font-weight: 700; margin: 6px 0 2px; }
+    .card .move span { color: var(--accent); }
+    .card .sub { color: var(--muted); font-size: 0.8rem; }
+    .card .band { margin-top: 12px; font-size: 0.82rem; }
+    .card .band .lo { color: var(--red); font-weight: 600; }
+    .card .band .hi { color: var(--green); font-weight: 600; }
+    .loading { text-align: center; padding: 50px 24px; color: var(--muted); }
+    .spin { width: 36px; height: 36px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 14px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .disclaimer { color: var(--muted); font-size: 0.8rem; margin-top: 22px; padding: 14px; background: var(--bg2); border-radius: 8px; border: 1px solid var(--border); line-height: 1.5; }
+    .disclaimer b { color: var(--text); }
+    footer { text-align: center; padding: 32px 24px; color: var(--muted); font-size: 0.8rem; border-top: 1px solid var(--border); margin-top: 40px; }
+  </style>
+</head>
+<body>
+<nav>
+  <a class="logo" href="/"><span style="color:var(--text)">Chart</span><span style="color:#58a6ff">Edge</span><span style="color:var(--muted);font-weight:500;">.trade</span></a>
+  <button class="hamburger" onclick="toggleMobileNav(event)">☰</button>
+  <div class="nav-links" id="mobile-nav">""" + _NAV_LINKS + """</div>
+</nav>
+<div class="hero">
+  <h1>Expected <span>Move</span></h1>
+  <p>How far a stock is likely to travel — a magnitude read from its own volatility. No direction guessing.</p>
+</div>
+<div class="container">
+  <div class="controls">
+    <input id="ticker" value="SPY" placeholder="Ticker" onkeydown="if(event.key==='Enter')loadMove()">
+    <select id="interval">
+      <option value="5m">5-minute</option>
+      <option value="1h" selected>Hourly</option>
+      <option value="1d">Daily</option>
+    </select>
+    <button onclick="loadMove()">Estimate</button>
+  </div>
+  <div id="out">
+    <div class="loading"><div class="spin"></div><p>Estimating…</p></div>
+  </div>
+  <div class="disclaimer">
+    <b>Why no up/down arrow?</b> We tested directional prediction across 20,000+ bars: it has no skill —
+    a naive "always up" rule beats it. So we don't sell you a coin flip. What <i>is</i> predictable is
+    <b>how much</b> price moves. These bands are one (68%) and two (95%) standard deviations of expected
+    movement, scaled from recent volatility. Magnitude only — not financial advice.
+  </div>
+</div>
+<footer>© 2026 ChartEdge.trade · Not financial advice · <a href="/privacy" style="color:inherit">Privacy</a> · <a href="/terms" style="color:inherit">Terms</a></footer>
+<script>
+async function loadMove() {
+  const ticker = (document.getElementById('ticker').value || 'SPY').toUpperCase();
+  const interval = document.getElementById('interval').value;
+  const out = document.getElementById('out');
+  out.innerHTML = '<div class="loading"><div class="spin"></div><p>Estimating…</p></div>';
+  try {
+    const res = await fetch('/api/expected_move?ticker=' + encodeURIComponent(ticker) + '&interval=' + interval);
+    const data = await res.json();
+    if (data.error) { out.innerHTML = '<div class="loading" style="color:var(--red)">' + data.error + '</div>'; return; }
+    let html = '<div class="price">' + data.ticker + ' · last <b>$' + data.last_price + '</b></div><div class="cards">';
+    data.moves.forEach(m => {
+      html += '<div class="card">'
+            + '<div class="horizon">Next ' + m.label + '</div>'
+            + '<div class="move">±<span>' + m.expected_move_pct_68 + '%</span></div>'
+            + '<div class="sub">68% · ±' + m.expected_move_pct_95 + '% at 95%</div>'
+            + '<div class="band">68% range<br><span class="lo">$' + m.band_68[0] + '</span> – <span class="hi">$' + m.band_68[1] + '</span></div>'
+            + '</div>';
+    });
+    html += '</div>';
+    out.innerHTML = html;
+  } catch(e) {
+    out.innerHTML = '<div class="loading" style="color:var(--red)">Failed to load. Try again.</div>';
+  }
+}
+loadMove();
 """ + _THEME_JS + """
 </script>
 </body>
