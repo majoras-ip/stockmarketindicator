@@ -1,0 +1,26 @@
+{
+  "h1": {
+    "directional_accuracy": 0.5053,
+    "q10_q90_coverage": 0.6316,
+    "pinball_loss": 0.0008,
+    "after_cost_hit_rate": 0.3783,
+    "folds": 4,
+    "horizon_bars": 1
+  },
+  "h6": {
+    "directional_accuracy": 0.4782,
+    "q10_q90_coverage": 0.4597,
+    "pinball_loss": 0.0025,
+    "after_cost_hit_rate": 0.4641,
+    "folds": 4,
+    "horizon_bars": 6
+  },
+  "h24": {
+    "directional_accuracy": 0.5439,
+    "q10_q90_coverage": 0.3301,
+    "pinball_loss": 0.0052,
+    "after_cost_hit_rate": 0.5085,
+    "folds": 4,
+    "horizon_bars": 24
+  }
+}

@@ -41,6 +41,9 @@ MENU = """
 ║  14. Multi-Ticker Forecast               ║
 ║  15. Start Alert Monitor                 ║
 ║  ──────────────────────────────────────  ║
+║  16. Train Directional Model             ║
+║  17. Predict Direction (cone)            ║
+║  ──────────────────────────────────────  ║
 ║  10. Exit                                ║
 ╚══════════════════════════════════════════╝"""
 
@@ -279,6 +282,52 @@ def _train_forecaster() -> None:
     except Exception as exc:
         print(f"\n  [!] Forecaster training failed: {exc}")
         log.exception("Forecaster training error")
+
+
+def _train_direction() -> None:
+    """Option 16 — train the multi-horizon quantile directional model."""
+    from training.direction_trainer import train, DEFAULT_TICKERS
+
+    raw = input(f"  Tickers (comma-sep) [default: {','.join(DEFAULT_TICKERS)}]: ").strip()
+    tickers = [t.strip().upper() for t in raw.split(",") if t.strip()] or None
+    period   = input("  Period [default: 2y]: ").strip() or "2y"
+    interval = input("  Interval [default: 1h]: ").strip() or "1h"
+
+    try:
+        train(tickers=tickers, period=period, interval=interval)
+        print("\n  Directional model training complete.\n")
+    except Exception as exc:
+        print(f"\n  [!] Directional training failed: {exc}")
+        log.exception("Directional training error")
+
+
+def _predict_direction() -> None:
+    """Option 17 — print the directional cone for a ticker."""
+    from training.direction_trainer import DirectionModel
+    from data.collector import download
+
+    ticker   = input(f"  Ticker [default: {_ticker}]: ").strip().upper() or _ticker
+    interval = input("  Interval [default: 1h]: ").strip() or "1h"
+
+    try:
+        df = download(ticker=ticker, period="60d", interval=interval, save_csv=False)
+        result = DirectionModel().predict(df)
+    except FileNotFoundError:
+        print("  [!] No directional model found. Run option 16 first.")
+        return
+    except Exception as exc:
+        print(f"  [!] Prediction failed: {exc}")
+        log.exception("Directional prediction error")
+        return
+
+    print(f"\n  {ticker} directional read (last close {df['Close'].iloc[-1]:.2f}):\n")
+    for horizon, r in result.items():
+        arrow = "▲" if r["direction"] == "up" else "▼"
+        print(f"    {horizon:>4}  {arrow} {r['direction'].upper():4}  "
+              f"conf {r['confidence']:.0%}  "
+              f"target {r['target_price']}  "
+              f"cone [{r['low_price']} … {r['high_price']}]")
+    print()
 
 
 def _export_forecast_pine() -> None:
@@ -550,6 +599,8 @@ _HANDLERS = {
     "13": _auto_refresh_forecast,
     "14": _multi_ticker_forecast,
     "15": _alert_monitor,
+    "16": _train_direction,
+    "17": _predict_direction,
 }
 
 
