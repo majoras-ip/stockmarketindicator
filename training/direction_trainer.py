@@ -145,9 +145,15 @@ def _score_horizon(y_true, preds_by_q):
     # directional accuracy on non-flat actual moves
     mask = np.abs(y_true) > FLAT_EPS
     if mask.sum() > 0:
-        dir_acc = float(np.mean(np.sign(q50[mask]) == np.sign(y_true[mask])))
+        yt = y_true[mask]
+        dir_acc = float(np.mean(np.sign(q50[mask]) == np.sign(yt)))
+        # naive baseline: always predict the majority direction (usually "up"
+        # thanks to drift). This is the bar a real edge must clear.
+        base_rate = float(np.mean(yt > 0))              # fraction of up moves
+        baseline_acc = max(base_rate, 1.0 - base_rate)  # always-up or always-down
+        skill = dir_acc - baseline_acc                  # >0 means genuine edge
     else:
-        dir_acc = float("nan")
+        dir_acc = base_rate = baseline_acc = skill = float("nan")
 
     coverage = float(np.mean((y_true >= q10) & (y_true <= q90)))  # target ≈ 0.80
     pinball = float(np.mean([_pinball(y_true, preds_by_q[q], q) for q in preds_by_q]))
@@ -167,6 +173,9 @@ def _score_horizon(y_true, preds_by_q):
 
     return {
         "directional_accuracy": round(dir_acc, 4),
+        "base_rate_up": round(base_rate, 4),
+        "baseline_accuracy": round(baseline_acc, 4),
+        "skill_vs_baseline": round(skill, 4),
         "q10_q90_coverage": round(coverage, 4),
         "pinball_loss": round(pinball, 6),
         "after_cost_hit_rate": round(hit_after_cost, 4) if n_trades else None,
@@ -242,7 +251,8 @@ def train(
 
         # average the numeric metrics across folds
         agg = {}
-        keys = ["directional_accuracy", "q10_q90_coverage", "pinball_loss"]
+        keys = ["directional_accuracy", "base_rate_up", "baseline_accuracy",
+                "skill_vs_baseline", "q10_q90_coverage", "pinball_loss"]
         for kk in keys:
             vals = [f[kk] for f in fold_scores if f[kk] is not None and not np.isnan(f[kk])]
             agg[kk] = round(float(np.mean(vals)), 4) if vals else None
@@ -252,8 +262,12 @@ def train(
         agg["horizon_bars"] = hbars
         all_metrics[name] = agg
 
+        skill = agg["skill_vs_baseline"]
+        verdict = "EDGE" if (skill is not None and skill > 0) else "no edge (worse than always-majority)"
         print(f"  ── {name} (H={hbars} bars, n={n}) ──")
         print(f"     directional accuracy : {agg['directional_accuracy']}   (0.50 = coin flip)")
+        print(f"     always-majority base : {agg['baseline_accuracy']}   (the bar to beat — drift)")
+        print(f"     skill vs baseline    : {skill}   → {verdict}")
         print(f"     q10–q90 coverage     : {agg['q10_q90_coverage']}   (0.80 = calibrated)")
         print(f"     pinball loss         : {agg['pinball_loss']}")
         print(f"     after-cost hit rate  : {agg['after_cost_hit_rate']}\n")
