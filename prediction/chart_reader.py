@@ -99,7 +99,9 @@ def read_chart(image_bytes: bytes, media_type: str = "image/png") -> dict:
     if not ticker:
         cands = []  # (top_y, symbol)
         for w, y in zip(words, tops):
-            for c in _CAND_RE.findall(w.upper()):
+            # match only genuinely uppercase tokens — tickers render uppercase on
+            # charts, so don't fold lowercase axis labels / prose into candidates
+            for c in _CAND_RE.findall(w):
                 if c not in _STOP:
                     cands.append((y, c))
         cands.sort(key=lambda p: p[0])          # topmost first

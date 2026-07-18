@@ -749,14 +749,19 @@ def api_expected_move_from_image():
         return jsonify({"error": f"Could not read the chart: {e}"}), 502
 
     if not detected["is_chart"]:
-        return jsonify({"error": "That doesn't look like a price chart."}), 422
+        return jsonify({"error": "That doesn't look like a price chart.",
+                        "manual": True}), 422
     if not detected["ticker"]:
-        return jsonify({"error": "Couldn't read a ticker symbol from the chart. Try a clearer screenshot."}), 422
+        return jsonify({"error": "Couldn't read the ticker from that screenshot — "
+                                 "type it in the box above instead.",
+                        "manual": True}), 422
 
     try:
         payload = _compute_expected_move(detected["ticker"], detected["interval"])
     except ValueError:
-        return jsonify({"error": f"Not enough market data for {detected['ticker']}."}), 400
+        return jsonify({"error": f"Read “{detected['ticker']}” but found no market data "
+                                 f"for it — type the ticker in the box above instead.",
+                        "manual": True}), 400
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -8733,6 +8738,8 @@ EXPECTED_MOVE_HTML = """<!DOCTYPE html>
     .container { max-width: 760px; margin: 0 auto; padding: 28px 24px; }
     .controls { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-bottom: 24px; }
     .controls input, .controls select { background: var(--bg2); border: 1px solid var(--border); color: var(--text); padding: 10px 14px; border-radius: 8px; font-size: 0.9rem; }
+    @keyframes flash { 0%,100% { border-color: var(--border); } 30% { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(88,166,255,0.25); } }
+    .controls input.flash { animation: flash 1.1s ease 2; }
     .controls input { width: 120px; text-transform: uppercase; }
     .controls button { background: var(--accent); color: #fff; border: none; padding: 10px 20px; border-radius: 8px; font-size: 0.9rem; font-weight: 600; cursor: pointer; }
     .controls button:hover { opacity: 0.9; }
@@ -8834,6 +8841,14 @@ async function loadMove() {
   }
 }
 
+function nudgeTicker() {
+  const t = document.getElementById('ticker');
+  t.classList.remove('flash'); void t.offsetWidth;   // restart the animation
+  t.classList.add('flash');
+  t.focus(); t.select();
+  t.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
 async function loadFromImage(file) {
   if (!file) return;
   spinner('Reading your chart…');
@@ -8841,9 +8856,12 @@ async function loadFromImage(file) {
   fd.append('chart', file);
   try {
     const res = await fetch('/api/expected_move_from_image', { method: 'POST', body: fd });
-    render(await res.json());
+    const data = await res.json();
+    render(data);
+    if (data.error && data.manual) nudgeTicker();   // OCR miss → point to manual entry
   } catch(e) {
-    out.innerHTML = '<div class="loading" style="color:var(--red)">Failed to read the chart. Try again.</div>';
+    out.innerHTML = '<div class="loading" style="color:var(--red)">Couldn\\'t read the chart — type the ticker in the box above instead.</div>';
+    nudgeTicker();
   }
 }
 
