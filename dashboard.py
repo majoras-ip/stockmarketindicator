@@ -662,61 +662,109 @@ def expected_move_page():
     return render_template_string(EXPECTED_MOVE_HTML, current_user=current_user())
 
 
+def _compute_expected_move(ticker, interval):
+    """Shared expected-move computation. Returns the response dict or raises
+    ValueError('not_enough_data') when the symbol has too little history."""
+    import numpy as np
+    import yfinance as yf
+
+    period_map = {"1m": "7d", "5m": "60d", "15m": "60d", "1h": "730d", "1d": "2y"}
+    period = period_map.get(interval, "60d")
+    raw = yf.download(ticker, period=period, interval=interval, progress=False, auto_adjust=True)
+    if raw is None or len(raw) < 30:
+        raise ValueError("not_enough_data")
+
+    if isinstance(raw.columns, __import__('pandas').MultiIndex):
+        raw.columns = raw.columns.get_level_values(0)
+
+    close = raw["Close"].dropna()
+    if len(close) < 30:
+        raise ValueError("not_enough_data")
+
+    last_price = float(close.iloc[-1])
+    log_ret    = np.log(close / close.shift(1)).dropna()
+    rv_per_bar = float(log_ret.tail(30).std())
+
+    from prediction.expected_move import expected_move
+
+    bar_min = {"1m": 1, "5m": 5, "15m": 15, "1h": 60, "1d": 1440}.get(interval, 60)
+
+    def _label(h):
+        if interval == "1d":
+            return f"{h} day" + ("s" if h > 1 else "")
+        mins = h * bar_min
+        if mins < 60:
+            return f"{mins} min"
+        if mins % 60 == 0:
+            return f"{mins // 60}h"
+        return f"{mins // 60}h {mins % 60}m"
+
+    moves = []
+    for h in (1, 6, 24):
+        em = expected_move(last_price, horizon_bars=h, rv_per_bar=rv_per_bar)
+        em["label"] = _label(h)
+        moves.append(em)
+
+    return {
+        "ticker": ticker,
+        "interval": interval,
+        "last_price": round(last_price, 4),
+        "moves": moves,
+    }
+
+
 @app.route("/api/expected_move")
 def api_expected_move():
     """Honest expected-move bands (magnitude only, no directional call)."""
-    import numpy as np
     ticker   = request.args.get("ticker", "SPY").upper()
     interval = request.args.get("interval", "1h")
-
     try:
-        import yfinance as yf
-        period_map = {"1m": "7d", "5m": "60d", "15m": "60d", "1h": "730d", "1d": "2y"}
-        period = period_map.get(interval, "60d")
-        raw = yf.download(ticker, period=period, interval=interval, progress=False, auto_adjust=True)
-        if raw is None or len(raw) < 30:
-            return jsonify({"error": "Not enough data"}), 400
-
-        if isinstance(raw.columns, __import__('pandas').MultiIndex):
-            raw.columns = raw.columns.get_level_values(0)
-
-        close = raw["Close"].dropna()
-        if len(close) < 30:
-            return jsonify({"error": "Not enough data"}), 400
-
-        last_price = float(close.iloc[-1])
-        log_ret    = np.log(close / close.shift(1)).dropna()
-        rv_per_bar = float(log_ret.tail(30).std())
-
-        from prediction.expected_move import expected_move
-
-        bar_min = {"1m": 1, "5m": 5, "15m": 15, "1h": 60, "1d": 1440}.get(interval, 60)
-
-        def _label(h):
-            if interval == "1d":
-                return f"{h} day" + ("s" if h > 1 else "")
-            mins = h * bar_min
-            if mins < 60:
-                return f"{mins} min"
-            if mins % 60 == 0:
-                return f"{mins // 60}h"
-            return f"{mins // 60}h {mins % 60}m"
-
-        moves = []
-        for h in (1, 6, 24):
-            em = expected_move(last_price, horizon_bars=h, rv_per_bar=rv_per_bar)
-            em["label"] = _label(h)
-            moves.append(em)
-
-        return jsonify({
-            "ticker": ticker,
-            "interval": interval,
-            "last_price": round(last_price, 4),
-            "moves": moves,
-        })
-
+        return jsonify(_compute_expected_move(ticker, interval))
+    except ValueError:
+        return jsonify({"error": "Not enough data"}), 400
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/expected_move_from_image", methods=["POST"])
+def api_expected_move_from_image():
+    """Read ticker + timeframe from an uploaded chart screenshot (Claude vision),
+    then run the normal expected-move math on real data for that symbol."""
+    import base64
+
+    pic = request.files.get("chart")
+    if pic is None:
+        return jsonify({"error": "No image uploaded"}), 400
+
+    mime = pic.mimetype or "image/png"
+    if mime not in ("image/png", "image/jpeg", "image/webp", "image/gif"):
+        return jsonify({"error": "Unsupported image type — use PNG, JPEG, WebP, or GIF."}), 400
+
+    data = pic.read()
+    if not data or len(data) > 8 * 1024 * 1024:      # cap at 8 MB
+        return jsonify({"error": "Image missing or too large (max 8 MB)."}), 400
+    b64 = base64.standard_b64encode(data).decode("utf-8")
+
+    try:
+        from prediction.chart_reader import read_chart
+        detected = read_chart(b64, media_type=mime)
+    except Exception as e:
+        return jsonify({"error": f"Could not read the chart: {e}"}), 502
+
+    if not detected["is_chart"]:
+        return jsonify({"error": "That doesn't look like a price chart."}), 422
+    if not detected["ticker"]:
+        return jsonify({"error": "Couldn't read a ticker symbol from the chart. Try a clearer screenshot."}), 422
+
+    try:
+        payload = _compute_expected_move(detected["ticker"], detected["interval"])
+    except ValueError:
+        return jsonify({"error": f"Not enough market data for {detected['ticker']}."}), 400
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+    payload["detected"] = detected   # so the UI can show what it read
+    return jsonify(payload)
 
 
 # ── Pine Script JSON endpoint ─────────────────────────────────────────────────
@@ -8691,8 +8739,12 @@ EXPECTED_MOVE_HTML = """<!DOCTYPE html>
     .controls input { width: 120px; text-transform: uppercase; }
     .controls button { background: var(--accent); color: #fff; border: none; padding: 10px 20px; border-radius: 8px; font-size: 0.9rem; font-weight: 600; cursor: pointer; }
     .controls button:hover { opacity: 0.9; }
+    .or { text-align: center; color: var(--muted); font-size: 0.8rem; margin: 18px 0 12px; }
+    .drop { display: block; border: 1.5px dashed var(--border); border-radius: 10px; padding: 22px 16px; text-align: center; color: var(--muted); font-size: 0.88rem; cursor: pointer; transition: border-color 0.15s, background 0.15s; margin-bottom: 24px; }
+    .drop:hover, .drop.over { border-color: var(--accent); background: var(--bg2); color: var(--text); }
     .price { text-align: center; color: var(--muted); font-size: 0.9rem; margin-bottom: 18px; }
     .price b { color: var(--text); font-size: 1.05rem; }
+    .detected { text-align: center; color: var(--accent); font-size: 0.82rem; margin-bottom: 14px; }
     .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; }
     .card { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 18px; }
     .card .horizon { color: var(--muted); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; }
@@ -8730,6 +8782,11 @@ EXPECTED_MOVE_HTML = """<!DOCTYPE html>
     </select>
     <button onclick="loadMove()">Estimate</button>
   </div>
+  <div class="or">— or drop a chart screenshot —</div>
+  <label class="drop" id="drop">
+    <input type="file" id="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden>
+    <span id="drop-text">📈 Click or drop a chart image — we'll read the ticker &amp; timeframe</span>
+  </label>
   <div id="out">
     <div class="loading"><div class="spin"></div><p>Estimating…</p></div>
   </div>
@@ -8742,30 +8799,65 @@ EXPECTED_MOVE_HTML = """<!DOCTYPE html>
 </div>
 <footer>© 2026 ChartEdge.trade · Not financial advice · <a href="/privacy" style="color:inherit">Privacy</a> · <a href="/terms" style="color:inherit">Terms</a></footer>
 <script>
+const out = document.getElementById('out');
+
+function spinner(msg) {
+  out.innerHTML = '<div class="loading"><div class="spin"></div><p>' + msg + '</p></div>';
+}
+
+function render(data) {
+  if (data.error) { out.innerHTML = '<div class="loading" style="color:var(--red)">' + data.error + '</div>'; return; }
+  let html = '';
+  if (data.detected) {
+    html += '<div class="detected">📈 Read from your screenshot: <b>' + data.detected.ticker
+          + '</b> · ' + data.detected.interval + ' (confidence ' + Math.round(data.detected.confidence * 100) + '%)</div>';
+  }
+  html += '<div class="price">' + data.ticker + ' · last <b>$' + data.last_price + '</b></div><div class="cards">';
+  data.moves.forEach(m => {
+    html += '<div class="card">'
+          + '<div class="horizon">Next ' + m.label + '</div>'
+          + '<div class="move">±<span>' + m.expected_move_pct_68 + '%</span></div>'
+          + '<div class="sub">68% · ±' + m.expected_move_pct_95 + '% at 95%</div>'
+          + '<div class="band">68% range<br><span class="lo">$' + m.band_68[0] + '</span> – <span class="hi">$' + m.band_68[1] + '</span></div>'
+          + '</div>';
+  });
+  html += '</div>';
+  out.innerHTML = html;
+}
+
 async function loadMove() {
   const ticker = (document.getElementById('ticker').value || 'SPY').toUpperCase();
   const interval = document.getElementById('interval').value;
-  const out = document.getElementById('out');
-  out.innerHTML = '<div class="loading"><div class="spin"></div><p>Estimating…</p></div>';
+  spinner('Estimating…');
   try {
     const res = await fetch('/api/expected_move?ticker=' + encodeURIComponent(ticker) + '&interval=' + interval);
-    const data = await res.json();
-    if (data.error) { out.innerHTML = '<div class="loading" style="color:var(--red)">' + data.error + '</div>'; return; }
-    let html = '<div class="price">' + data.ticker + ' · last <b>$' + data.last_price + '</b></div><div class="cards">';
-    data.moves.forEach(m => {
-      html += '<div class="card">'
-            + '<div class="horizon">Next ' + m.label + '</div>'
-            + '<div class="move">±<span>' + m.expected_move_pct_68 + '%</span></div>'
-            + '<div class="sub">68% · ±' + m.expected_move_pct_95 + '% at 95%</div>'
-            + '<div class="band">68% range<br><span class="lo">$' + m.band_68[0] + '</span> – <span class="hi">$' + m.band_68[1] + '</span></div>'
-            + '</div>';
-    });
-    html += '</div>';
-    out.innerHTML = html;
+    render(await res.json());
   } catch(e) {
     out.innerHTML = '<div class="loading" style="color:var(--red)">Failed to load. Try again.</div>';
   }
 }
+
+async function loadFromImage(file) {
+  if (!file) return;
+  spinner('Reading your chart…');
+  const fd = new FormData();
+  fd.append('chart', file);
+  try {
+    const res = await fetch('/api/expected_move_from_image', { method: 'POST', body: fd });
+    render(await res.json());
+  } catch(e) {
+    out.innerHTML = '<div class="loading" style="color:var(--red)">Failed to read the chart. Try again.</div>';
+  }
+}
+
+// wire the drop zone
+const drop = document.getElementById('drop');
+const fileInput = document.getElementById('file');
+fileInput.addEventListener('change', e => loadFromImage(e.target.files[0]));
+['dragover', 'dragenter'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('over'); }));
+['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('over'); }));
+drop.addEventListener('drop', e => { if (e.dataTransfer.files.length) loadFromImage(e.dataTransfer.files[0]); });
+
 loadMove();
 """ + _THEME_JS + """
 </script>

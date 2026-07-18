@@ -39,3 +39,6 @@ authlib>=1.3.0
 requests>=2.31.0
 stripe>=7.0.0
 resend>=0.7.0
+
+# ── Vision (screenshot → ticker for Expected Move) ──────────────────────────────
+anthropic>=0.69.0           # needs ANTHROPIC_API_KEY in the environment
