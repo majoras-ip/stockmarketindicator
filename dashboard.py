@@ -728,10 +728,8 @@ def api_expected_move():
 
 @app.route("/api/expected_move_from_image", methods=["POST"])
 def api_expected_move_from_image():
-    """Read ticker + timeframe from an uploaded chart screenshot (Claude vision),
+    """Read ticker + timeframe from an uploaded chart screenshot (local OCR),
     then run the normal expected-move math on real data for that symbol."""
-    import base64
-
     pic = request.files.get("chart")
     if pic is None:
         return jsonify({"error": "No image uploaded"}), 400
@@ -743,11 +741,10 @@ def api_expected_move_from_image():
     data = pic.read()
     if not data or len(data) > 8 * 1024 * 1024:      # cap at 8 MB
         return jsonify({"error": "Image missing or too large (max 8 MB)."}), 400
-    b64 = base64.standard_b64encode(data).decode("utf-8")
 
     try:
         from prediction.chart_reader import read_chart
-        detected = read_chart(b64, media_type=mime)
+        detected = read_chart(data, media_type=mime)
     except Exception as e:
         return jsonify({"error": f"Could not read the chart: {e}"}), 502
 

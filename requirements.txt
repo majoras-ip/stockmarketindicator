@@ -40,5 +40,8 @@ requests>=2.31.0
 stripe>=7.0.0
 resend>=0.7.0
 
-# ── Vision (screenshot → ticker for Expected Move) ──────────────────────────────
-anthropic>=0.69.0           # needs ANTHROPIC_API_KEY in the environment
+# ── OCR (screenshot → ticker for Expected Move) ─────────────────────────────────
+# Free, no API key. Needs the `tesseract` binary on the host (see Dockerfile
+# and nixpacks.toml).
+pytesseract>=0.3.10
+pillow>=10.0.0
