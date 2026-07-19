@@ -18,9 +18,11 @@ import re
 
 _VALID_INTERVALS = {"1m", "5m", "15m", "1h", "1d"}
 
-# exchange-prefixed tickers are the strongest signal (e.g. "NASDAQ:AAPL")
+# exchange-prefixed tickers are the strongest signal (e.g. "NASDAQ:AAPL").
+# Capture up to 8 chars because OCR often glues the adjacent timeframe onto the
+# symbol ("NASDAQ:AAPL1D" -> "AAPLID"); _resolve() trims it back to a real ticker.
 _EXCHANGE_RE = re.compile(
-    r"(?:NASDAQ|NYSE|AMEX|ARCA|BATS|CBOE|OTC|NYSEARCA)[:\s]+([A-Z]{1,6})"
+    r"(?:NASDAQ|NYSE|AMEX|ARCA|BATS|CBOE|OTC|NYSEARCA)[:\s]*([A-Z]{1,8})"
 )
 _CAND_RE = re.compile(r"\b[A-Z]{2,5}\b")
 
@@ -36,10 +38,15 @@ _STOP = {
 
 
 def _detect_interval(text: str) -> str:
-    """Best-effort timeframe from OCR text. Falls back to '1d' (most robust for
-    an expected-move estimate) when nothing legible is found."""
+    """Best-effort timeframe from OCR text.
+
+    A charting toolbar usually lists *every* timeframe (1m 5m 15m 1h 1D…), and
+    OCR can't see which one is highlighted — so if several are present we can't
+    tell the active one and fall back to '1d' (the most robust horizon for an
+    expected-move estimate). We only trust a timeframe when exactly one is
+    visible (e.g. a cropped chart)."""
     t = text.lower()
-    # ordered so more specific tokens win
+    found = []
     for pat, code in (
         (r"\b15\s?m\b|\b15\s?min", "15m"),
         (r"\b5\s?m\b|\b5\s?min", "5m"),
@@ -48,8 +55,8 @@ def _detect_interval(text: str) -> str:
         (r"\b1\s?d\b|\bdaily|\b1\s?day", "1d"),
     ):
         if re.search(pat, t):
-            return code
-    return "1d"
+            found.append(code)
+    return found[0] if len(found) == 1 else "1d"
 
 
 def _valid_ticker(sym: str) -> bool:
@@ -60,6 +67,19 @@ def _valid_ticker(sym: str) -> bool:
         return df is not None and len(df) > 0
     except Exception:
         return False
+
+
+def _resolve(token: str) -> str:
+    """Return the longest prefix of `token` (len 2–5) that is a real ticker, or
+    "". Handles OCR gluing the timeframe onto the symbol ("AAPLID" -> "AAPL")."""
+    token = token.upper()
+    for n in range(min(len(token), 5), 1, -1):
+        cand = token[:n]
+        if cand in _STOP:
+            continue
+        if _valid_ticker(cand):
+            return cand
+    return ""
 
 
 def read_chart(image_bytes: bytes, media_type: str = "image/png") -> dict:
@@ -89,18 +109,18 @@ def read_chart(image_bytes: bytes, media_type: str = "image/png") -> dict:
         return {"is_chart": False, "ticker": "", "interval": "1d",
                 "timeframe_detected": "unknown", "confidence": 0.0}
 
-    # 1) exchange-prefixed ticker wins outright
+    # 1) exchange-prefixed capture is the strongest signal — resolve it first
+    #    (trims any glued-on timeframe). 2) otherwise the topmost uppercase
+    #    tokens, resolved in order. Only genuinely uppercase tokens qualify, so
+    #    lowercase axis labels / prose never become candidates.
     ticker = ""
     m = _EXCHANGE_RE.search(full_text)
-    if m and _valid_ticker(m.group(1)):
-        ticker = m.group(1)
+    if m:
+        ticker = _resolve(m.group(1))
 
-    # 2) otherwise gather candidates, prefer ones nearer the top, validate
     if not ticker:
         cands = []  # (top_y, symbol)
         for w, y in zip(words, tops):
-            # match only genuinely uppercase tokens — tickers render uppercase on
-            # charts, so don't fold lowercase axis labels / prose into candidates
             for c in _CAND_RE.findall(w):
                 if c not in _STOP:
                     cands.append((y, c))
