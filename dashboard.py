@@ -800,9 +800,6 @@ def api_expected_move_from_image():
     except Exception as e:
         return jsonify({"error": f"Could not read the chart: {e}"}), 502
 
-    if not detected["is_chart"]:
-        return jsonify({"error": "That doesn't look like a price chart.",
-                        "manual": True}), 422
     if not detected["ticker"]:
         return jsonify({"error": "Couldn't read the ticker from that screenshot — "
                                  "type it in the box above instead.",

@@ -100,11 +100,18 @@ def read_chart(image_bytes: bytes, media_type: str = "image/png") -> dict:
     import pytesseract
     from PIL import Image
 
+    from PIL import ImageOps, ImageStat
+
     img = Image.open(io.BytesIO(image_bytes)).convert("L")   # grayscale
-    # upscale small images — OCR is much more reliable above ~1000px wide
-    if img.width < 1000:
-        scale = 1000 / img.width
+    # upscale — OCR is much more reliable on larger text
+    if img.width < 1600:
+        scale = 1600 / img.width
         img = img.resize((int(img.width * scale), int(img.height * scale)))
+    # dark-mode charts are light text on a dark background; Tesseract expects the
+    # opposite, so invert when the image is mostly dark
+    if ImageStat.Stat(img).mean[0] < 128:
+        img = ImageOps.invert(img)
+    img = ImageOps.autocontrast(img)   # stretch contrast so faint labels read
 
     # image_to_data gives per-word boxes so we can prefer top-of-chart tokens
     data = pytesseract.image_to_data(img, output_type=pytesseract.Output.DICT)
