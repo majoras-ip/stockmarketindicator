@@ -4858,6 +4858,8 @@ _META = """
   <meta property="og:description" content="Free Pine Script indicators for TradingView. No paid plan required.">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://chartedge.trade">
+  <meta property="og:site_name" content="ChartEdge.trade">
+  <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebSite","name":"ChartEdge.trade","alternateName":"ChartEdge","url":"https://chartedge.trade"}</script>
   <meta name="twitter:card" content="summary">
   <meta name="twitter:title" content="ChartEdge.trade — Free TradingView Indicators">
   <meta name="twitter:description" content="Free Pine Script indicators for TradingView. No paid plan required.">{% if show_email_banner %}
