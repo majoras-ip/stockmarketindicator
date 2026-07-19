@@ -460,7 +460,7 @@ def canonical_host_redirect():
     Stripe webhook (POST) and any API integrations on the old host still work."""
     host = request.host.split(":")[0]
     if (host.endswith("railway.app")
-            and request.method == "GET"
+            and request.method in ("GET", "HEAD")
             and not request.path.startswith("/api/")):
         target = f"https://{CANONICAL_HOST}{request.path}"
         if request.query_string:
