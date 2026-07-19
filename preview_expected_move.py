@@ -67,7 +67,7 @@ def make_chart():
 # --- real compute (reuses the real expected_move math) ---
 def compute(ticker, interval):
     import numpy as np, pandas as pd, yfinance as yf
-    pm = {"1m": "7d", "5m": "60d", "15m": "60d", "1h": "730d", "1d": "2y"}
+    pm = {"1m":"7d","5m":"60d","15m":"60d","30m":"60d","1h":"730d","1d":"2y","1wk":"10y","1mo":"max"}
     raw = yf.download(ticker, period=pm.get(interval, "60d"), interval=interval,
                       progress=False, auto_adjust=True)
     if raw is None or len(raw) < 30: raise ValueError("not_enough_data")
@@ -75,9 +75,10 @@ def compute(ticker, interval):
     close = raw["Close"].dropna(); last = float(close.iloc[-1])
     rv = float(np.log(close/close.shift(1)).dropna().tail(30).std())
     from prediction.expected_move import expected_move
-    bm = {"1m":1,"5m":5,"15m":15,"1h":60,"1d":1440}.get(interval,60)
+    bm = {"1m":1,"5m":5,"15m":15,"30m":30,"1h":60,"1d":1440,"1wk":10080,"1mo":43200}.get(interval,60)
     def lbl(h):
-        if interval=="1d": return f"{h} day"+("s" if h>1 else "")
+        for c,u in (("1mo","month"),("1wk","week"),("1d","day")):
+            if interval==c: return f"{h} {u}"+("s" if h>1 else "")
         m=h*bm; return f"{m} min" if m<60 else (f"{m//60}h" if m%60==0 else f"{m//60}h {m%60}m")
     return {"ticker":ticker,"interval":interval,"last_price":round(last,4),
             "moves":[dict(expected_move(last,horizon_bars=h,rv_per_bar=rv),label=lbl(h)) for h in (1,6,24)]}

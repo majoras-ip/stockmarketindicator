@@ -668,7 +668,11 @@ def _compute_expected_move(ticker, interval):
     import numpy as np
     import yfinance as yf
 
-    period_map = {"1m": "7d", "5m": "60d", "15m": "60d", "1h": "730d", "1d": "2y"}
+    # how much history to pull per interval (respects yfinance lookback limits)
+    period_map = {
+        "1m": "7d", "5m": "60d", "15m": "60d", "30m": "60d",
+        "1h": "730d", "1d": "2y", "1wk": "10y", "1mo": "max",
+    }
     period = period_map.get(interval, "60d")
     raw = yf.download(ticker, period=period, interval=interval, progress=False, auto_adjust=True)
     if raw is None or len(raw) < 30:
@@ -687,11 +691,15 @@ def _compute_expected_move(ticker, interval):
 
     from prediction.expected_move import expected_move
 
-    bar_min = {"1m": 1, "5m": 5, "15m": 15, "1h": 60, "1d": 1440}.get(interval, 60)
+    bar_min = {
+        "1m": 1, "5m": 5, "15m": 15, "30m": 30, "1h": 60,
+        "1d": 1440, "1wk": 10080, "1mo": 43200,
+    }.get(interval, 60)
 
     def _label(h):
-        if interval == "1d":
-            return f"{h} day" + ("s" if h > 1 else "")
+        for code, unit in (("1mo", "month"), ("1wk", "week"), ("1d", "day")):
+            if interval == code:
+                return f"{h} {unit}" + ("s" if h > 1 else "")
         mins = h * bar_min
         if mins < 60:
             return f"{mins} min"
@@ -8780,9 +8788,14 @@ EXPECTED_MOVE_HTML = """<!DOCTYPE html>
   <div class="controls">
     <input id="ticker" value="SPY" placeholder="Ticker" onkeydown="if(event.key==='Enter')loadMove()">
     <select id="interval">
+      <option value="1m">1-minute</option>
       <option value="5m">5-minute</option>
+      <option value="15m">15-minute</option>
+      <option value="30m">30-minute</option>
       <option value="1h" selected>Hourly</option>
       <option value="1d">Daily</option>
+      <option value="1wk">Weekly</option>
+      <option value="1mo">Monthly</option>
     </select>
     <button onclick="loadMove()">Estimate</button>
   </div>

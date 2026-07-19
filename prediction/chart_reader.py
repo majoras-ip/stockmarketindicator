@@ -16,7 +16,7 @@ from __future__ import annotations
 import io
 import re
 
-_VALID_INTERVALS = {"1m", "5m", "15m", "1h", "1d"}
+_VALID_INTERVALS = {"1m", "5m", "15m", "30m", "1h", "1d", "1wk", "1mo"}
 
 # exchange-prefixed tickers are the strongest signal (e.g. "NASDAQ:AAPL").
 # Capture up to 8 chars because OCR often glues the adjacent timeframe onto the
@@ -40,21 +40,28 @@ _STOP = {
 def _detect_interval(text: str) -> str:
     """Best-effort timeframe from OCR text.
 
-    A charting toolbar usually lists *every* timeframe (1m 5m 15m 1h 1D…), and
+    A charting toolbar usually lists *every* timeframe (1m 5m 15m 1h D W M), and
     OCR can't see which one is highlighted — so if several are present we can't
     tell the active one and fall back to '1d' (the most robust horizon for an
     expected-move estimate). We only trust a timeframe when exactly one is
-    visible (e.g. a cropped chart)."""
-    t = text.lower()
+    visible (e.g. a cropped chart).
+
+    Case matters: minutes render lowercase ('1m','30m') but day/week/month render
+    uppercase ('D','W','M'), so lowercasing would collide 1-month with 1-minute.
+    Patterns are matched against the original-case text accordingly."""
+    checks = [
+        (r"\b30\s?m(in)?\b", "30m", re.I),
+        (r"\b15\s?m(in)?\b", "15m", re.I),
+        (r"\b5\s?m(in)?\b", "5m", re.I),
+        (r"\b1\s?m(in)?\b", "1m", 0),                       # lowercase m → minute
+        (r"\b(1\s?h|60\s?m(in)?|hourly)\b", "1h", re.I),
+        (r"\b(1?\s?D|daily|1\s?day)\b", "1d", 0),           # uppercase D → day
+        (r"\b(1?\s?W|weekly|1\s?wk)\b", "1wk", 0),          # uppercase W → week
+        (r"(\b1?\s?M\b|Monthly|\b1\s?mo\b)", "1mo", 0),     # uppercase M → month
+    ]
     found = []
-    for pat, code in (
-        (r"\b15\s?m\b|\b15\s?min", "15m"),
-        (r"\b5\s?m\b|\b5\s?min", "5m"),
-        (r"\b1\s?m\b|\b1\s?min", "1m"),
-        (r"\b1\s?h\b|\b60\s?min|\bhourly", "1h"),
-        (r"\b1\s?d\b|\bdaily|\b1\s?day", "1d"),
-    ):
-        if re.search(pat, t):
+    for pat, code, flags in checks:
+        if re.search(pat, text, flags) and code not in found:
             found.append(code)
     return found[0] if len(found) == 1 else "1d"
 
