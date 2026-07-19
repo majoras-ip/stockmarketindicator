@@ -446,7 +446,26 @@ _PUBLIC_ROUTES = {
     "index", "login", "register", "google_login", "google_callback",
     "pricing", "privacy", "terms", "stripe_webhook", "admin_codes",
     "forgot_password", "reset_password", "verify_email",
+    "robots_txt", "sitemap_xml",
 }
+
+CANONICAL_HOST = "chartedge.trade"
+
+
+@app.before_request
+def canonical_host_redirect():
+    """Send crawlers/users off the Railway URL onto the real domain so Google
+    indexes chartedge.trade, not *.up.railway.app. GET-only and non-/api so the
+    Stripe webhook (POST) and any API integrations on the old host still work."""
+    host = request.host.split(":")[0]
+    if (host.endswith("railway.app")
+            and request.method == "GET"
+            and not request.path.startswith("/api/")):
+        target = f"https://{CANONICAL_HOST}{request.path}"
+        if request.query_string:
+            target += "?" + request.query_string.decode()
+        return redirect(target, code=301)
+
 
 @app.before_request
 def require_login():
@@ -458,6 +477,31 @@ def require_login():
         if request.path.startswith("/api/"):
             return jsonify({"error": "not_logged_in"}), 401
         return redirect(f"/login?next={request.path}")
+
+
+@app.route("/robots.txt")
+def robots_txt():
+    body = (
+        "User-agent: *\n"
+        "Allow: /\n"
+        f"Sitemap: https://{CANONICAL_HOST}/sitemap.xml\n"
+    )
+    return body, 200, {"Content-Type": "text/plain"}
+
+
+@app.route("/sitemap.xml")
+def sitemap_xml():
+    # public marketing / tool pages worth indexing
+    paths = ["/", "/pricing", "/indicators", "/expected-move", "/generate",
+             "/heatmap", "/earnings", "/dividends", "/economic", "/ipo",
+             "/faq", "/privacy", "/terms"]
+    urls = "".join(
+        f"<url><loc>https://{CANONICAL_HOST}{p}</loc></url>" for p in paths
+    )
+    xml = ('<?xml version="1.0" encoding="UTF-8"?>'
+           '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+           f"{urls}</urlset>")
+    return xml, 200, {"Content-Type": "application/xml"}
 
 
 def _get_user_plan(user_id):
@@ -4806,6 +4850,7 @@ _GA_SCRIPT = ("""
   <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','""" + _GA_ID + """');</script>""") if _GA_ID else ""
 
 _META = """
+  <link rel="canonical" href="https://chartedge.trade{{ request.path }}">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📈</text></svg>">
   <meta name="description" content="Free TradingView Pine Script indicators — VWAP, RSI, MACD, Supertrend, Bollinger Squeeze and more. Works on any free TradingView account.">
   <meta name="keywords" content="TradingView indicators, Pine Script, free indicators, VWAP, RSI, MACD, Bollinger Bands, Supertrend">
