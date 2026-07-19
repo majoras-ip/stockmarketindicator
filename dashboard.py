@@ -801,8 +801,13 @@ def api_expected_move_from_image():
         return jsonify({"error": f"Could not read the chart: {e}"}), 502
 
     if not detected["ticker"]:
+        preview = (detected.get("ocr_preview") or "").strip()
+        cands = detected.get("candidates") or []
+        diag = ""
+        if preview or cands:
+            diag = f" (OCR read: “{preview[:80]}” · candidates: {cands})"
         return jsonify({"error": "Couldn't read the ticker from that screenshot — "
-                                 "type it in the box above instead.",
+                                 "type it in the box above instead." + diag,
                         "manual": True}), 422
 
     try:

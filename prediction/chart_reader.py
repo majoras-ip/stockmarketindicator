@@ -121,7 +121,8 @@ def read_chart(image_bytes: bytes, media_type: str = "image/png") -> dict:
 
     if not full_text.strip():
         return {"is_chart": False, "ticker": "", "interval": "1d",
-                "timeframe_detected": "unknown", "confidence": 0.0}
+                "timeframe_detected": "unknown", "confidence": 0.0,
+                "ocr_preview": "", "candidates": []}
 
     # 1) exchange-prefixed capture is the strongest signal — resolve it first
     #    (trims any glued-on timeframe). 2) otherwise the topmost uppercase
@@ -132,22 +133,18 @@ def read_chart(image_bytes: bytes, media_type: str = "image/png") -> dict:
     if m:
         ticker = _resolve(m.group(1))
 
+    cands = []  # (top_y, symbol)
+    for w, y in zip(words, tops):
+        for c in _CAND_RE.findall(w):
+            if c not in _STOP:
+                cands.append((y, c))
+    cands.sort(key=lambda p: p[0])              # topmost first
+    ordered = list(dict.fromkeys(c for _, c in cands))
+
     if not ticker:
-        cands = []  # (top_y, symbol)
-        for w, y in zip(words, tops):
-            for c in _CAND_RE.findall(w):
-                if c not in _STOP:
-                    cands.append((y, c))
-        cands.sort(key=lambda p: p[0])          # topmost first
-        seen = set()
-        for _, c in cands:
-            if c in seen:
-                continue
-            seen.add(c)
+        for c in ordered[:6]:                  # cap validation lookups
             if _valid_ticker(c):
                 ticker = c
-                break
-            if len(seen) >= 6:                   # cap validation lookups
                 break
 
     interval = _detect_interval(full_text)
@@ -157,4 +154,6 @@ def read_chart(image_bytes: bytes, media_type: str = "image/png") -> dict:
         "interval": interval if interval in _VALID_INTERVALS else "1d",
         "timeframe_detected": interval,
         "confidence": 0.9 if ticker else 0.0,
+        "ocr_preview": full_text[:120],        # diagnostic: what OCR actually saw
+        "candidates": ordered[:8],             # diagnostic: uppercase tokens considered
     }
