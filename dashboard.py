@@ -447,7 +447,7 @@ _PUBLIC_ROUTES = {
     "pricing", "privacy_page", "terms_page", "faq_page",
     "stripe_webhook", "admin_codes",
     "forgot_password", "reset_password", "verify_email",
-    "robots_txt", "sitemap_xml",
+    "robots_txt", "sitemap_xml", "ocr_selftest",
 }
 
 CANONICAL_HOST = "chartedge.trade"
@@ -478,6 +478,28 @@ def require_login():
         if request.path.startswith("/api/"):
             return jsonify({"error": "not_logged_in"}), 401
         return redirect(f"/login?next={request.path}")
+
+
+@app.route("/api/ocr_selftest")
+def ocr_selftest():
+    """Temporary public diagnostic: is Tesseract actually working on this host?"""
+    import shutil
+    info = {"which_tesseract": shutil.which("tesseract")}
+    try:
+        import pytesseract
+        info["tesseract_version"] = str(pytesseract.get_tesseract_version())
+    except Exception as e:
+        info["version_error"] = repr(e)
+    try:
+        from PIL import Image, ImageDraw
+        import pytesseract
+        im = Image.new("RGB", (600, 160), "white")
+        ImageDraw.Draw(im).text((20, 50), "NASDAQ:AAPL TEST123", fill="black")
+        im = im.resize((1200, 320))
+        info["ocr_read"] = pytesseract.image_to_string(im).strip()
+    except Exception as e:
+        info["ocr_error"] = repr(e)
+    return jsonify(info)
 
 
 @app.route("/robots.txt")
