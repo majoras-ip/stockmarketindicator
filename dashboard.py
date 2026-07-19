@@ -8827,7 +8827,8 @@ function render(data) {
   let html = '';
   if (data.detected) {
     html += '<div class="detected">📈 Read from your screenshot: <b>' + data.detected.ticker
-          + '</b> · ' + data.detected.interval + ' (confidence ' + Math.round(data.detected.confidence * 100) + '%)</div>';
+          + '</b> · ' + data.detected.interval + ' (confidence ' + Math.round(data.detected.confidence * 100) + '%)'
+          + '<br><span style="color:var(--muted)">Wrong timeframe? Change it above and hit Estimate.</span></div>';
   }
   html += '<div class="price">' + data.ticker + ' · last <b>$' + data.last_price + '</b></div><div class="cards">';
   data.moves.forEach(m => {
@@ -8871,7 +8872,17 @@ async function loadFromImage(file) {
     const res = await fetch('/api/expected_move_from_image', { method: 'POST', body: fd });
     const data = await res.json();
     render(data);
-    if (data.error && data.manual) nudgeTicker();   // OCR miss → point to manual entry
+    if (data.error) {
+      if (data.manual) nudgeTicker();   // OCR miss → point to manual entry
+    } else if (data.detected) {
+      // autofill the form from what we read, so the user can flip the
+      // timeframe (which OCR can't reliably detect) and re-run in one click
+      document.getElementById('ticker').value = data.detected.ticker || data.ticker;
+      const sel = document.getElementById('interval');
+      if ([...sel.options].some(o => o.value === data.detected.interval)) {
+        sel.value = data.detected.interval;
+      }
+    }
   } catch(e) {
     out.innerHTML = '<div class="loading" style="color:var(--red)">Couldn\\'t read the chart — type the ticker in the box above instead.</div>';
     nudgeTicker();
