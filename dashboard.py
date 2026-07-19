@@ -444,7 +444,8 @@ def inject_nav_plan():
 # Routes that don't require login
 _PUBLIC_ROUTES = {
     "index", "login", "register", "google_login", "google_callback",
-    "pricing", "privacy", "terms", "stripe_webhook", "admin_codes",
+    "pricing", "privacy_page", "terms_page", "faq_page",
+    "stripe_webhook", "admin_codes",
     "forgot_password", "reset_password", "verify_email",
     "robots_txt", "sitemap_xml",
 }
@@ -491,10 +492,9 @@ def robots_txt():
 
 @app.route("/sitemap.xml")
 def sitemap_xml():
-    # public marketing / tool pages worth indexing
-    paths = ["/", "/pricing", "/indicators", "/expected-move", "/generate",
-             "/heatmap", "/earnings", "/dividends", "/economic", "/ipo",
-             "/faq", "/privacy", "/terms"]
+    # only publicly-accessible pages (anything login-gated would just 302 to
+    # /login, which Google won't index)
+    paths = ["/", "/pricing", "/faq", "/privacy", "/terms"]
     urls = "".join(
         f"<url><loc>https://{CANONICAL_HOST}{p}</loc></url>" for p in paths
     )
